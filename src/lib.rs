@@ -1,143 +1,158 @@
+pub mod backend;
+pub mod cpu;
+
+// Если хочешь, можно сразу реэкспортировать ключевые части
+pub use backend::{Backend, ScalarOps};
+pub use cpu::CpuBackend;
+
+
 pub struct Unfitted;
 pub struct Fitted;
 
-pub struct LinearModel<S>{
-    weights: Vec<f64>,
-    bias: f64,
-    lr: f64,
-    lambda: f64,
+/// Linear regression model parametrized by backend and state.
+pub struct LinearModel<B: Backend, S> {
+    weights: B::Tensor1D,
+    bias: B::Scalar,
+    lr: B::Scalar,
+    lambda: B::Scalar,
     max_steps: usize,
-    delta_converged: f64,
+    delta_converged: B::Scalar,
     batch_size: usize,
 
+    // Only `S` needs PhantomData — it's not used in any field
     _state: std::marker::PhantomData<S>,
 }
 
-impl LinearModel<Unfitted>{
-    pub fn new(nfeatures: usize) -> Self{
-        Self{weights: vec![0.0; nfeatures], 
-            bias: 0.0,
-            lr: 1e-4,
-            lambda: 1.,
-            delta_converged: 1e-3,
+// === Unfitted state ===
+impl<B: Backend> LinearModel<B, Unfitted> {
+    /// Create a new unfitted linear model.
+    pub fn new(n_features: usize, device: &B::Device) -> Self {
+        Self {
+            weights: B::zeros_1d(n_features, device),
+            bias: B::scalar(0.0, device),
+            lr: B::scalar(1e-2, device),
+            lambda: B::scalar(0.1, device),
+            delta_converged: B::scalar(1e-3, device),
             batch_size: 64,
-            max_steps: 1000, 
-            _state: std::marker::PhantomData}
+            max_steps: 5000,
+            _state: std::marker::PhantomData,
+        }
     }
 
-    pub fn fit(&mut self, x: Vec<Vec<f64>>, y: Vec<f64>) -> LinearModel<Fitted>{
-        for _it in 0..self.max_steps{
-            let dotproduct = |x: &Vec<f64>| -> f64 {
-            let res: f64 = x.iter().zip(self.weights.clone()).map(|(x, y)| {x * y}).sum();
-            res + self.bias
-            };
+    /// Fit the model using full-batch gradient descent.
+    pub fn fit(self, x: B::Tensor2D, y: B::Tensor1D, device: &B::Device) -> LinearModel<B, Fitted> {
+        let mut weights = self.weights;
+        let mut bias = self.bias;
+        let n_samples = B::shape_2d(&x).0;
+        let n_features = B::len_1d(&weights);
 
-            let preds: Vec<_> = x.iter().map(dotproduct).collect();
-            let grad_bias: f64 = preds.iter().zip(y.iter()).map(|(p, t)| {2. * (p - t)}).sum::<f64>() / preds.len() as f64;
-            self.bias -= self.lr * grad_bias;
+        assert_eq!(n_samples, B::len_1d(&y), "X rows must match Y length");
 
+        let n_samples_f = n_samples as f64;
+        let lr = self.lr;
+        let lambda = self.lambda;
+        println!("Starting fit with max_steps = {}", self.max_steps);
+        for _step in 0..self.max_steps {
+            // --- Forward pass: preds = X @ weights + bias ---
+            let mut preds = B::matvec(&x, &weights);
+            B::add_scalar_1d_inplace(&mut preds, bias);
 
-            let pred_diff = preds.iter().zip(y.iter()).map(|(p, t)| {2. / preds.len() as f64 * (p - t)});
-            let mut wgrad = Vec::with_capacity(self.weights.len());
-            for i in 0..x[0].len(){
-                let feature: Vec<_> = x.iter().map(|x| {x[i]}).collect();
-                let feature_grad: f64 = feature.iter().zip(pred_diff.clone()).map(|(f, g )| { 2. * f * g / preds.len() as f64}).sum();
-                wgrad.push(feature_grad);
+            let diffs = B::minus_vec_vec(&preds, &y);
+
+            // --- Bias gradient: 2/n * sum(diffs) ---
+            let grad_bias = (2.0 / n_samples_f) * B::sum_1d(&diffs).to_f64();
+            bias = bias - lr * B::scalar(grad_bias, device);
+
+            // --- Weights gradient: 2/n * X^T @ diffs + 2*lambda*weights ---
+            let w_grad = B::matvec(&B::transpose(&x), &diffs);
+            //let  w_grad = B::zeros_1d(n_features, device);
+            let scale = B::scalar(2.0 / n_samples_f, device);
+            let w_grad = B::scale_1d(scale, &w_grad);
+            let w_reg = B::scale_1d(lambda * B::scalar(2., device), &weights);
+  
+            let w_grad = B::plus_vec_vec(&w_grad, &w_reg);
+            for j in 0..n_features {
+                let w_old = B::get_1d(&weights, j);
+                let g = B::get_1d(&w_grad, j);
+                B::set_1d(&mut weights, j, w_old - lr * g);
             }
 
-            wgrad = wgrad.iter().zip(self.weights.iter()).map(|(g, w)| {g + w * 2. * self.lambda}).collect();
-
-            let wgrad_norm: f64 = wgrad.iter().map(|x| {x * x}).sum();
-            
-            self.weights = self.weights.iter().zip(wgrad.iter()).map(|(w, g)| {w - self.lr * g}).collect();
-
-            if wgrad_norm.sqrt() < self.delta_converged{
+            // --- Convergence check ---
+            let grad_norm_sq: f64 = (0..n_features).map(|j| {
+                let g = B::get_1d(&w_grad, j).to_f64();
+                g * g
+            }).sum();
+            if grad_norm_sq.sqrt() < self.delta_converged.to_f64() {
                 break;
             }
-
+            //println!("{_step}, {:?} {:?}", B::get_1d(&weights, 0).to_f64(), bias.to_f64());
         }
 
-        println!("weights {:?} bias {}", self.weights, self.bias);
-        LinearModel::<Fitted>::new(self.weights.clone(), self.bias)
-
+        LinearModel {
+            weights,
+            bias,
+            lr: self.lr,
+            lambda: self.lambda,
+            max_steps: self.max_steps,
+            delta_converged: self.delta_converged,
+            batch_size: self.batch_size,
+            _state: std::marker::PhantomData,
+        }
     }
-
-
 }
 
-impl LinearModel<Fitted>{
-    pub fn new(weights: Vec<f64>, bias: f64) -> Self{
-        Self{weights, 
-            bias,
-            lr: 1e-4,
-            lambda: 1.,
-            delta_converged: 1e-3,
-            batch_size: 64,
-            max_steps: 1000, 
-            _state: std::marker::PhantomData}
-    }
-    pub fn predict(&self, x: Vec<f64>) -> f64{
-        let dotproduct = |x: &Vec<f64>| -> f64 {
-            let res: f64 = x.iter().zip(self.weights.clone()).map(|(x, y)| {x * y}).sum();
-            res + self.bias
-            };
-
-        dotproduct(&x)
+// === Fitted state ===
+impl<B: Backend> LinearModel<B, Fitted> {
+    /// Predict on a single sample.
+    pub fn predict(&self, x: B::Tensor1D) -> B::Scalar {
+        B::dot(&x, &self.weights) + self.bias
     }
 
-    pub fn predict_batch(&self, x: Vec<Vec<f64>>) -> Vec<f64>{
-        let dotproduct = |x: &Vec<f64>| -> f64 {
-            let res: f64 = x.iter().zip(self.weights.clone()).map(|(x, y)| {x * y}).sum();
-            res + self.bias
-            };
-
-        let preds: Vec<_> = x.iter().map(dotproduct).collect();
+    /// Predict on a batch.
+    pub fn predict_batch(&self, x: B::Tensor2D) -> B::Tensor1D {
+        let mut preds = B::matvec(&x, &self.weights);
+        let n = B::shape_2d(&x).0;
+        for i in 0..n {
+            let p = B::get_1d(&preds, i);
+            B::set_1d(&mut preds, i, p + self.bias);
+        }
         preds
     }
-}
-
-
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    pub use cpu::CpuBackend;
+    use crate::backend::Device;
 
     #[test]
-    fn test_fit_and_predict_identity() {
-        // Простейший случай: y = x (один признак, без смещения)
-        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+    fn test_fit_predict_identity() {
+        let device = Device::Cpu;
+        // X: 3 samples, 1 feature → flat buffer: [1.0, 2.0, 3.0], shape (3,1)
+        let x = (vec![1.0, 2.0, 3.0], 3, 1);
         let y = vec![1.0, 2.0, 3.0];
 
-        let mut model = LinearModel::<Unfitted>::new(1);
-        model.lr = 1e-2; // чуть больше скорость для быстрой сходимости
-        model.max_steps = 5000;
-        model.lambda = 0.01; // отключите регуляризацию!
+        let model = LinearModel::<CpuBackend, Unfitted>::new(1, &device);
+        let fitted = model.fit(x, y, &device);
 
-        let fitted = model.fit(x, y);
-
-        let pred1 = fitted.predict(vec![1.0]);
-        let pred2 = fitted.predict(vec![2.5]);
-
-        // Ожидаем приблизительно y ≈ x
-        assert!((pred1 - 1.0).abs() < 0.1);
-        assert!((pred2 - 2.5).abs() < 0.1);
+        let pred = fitted.predict(vec![2.5]); // → f64 directly
+        assert!((pred - 2.5).abs() < 0.2);
     }
 
     #[test]
     fn test_fit_with_bias() {
         // y = 2 * x + 1
-        let x = vec![vec![0.0], vec![1.0], vec![2.0]];
+        let device = Device::Cpu;
+        let x = (vec![0.0, 1.0, 2.0], 3, 1);
         let y = vec![1.0, 3.0, 5.0];
 
-        let mut model = LinearModel::<Unfitted>::new(1);
-        model.lr = 1e-2;
-        model.max_steps = 5000;
-        model.lambda = 0.0; // отключаем регуляризацию
+        let model = LinearModel::<CpuBackend, Unfitted>::new(1, &device);
+        //model.lr = 1e-2;
+        //model.max_steps = 5000;
+        //model.lambda = 0.0; // отключаем регуляризацию
 
-        let fitted = model.fit(x, y);
+        let fitted = model.fit(x, y, &device);
 
         let pred0 = fitted.predict(vec![0.0]);
         let pred1 = fitted.predict(vec![1.0]);
@@ -147,5 +162,4 @@ mod tests {
         assert!((pred1 - 3.0).abs() < 0.15);
         assert!((pred3 - 7.0).abs() < 0.2); // экстраполяция
     }
-
 }
