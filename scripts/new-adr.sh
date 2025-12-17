@@ -24,7 +24,6 @@ if [ -f "$FILENAME" ]; then
   exit 1
 fi
 
-# Заполнить шаблон
 sed "s/{number}/${NEXT_NUM}/g; s/{short-title}/${TITLE// /-/}/g" "$ADR_DIR/template.md" > "$FILENAME"
 
 echo "Created: $FILENAME"

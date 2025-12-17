@@ -1,5 +1,4 @@
-use crate::backend::{Backend, Device};
-
+use super::{Backend, Device};
 #[derive(Clone, Debug)]
 pub struct CpuBackend;
 

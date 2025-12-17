@@ -1,9 +1,6 @@
 pub mod backend;
-pub mod cpu;
-
-// Если хочешь, можно сразу реэкспортировать ключевые части
-pub use backend::{Backend, ScalarOps};
-pub use cpu::CpuBackend;
+pub mod model;
+pub use backend::{Backend, ScalarOps, CpuBackend};
 
 
 pub struct Unfitted;
@@ -19,7 +16,6 @@ pub struct LinearModel<B: Backend, S> {
     delta_converged: B::Scalar,
     batch_size: usize,
 
-    // Only `S` needs PhantomData — it's not used in any field
     _state: std::marker::PhantomData<S>,
 }
 
@@ -65,7 +61,6 @@ impl<B: Backend> LinearModel<B, Unfitted> {
 
             // --- Weights gradient: 2/n * X^T @ diffs + 2*lambda*weights ---
             let w_grad = B::matvec(&B::transpose(&x), &diffs);
-            //let  w_grad = B::zeros_1d(n_features, device);
             let scale = B::scalar(2.0 / n_samples_f, device);
             let w_grad = B::scale_1d(scale, &w_grad);
             let w_reg = B::scale_1d(lambda * B::scalar(2., device), &weights);
@@ -123,8 +118,13 @@ impl<B: Backend> LinearModel<B, Fitted> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    pub use cpu::CpuBackend;
+    pub use backend::CpuBackend;
     use crate::backend::Device;
+    pub use model::LinearModel;
+
+    #[test]
+    fn test_new_structure() {
+    }
 
     #[test]
     fn test_fit_predict_identity() {

@@ -1,3 +1,6 @@
+mod cpu;
+pub use self::cpu::CpuBackend;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Device {
     Cpu,
@@ -37,8 +40,16 @@ impl ScalarOps for f64 {
     
 }
 
+
+pub enum Tensor<B: Backend> {
+    Scalar(B::Scalar),
+    Tensor0D(B::Tensor0D),
+    Tensor1D(B::Tensor1D),
+    Tensor2D(B::Tensor2D),
+}
+ 
 pub trait Backend {
-    type Scalar: ScalarOps;
+    type Scalar: ScalarOps + Clone;
     type Tensor0D: Clone + Send + Sync;
     type Tensor1D: Clone + Send + Sync;
     type Tensor2D: Clone + Send + Sync;
