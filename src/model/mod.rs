@@ -1,19 +1,20 @@
-mod linear;
+pub mod linear;
 pub use crate::backend::{Backend, ScalarOps, Tensor};
 
-pub struct ForwardResult<M: TrainableModel<B, Input>, B: Backend, Input> {
-    pub output: M::Prediction,
-    pub(crate) context: M::ForwardContext, // ← выносим контекст в ассоциированный тип модели
-}
 
 
-pub trait TrainableModel<B: Backend, Input> {
-    type Params;
-    type ForwardContext;
+pub trait TrainableModel<B: Backend, Output> {
+    type Input;
     type Prediction;
+    type Params;
+    type Gradients;
 
-    fn forward(&self, x: Input) -> ForwardResult<Self, B, Input>
-    where
-        Self: Sized;
-    fn update_params(&mut self, params: &Self::Params);
+    
+    fn forward(&self, input: &Self::Input) -> Self::Prediction;
+    fn backward(&self, input: &Self::Input, grad_output: &Self::Prediction) -> Self::Gradients;
+    fn params(&self) -> &Self::Params;
+    fn update_params(&mut self, new_params: &Self::Params);
+
+    fn into_fitted(self) -> Output;
+
 }

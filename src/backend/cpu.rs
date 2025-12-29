@@ -1,4 +1,4 @@
-use super::{Backend, Device};
+use super::{Backend};
 #[derive(Clone, Debug)]
 pub struct CpuBackend;
 
@@ -7,18 +7,22 @@ impl Backend for CpuBackend {
     type Tensor0D = f64;
     type Tensor1D = Vec<f64>;
     type Tensor2D = (Vec<f64>, usize, usize); // (data, rows, cols)
-    type Device = Device;
+    type Device = ();
+
+    fn default_device() -> Self::Device{
+        ()
+    }
 
     // === Allocation ===
-    fn zeros_1d(n: usize, _device: &Device) -> Self::Tensor1D {
+    fn zeros_1d(n: usize, _device: &Self::Device) -> Self::Tensor1D {
         vec![0.0; n]
     }
 
-    fn zeros_2d(rows: usize, cols: usize, _device: &Device) -> Self::Tensor2D {
+    fn zeros_2d(rows: usize, cols: usize, _device: &Self::Device) -> Self::Tensor2D {
         (vec![0.0; rows * cols], rows, cols)
     }
 
-    fn scalar(value: f64, _device: &Device) -> f64 {
+    fn scalar(value: f64, _device: &Self::Device) -> f64 {
         value
     }
 
@@ -97,6 +101,11 @@ impl Backend for CpuBackend {
         result
     }
 
+    fn _matvec_transpose_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D{
+        //todo - efficient implementation
+        Self::_matvec_unchecked(&Self::transpose(a), x)
+    }
+
     fn _matmul_unchecked(a: &(Vec<f64>, usize, usize), b: &(Vec<f64>, usize, usize)) -> (Vec<f64>, usize, usize) {
         let (a_data, a_rows, a_cols) = a;
         let (b_data, b_rows, b_cols) = b;
@@ -156,5 +165,85 @@ impl Backend for CpuBackend {
 
         (out, *cols, *rows)
 
+    }
+}
+
+#[cfg(test)]
+mod matvec_tests {
+    use super::*;
+
+    #[test]
+    fn test_matvec_transpose() {
+        let backend = CpuBackend;
+        let device = CpuBackend::default_device();
+
+        // Пример 1: X — (3, 2), v — (3,)
+        // X = [[1.0, 2.0],
+        //      [3.0, 4.0],
+        //      [5.0, 6.0]]
+        // v = [1.0, 0.0, 2.0]
+        // Xᵀ @ v = [1*1 + 3*0 + 5*2, 2*1 + 4*0 + 6*2] = [11.0, 14.0]
+
+        let x_data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]; // row-major
+        let x = (x_data, 3, 2); // (rows=3, cols=2)
+        let v = vec![1.0, 0.0, 2.0];
+
+        let result = CpuBackend::matvec_transpose(&x, &v);
+        let expected = vec![11.0, 14.0];
+
+        assert_eq!(result.len(), expected.len());
+        for (r, e) in result.iter().zip(expected.iter()) {
+            assert!((r - e).abs() < 1e-12, "Expected {}, got {}", e, r);
+        }
+
+        // Пример 2: (4, 1) — вектор-столбец (как в твоих линейных регрессиях)
+        // X = [[2.0],
+        //      [3.0],
+        //      [4.0],
+        //      [5.0]]
+        // v = [1.0, 1.0, 1.0, 1.0]
+        // Xᵀ @ v = [2+3+4+5] = [14.0]
+
+        let x2 = (vec![2.0, 3.0, 4.0, 5.0], 4, 1);
+        let v2 = vec![1.0, 1.0, 1.0, 1.0];
+        let result2 = CpuBackend::matvec_transpose(&x2, &v2);
+        let expected2 = vec![14.0];
+
+        assert_eq!(result2, expected2);
+
+        // Пример 3: (2, 3) → output len = 3
+        // X = [[1, 0, 0],
+        //      [0, 1, 0]]
+        // v = [5.0, 7.0]
+        // Xᵀ @ v = [5, 7, 0]
+
+        let x3 = (vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0], 2, 3);
+        let v3 = vec![5.0, 7.0];
+        let result3 = CpuBackend::matvec_transpose(&x3, &v3);
+        let expected3 = vec![5.0, 7.0, 0.0];
+
+        assert_eq!(result3.len(), 3);
+        for (r, e) in result3.iter().zip(expected3.iter()) {
+            assert!((r - e).abs() < 1e-12, "Expected {}, got {}", e, r);
+        }
+    }
+
+    #[test]
+    fn test_matvec_transpose_consistency_with_transpose_and_matvec() {
+        // Проверяем: matvec_transpose(X, v) == matvec(transpose(X), v)
+        let backend = CpuBackend;
+        let device = CpuBackend::default_device();
+
+        let x = (vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2); // (3,2)
+        let v = vec![1.0, 0.0, 2.0];
+
+        let result1 = CpuBackend::matvec_transpose(&x, &v);
+        let x_t = CpuBackend::transpose(&x);
+        let result2 = CpuBackend::matvec(&x_t, &v);
+
+        assert_eq!(result1.len(), result2.len());
+        for (a, b) in result1.iter().zip(result2.iter()) {
+            assert!((a - b).abs() < 1e-12);
+        }
     }
 }

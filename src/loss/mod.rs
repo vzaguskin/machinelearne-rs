@@ -1,30 +1,50 @@
-pub trait Loss<B: Backend, M: Model>{
+pub use crate::backend::{Backend, ScalarOps, Tensor};
+pub use crate::model::{TrainableModel};
+pub use crate::model::linear::{LinearModel, Unfitted, LinearParams};
+
+pub trait Loss<B: Backend> {
+    type Prediction;
     type Target;
-    pub fn grad(params: M::Params, predictions: M::Prediction, target: Target);
+
+    /// Computes the scalar loss value (for logging/metrics).
+    fn loss(&self, prediction: &Self::Prediction, target: &Self::Target) -> B::Scalar;
+
+    /// Computes the gradient of the loss w.r.t. the prediction: ∂L/∂pred.
+    /// This is what gets passed to `model.backward()`.
+    fn grad_wrt_prediction(
+        &self,
+        prediction: &Self::Prediction,
+        target: &Self::Target,
+    ) -> Self::Prediction;
 }
 
+pub struct MSELoss;
 
-struct MSELoss;
-
-impl Loss for MSELoss<B, LinearModel<B, Unfitted>>{
+impl<B: Backend> Loss<B> for MSELoss
+where
+    B::Tensor1D: Clone,
+{
+    type Prediction = B::Tensor1D;
     type Target = B::Tensor1D;
 
-    fn grad(params: M::Params, predictions: M::Prediction, target: Target) -> M::Params{
+    fn loss(&self, pred: &B::Tensor1D, target: &B::Tensor1D) -> B::Scalar {
+        let diff = B::sub_1d(pred, target);
+        let sq = B::dot(&diff, &diff);
+        let mean = sq / B::Scalar::from_f64(B::len_1d(&diff) as f64);
+        mean
+    }
 
-        let diffs = B::minus_vec_vec(&predictions, &target);
-
-        // --- Bias gradient: 2/n * sum(diffs) ---
-        let n_samples_f = B::shape_2d(&predictions).0;
-        let grad_bias = (2.0 / n_samples_f) * B::sum_1d(&diffs).to_f64();
-        bias = bias - lr * B::scalar(grad_bias, device);
-
-        // --- Weights gradient: 2/n * X^T @ diffs + 2*lambda*weights ---
-        let w_grad = B::matvec(&B::transpose(&x), &diffs);
-        let scale = B::scalar(2.0 / n_samples_f, device);
-        let w_grad = B::scale_1d(scale, &w_grad);
-        let w_reg = B::scale_1d(lambda * B::scalar(2., device), &weights);
-
-        let w_grad = B::plus_vec_vec(&w_grad, &w_reg);
-
+    fn grad_wrt_prediction(
+        &self,
+        pred: &B::Tensor1D,
+        target: &B::Tensor1D,
+    ) -> B::Tensor1D {
+        // d/dp ( (p - y)^2 ) = 2(p - y)
+        // But commonly: MSE = (1/n) * sum(...), so grad = (2/n)(p - y)
+        // However, in practice, we often omit 2 and let LR absorb it.
+        // We'll return (pred - target) — standard in many frameworks.
+        let diff: B::Tensor1D = B::sub_1d(pred, target);
+        let n = B::Scalar::from_f64(1. / (B::len_1d(&pred) as f64)); // or use backend method
+        B::scale_1d(n, &diff)
     }
 }

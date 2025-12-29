@@ -1,6 +1,6 @@
 
-pub use crate::backend::Backend;
-pub use crate::model::{TrainableModel, ForwardResult};
+pub use crate::backend::{Backend, ScalarOps};
+pub use crate::model::{TrainableModel};
 
 pub struct Unfitted;
 pub struct Fitted;
@@ -11,8 +11,8 @@ where
     B::Tensor1D: Clone,
     B::Scalar: Clone,
 {
-    weights: B::Tensor1D,
-    bias: B::Scalar,
+    pub weights: B::Tensor1D,
+    pub bias: B::Scalar,
 }
 
 impl<B: Backend> Clone for LinearParams<B>
@@ -33,25 +33,74 @@ pub struct LinearModel<B: Backend, S> {
     _state: std::marker::PhantomData<S>,
 }
 
-pub struct LinearForwardContext<B:Backend>{
-    params: LinearParams<B>,
-    grads: LinearParams<B>,
+impl<B: Backend> LinearModel<B, Unfitted> {
+    /// Create a new fitted linear model from params.
+    pub fn new(params: LinearParams<B>) -> Self {
+        Self{params, _state: std::marker::PhantomData::<Unfitted>}
+    }
 }
 
-impl <B: Backend> TrainableModel<B, B::Tensor2D> for LinearModel<B, Unfitted>{
-   type ForwardContext = LinearForwardContext<B>;
-   type Params = LinearParams<B>;
-   type Prediction = B::Tensor1D;
-
-    fn forward(&self, x: B::Tensor2D) -> ForwardResult<Self, B, B::Tensor2D>{
-        let mut preds = B::matvec(&x, &self.params.weights);
-        B::add_scalar_1d_inplace(&mut preds, self.params.bias);
-        let cw = self.params.clone();
-        let cg = self.params.clone();
-        ForwardResult{output: preds, context: Self::ForwardContext{params: cw, grads: cg}}
+impl<B: Backend> LinearModel<B, Fitted> {
+    /// Create a new fitted linear model from params.
+    pub fn new(params: LinearParams<B>) -> Self {
+        Self{params, _state: std::marker::PhantomData::<Fitted>}
     }
-    fn update_params(&mut self, params: &Self::Params){
 
+    /// Predict on a single sample (feature vector).
+    pub fn predict(&self, x: &[f64]) -> f64
+    where
+        // We need to construct a Tensor1D from &[f64]
+        // For now, assume Device::Cpu is always used in predict for simplicity
+    {
+        let device = B::default_device();
+
+        // Build input tensor
+        let mut x_tensor = B::zeros_1d(x.len(), &device);
+        for (i, &val) in x.iter().enumerate() {
+            B::set_1d(&mut x_tensor, i, B::Scalar::from_f64(val));
+        }
+
+        // Compute w·x
+        let mut output = B::dot(&self.params.weights, &x_tensor);
+        // Add bias
+        output = output + self.params.bias;
+
+        B::Scalar::to_f64(output)
+    }
+}
+
+impl <B: Backend> TrainableModel<B, LinearModel<B, Fitted>> for LinearModel<B, Unfitted>{
+   type Params = LinearParams<B>;
+   type Gradients = LinearParams<B>;
+   type Prediction = B::Tensor1D;
+   type Input = B::Tensor2D;
+
+    fn forward(&self, x: &Self::Input) -> Self::Prediction{
+        let dp = B::matvec(&x, &self.params.weights);
+        B::add_scalar_1d(&dp, self.params.bias)
+    }
+
+    fn params(&self) -> &Self::Params{
+        &self.params
+    }
+    
+    fn update_params(&mut self, params: &Self::Params){
+        self.params = params.clone();
+
+    }
+
+    fn into_fitted(self) -> LinearModel<B, Fitted>
+    {
+        LinearModel::<B, Fitted>::new(self.params)
+    }
+
+    fn backward(&self, x: &Self::Input, grad_output: &Self::Prediction) -> Self::Gradients {
+        let grad_weights = B::matvec_transpose(x, grad_output);
+        let grad_bias = B::sum_1d(grad_output);
+        LinearParams {
+            weights: grad_weights,
+            bias: grad_bias,
+        }
     }
 
 }

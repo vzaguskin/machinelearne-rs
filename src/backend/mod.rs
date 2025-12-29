@@ -1,14 +1,6 @@
 mod cpu;
 pub use self::cpu::CpuBackend;
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Device {
-    Cpu,
-    Cuda(usize),   // device index
-    Metal(usize),
-    // можно расширить
-}
-
 /// Backend trait: абстракция над вычислительным движком (CPU, CUDA, ndarray, candle и т.д.)
 
 pub trait ScalarOps:
@@ -54,6 +46,8 @@ pub trait Backend {
     type Tensor1D: Clone + Send + Sync;
     type Tensor2D: Clone + Send + Sync;
     type Device: Clone + Send + Sync;
+
+    fn default_device() -> Self::Device;
 
     // === Allocation ===
     fn zeros_1d(n: usize, device: &Self::Device) -> Self::Tensor1D;
@@ -101,6 +95,13 @@ pub trait Backend {
         Self::_matvec_unchecked(a, x)
     }
 
+    fn matvec_transpose(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D {
+        let (rows, _cols) = Self::shape_2d(a);
+        let nx = Self::len_1d(x);
+        assert_eq!(rows, nx, "matvec: A.rows ({}) != x.len ({})", rows, nx);
+        Self::_matvec_transpose_unchecked(a, x)
+    }
+
     fn matmul(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
         let (_a_rows, a_cols) = Self::shape_2d(a);
         let (b_rows, _b_cols) = Self::shape_2d(b);
@@ -108,14 +109,14 @@ pub trait Backend {
         Self::_matmul_unchecked(a, b)
     }
 
-    fn minus_vec_vec(x: &Self::Tensor1D, y: &Self::Tensor1D) -> Self::Tensor1D {
+    fn sub_1d(x: &Self::Tensor1D, y: &Self::Tensor1D) -> Self::Tensor1D {
         let nx = Self::len_1d(x);
         let ny = Self::len_1d(y);
         assert_eq!(nx, ny, "axpy: vectors must have same length ({} != {})", nx, ny);
         Self::_minus_vec_vec_unchecked(x, y)
     }
 
-    fn plus_vec_vec(x: &Self::Tensor1D, y: &Self::Tensor1D) -> Self::Tensor1D {
+    fn add_1d(x: &Self::Tensor1D, y: &Self::Tensor1D) -> Self::Tensor1D {
         let nx = Self::len_1d(x);
         let ny = Self::len_1d(y);
         assert_eq!(nx, ny, "axpy: vectors must have same length ({} != {})", nx, ny);
@@ -139,6 +140,10 @@ pub trait Backend {
 
     #[doc(hidden)]
     fn _matvec_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D;
+
+    #[doc(hidden)]
+    fn _matvec_transpose_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D;
+
 
     #[doc(hidden)]
     fn _matmul_unchecked(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D;
