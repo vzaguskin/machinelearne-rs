@@ -2,6 +2,7 @@ pub mod backend;
 pub mod model;
 pub mod optimizer;
 pub mod loss;
+pub mod trainer;
 pub use backend::{Backend, ScalarOps, CpuBackend};
 
 mod tests {
@@ -40,14 +41,13 @@ mod tests {
 
         let mut model = LinearModel::<CpuBackend, Unfitted>::new(params);
         let loss_fn = MSELoss;
-        let optimizer = SGD;
-        let lr = <CpuBackend as backend::Backend>::Scalar::from_f64(0.01);
+        let optimizer = SGD::new(0.01);
 
         for epoch in 0..200 {
             let pred = model.forward(&x_tensor);
             let grad_pred = Loss::<CpuBackend>::grad_wrt_prediction(&loss_fn, &pred, &y_tensor);
             let grads = model.backward(&x_tensor, &grad_pred);
-            let new_params = optimizer.step(lr, &model.params(), &grads);
+            let new_params = optimizer.step(&model.params(), &grads);
             model.update_params(&new_params);
             if epoch % 5 == 0 {
     let loss_val = Loss::<CpuBackend>::loss(&loss_fn, &pred, &y_tensor);
@@ -86,14 +86,13 @@ mod tests {
         let mut model = LinearModel::<CpuBackend, Unfitted>::new(params);
 
         let loss_fn = MSELoss;
-        let optimizer = SGD;
-        let lr = <CpuBackend as backend::Backend>::Scalar::from_f64(0.02);
+        let optimizer = SGD::new(0.01);
 
         for _ in 0..3000 {
             let pred = model.forward(&x_tensor);
             let grad_pred = Loss::<CpuBackend>::grad_wrt_prediction(&loss_fn, &pred, &y_tensor);
             let grads = model.backward(&x_tensor, &grad_pred);
-            let new_params = optimizer.step(lr, model.params(), &grads);
+            let new_params = optimizer.step(model.params(), &grads);
             model.update_params(&new_params);
         }
 
