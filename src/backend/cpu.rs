@@ -174,8 +174,6 @@ mod matvec_tests {
 
     #[test]
     fn test_matvec_transpose() {
-        let backend = CpuBackend;
-        let device = CpuBackend::default_device();
 
         // Пример 1: X — (3, 2), v — (3,)
         // X = [[1.0, 2.0],
@@ -230,9 +228,6 @@ mod matvec_tests {
 
     #[test]
     fn test_matvec_transpose_consistency_with_transpose_and_matvec() {
-        // Проверяем: matvec_transpose(X, v) == matvec(transpose(X), v)
-        let backend = CpuBackend;
-        let device = CpuBackend::default_device();
 
         let x = (vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2); // (3,2)
         let v = vec![1.0, 0.0, 2.0];

@@ -1,16 +1,18 @@
 pub mod backend;
+
 pub mod model;
 pub mod optimizer;
 pub mod loss;
 pub mod trainer;
 pub use backend::{Backend, ScalarOps, CpuBackend};
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::backend::CpuBackend;
     use crate::loss::{Loss, MSELoss};
     use crate::optimizer::{Optimizer, SGD};
-    use crate::model::linear::{TrainableModel, LinearParams, LinearModel, Unfitted};
+    use crate::model::linear::{TrainableModel, LinearModel, Unfitted};
 
     // Вспомогательная функция для создания (n, 1) матрицы из столбца
     fn col_to_tensor2d(col: &[f64]) -> <CpuBackend as Backend>::Tensor2D {
@@ -33,13 +35,7 @@ mod tests {
         let x_tensor = col_to_tensor2d(x_data);
         let y_tensor = slice_to_tensor1d(y_data);
 
-        let device = CpuBackend::default_device();
-        let params = LinearParams {
-            weights: CpuBackend::zeros_1d(1, &device),
-            bias: <CpuBackend as backend::Backend>::Scalar::from_f64(0.0),
-        };
-
-        let mut model = LinearModel::<CpuBackend, Unfitted>::new(params);
+        let mut model = LinearModel::<CpuBackend, Unfitted>::new(1);
         let loss_fn = MSELoss;
         let optimizer = SGD::new(0.01);
 
@@ -77,13 +73,8 @@ mod tests {
         let x_tensor = col_to_tensor2d(x_data);
         let y_tensor = slice_to_tensor1d(y_data);
 
-        let device = CpuBackend::default_device();
-        let params = LinearParams {
-            weights: CpuBackend::zeros_1d(1, &device),
-            bias: <CpuBackend as backend::Backend>::Scalar::from_f64(0.0),
-        };
 
-        let mut model = LinearModel::<CpuBackend, Unfitted>::new(params);
+        let mut model = LinearModel::<CpuBackend, Unfitted>::new(1);
 
         let loss_fn = MSELoss;
         let optimizer = SGD::new(0.01);

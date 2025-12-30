@@ -1,9 +1,9 @@
 
 pub use crate::backend::{Backend, ScalarOps};
-pub use crate::model::{TrainableModel};
+pub use crate::model::{TrainableModel, Unfitted, Fitted};
+use std::marker::PhantomData;
 
-pub struct Unfitted;
-pub struct Fitted;
+
 
 //#[derive(Clone)]
 pub struct LinearParams<B: Backend>
@@ -33,12 +33,6 @@ pub struct LinearModel<B: Backend, S> {
     _state: std::marker::PhantomData<S>,
 }
 
-impl<B: Backend> LinearModel<B, Unfitted> {
-    /// Create a new fitted linear model from params.
-    pub fn new(params: LinearParams<B>) -> Self {
-        Self{params, _state: std::marker::PhantomData::<Unfitted>}
-    }
-}
 
 impl<B: Backend> LinearModel<B, Fitted> {
     /// Create a new fitted linear model from params.
@@ -104,3 +98,19 @@ impl <B: Backend> TrainableModel<B, LinearModel<B, Fitted>> for LinearModel<B, U
     }
 
 }
+
+pub type LinearRegression<B> = LinearModel<B, Unfitted>;
+
+impl<B: Backend> LinearRegression<B> {
+    pub fn new(n_features: usize) -> Self {
+        let device = B::default_device();
+        let params = LinearParams {
+            weights: B::zeros_1d(n_features, &device),
+            bias: B::Scalar::zero(),
+        };
+        Self { params, _state: PhantomData }
+    }
+}
+
+// Удобный алиас для CPU (в lib.rs или linear/mod.rs)
+pub type LinearRegressor = LinearRegression<crate::backend::CpuBackend>;

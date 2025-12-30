@@ -1,3 +1,6 @@
+pub mod state;
+pub use state::{Unfitted, Fitted};
+
 pub mod linear;
 pub use crate::backend::{Backend, ScalarOps, Tensor};
 
