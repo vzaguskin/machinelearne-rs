@@ -63,11 +63,12 @@ impl<B: Backend> LinearModel<B, Fitted> {
     }
 }
 
-impl <B: Backend> TrainableModel<B, LinearModel<B, Fitted>> for LinearModel<B, Unfitted>{
+impl <B: Backend> TrainableModel<B> for LinearModel<B, Unfitted>{
    type Params = LinearParams<B>;
    type Gradients = LinearParams<B>;
    type Prediction = B::Tensor1D;
    type Input = B::Tensor2D;
+   type Output = LinearModel<B, Fitted>;
 
     fn forward(&self, x: &Self::Input) -> Self::Prediction{
         let dp = B::matvec(&x, &self.params.weights);

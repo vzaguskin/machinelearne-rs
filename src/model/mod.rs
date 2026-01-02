@@ -6,11 +6,12 @@ pub use crate::backend::{Backend, ScalarOps, Tensor};
 
 
 
-pub trait TrainableModel<B: Backend, Output> {
+pub trait TrainableModel<B: Backend> {
     type Input;
     type Prediction;
     type Params;
     type Gradients;
+    type Output;
 
     
     fn forward(&self, input: &Self::Input) -> Self::Prediction;
@@ -18,6 +19,6 @@ pub trait TrainableModel<B: Backend, Output> {
     fn params(&self) -> &Self::Params;
     fn update_params(&mut self, new_params: &Self::Params);
 
-    fn into_fitted(self) -> Output;
+    fn into_fitted(self) -> Self::Output;
 
 }

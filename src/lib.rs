@@ -4,6 +4,7 @@ pub mod model;
 pub mod optimizer;
 pub mod loss;
 pub mod trainer;
+pub mod regularizers;
 pub use backend::{Backend, ScalarOps, CpuBackend};
 
 #[cfg(test)]

@@ -9,11 +9,11 @@ use crate::{
 };
 
 // --- Основная структура (immutable после build) ---
-pub struct Trainer<B, L, O, M, Output, P>
+pub struct Trainer<B, L, O, M, P>
 where
     B: Backend,
     L: Loss<B>,
-    M: TrainableModel<B, Output, Params = P, Gradients = P>,
+    M: TrainableModel<B, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
 {
     pub(crate) batch_size: usize,
@@ -22,15 +22,14 @@ where
     pub(crate) optimizer: O,
     _phantom_backend: PhantomData<B>,
     _phantom_model: PhantomData<M>,
-    _phantom_output: PhantomData<Output>,
 }
 
 // --- Билдер ---
-pub struct TrainerBuilder<B, L, O, M, Output, P>
+pub struct TrainerBuilder<B, L, O, M, P>
 where
     B: Backend,
     L: Loss<B>,
-    M: TrainableModel<B, Output, Params = P, Gradients = P>,
+    M: TrainableModel<B, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
 {
     batch_size: usize,
@@ -39,14 +38,13 @@ where
     optimizer: O,
     _phantom_backend: PhantomData<B>,
     _phantom_model: PhantomData<M>,
-    _phantom_output: PhantomData<Output>,
 }
 
-impl<B, L, O, M, Output, P> TrainerBuilder<B, L, O, M, Output, P>
+impl<B, L, O, M, P> TrainerBuilder<B, L, O, M, P>
 where
     B: Backend,
     L: Loss<B>,
-    M: TrainableModel<B, Output, Params = P, Gradients = P>,
+    M: TrainableModel<B, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
 {
     pub fn new(loss_fn: L, optimizer: O) -> Self {
@@ -57,7 +55,6 @@ where
             optimizer,
             _phantom_backend: PhantomData,
             _phantom_model: PhantomData,
-            _phantom_output: PhantomData,
         }
     }
 
@@ -71,7 +68,7 @@ where
         self
     }
 
-    pub fn build(self) -> Trainer<B, L, O, M, Output, P> {
+    pub fn build(self) -> Trainer<B, L, O, M, P> {
         Trainer {
             batch_size: self.batch_size,
             max_epochs: self.max_epochs,
@@ -79,18 +76,17 @@ where
             optimizer: self.optimizer,
             _phantom_backend: PhantomData,
             _phantom_model: PhantomData,
-            _phantom_output: PhantomData,
         }
     }
 }
 
 // --- Реализация fit переносится в Trainer ---
-impl<B, L, O, M, Output, P> Trainer<B, L, O, M, Output, P>
+impl<B, L, O, M, P> Trainer<B, L, O, M, P>
 where
     B: Backend,
     B::Scalar: Debug + Display,
     L: Loss<B, Target = B::Tensor1D, Prediction = B::Tensor1D>,
-    M: TrainableModel<B, Output, Input = B::Tensor2D, Prediction = L::Prediction, Params = P, Gradients = P>,
+    M: TrainableModel<B, Input = B::Tensor2D, Prediction = L::Prediction, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
 {
     pub fn fit(
@@ -98,7 +94,7 @@ where
         mut model: M,
         x: &[Vec<f64>],
         y: &[f64],
-    ) -> Result<Output, String> {
+    ) -> Result<M::Output, String> {
         if x.len() != y.len() {
             return Err("x and y must have same length".into());
         }
@@ -147,14 +143,14 @@ where
 }
 
 // --- Экспорт удобного конструктора ---
-impl<B, L, O, M, Output, P> Trainer<B, L, O, M, Output, P>
+impl<B, L, O, M, P> Trainer<B, L, O, M, P>
 where
     B: Backend,
     L: Loss<B>,
-    M: TrainableModel<B, Output, Params = P, Gradients = P>,
+    M: TrainableModel<B, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
 {
-    pub fn builder(loss_fn: L, optimizer: O) -> TrainerBuilder<B, L, O, M, Output, P> {
+    pub fn builder(loss_fn: L, optimizer: O) -> TrainerBuilder<B, L, O, M, P> {
         TrainerBuilder::new(loss_fn, optimizer)
     }
 }
