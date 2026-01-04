@@ -76,3 +76,35 @@ where
         B::scale_1d(n, &sign)
     }
 }
+
+pub struct BCEWithLogitsLoss;
+
+impl<B: Backend> Loss<B> for BCEWithLogitsLoss
+where
+    B::Tensor1D: Clone,
+{
+    type Prediction = B::Tensor1D; // logits
+    type Target = B::Tensor1D;     // labels in {0.0, 1.0}
+
+    fn loss(&self, logits: &B::Tensor1D, targets: &B::Tensor1D) -> B::Scalar {
+        // Numerically stable BCE: -(t * log(s(z)) + (1-t) * log(1 - s(z)))
+        // = max(z, 0) - z * t + log(1 + exp(-|z|))
+        let max_logits = B::maximum_1d(logits, &B::zeros_1d(B::len_1d(logits), &B::default_device()));
+        let neg_abs_logits = B::neg_1d(&B::abs_1d(logits));
+        let log1p_exp_negabs = B::log_1d(&B::add_scalar_1d(&B::exp_1d(&neg_abs_logits), B::Scalar::from_f64(1.0)));
+
+        let term1 = B::sub_1d(&max_logits, &B::mul_1d(logits, targets));
+        let term2 = log1p_exp_negabs;
+        let total = B::add_1d(&term1, &term2);
+        let mean = B::sum_1d(&total) / B::Scalar::from_f64(B::len_1d(logits) as f64);
+        mean
+    }
+
+    fn grad_wrt_prediction(&self, logits: &B::Tensor1D, targets: &B::Tensor1D) -> B::Tensor1D {
+        // d/dz BCE = sigmoid(z) - t
+        let sigmoid = B::sigmoid_1d(logits);
+        let diff = B::sub_1d(&sigmoid, targets);
+        let n = B::Scalar::from_f64(1.0 / (B::len_1d(logits) as f64));
+        B::scale_1d(n, &diff)
+    }
+}
