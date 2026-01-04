@@ -77,6 +77,26 @@ impl Backend for CpuBackend {
         (scaled, *rows, *cols)
     }
 
+    fn abs_1d(x: &Vec<f64>) -> Vec<f64>{
+        x.iter().map(|x| {x.abs()}).collect()
+    }
+
+    fn sign_1d(x: &Vec<f64>) -> Vec<f64>{
+        x
+        .iter()
+        .map(|&x| {
+            if x > 0.0 {
+                1.0
+            } else if x < 0.0 {
+                -1.0
+            } else {
+                0.0 // субградиент в нуле — стандартный выбор
+            }
+        })
+        .collect()
+
+    }
+
     // === Unchecked BLAS-like implementations ===
     fn _dot_unchecked(x: &Vec<f64>, y: &Vec<f64>) -> f64 {
         x.iter().zip(y).map(|(a, b)| a * b).sum()

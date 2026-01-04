@@ -48,3 +48,31 @@ where
         B::scale_1d(n, &diff)
     }
 }
+
+pub struct MAELoss;
+
+impl<B: Backend> Loss<B> for MAELoss
+where
+    B::Tensor1D: Clone,
+{
+    type Prediction = B::Tensor1D;
+    type Target = B::Tensor1D;
+
+    fn loss(&self, pred: &B::Tensor1D, target: &B::Tensor1D) -> B::Scalar {
+        let diff = B::sub_1d(pred, target);
+        let abs_diff_sum = B::sum_1d(&B::abs_1d(&diff));
+        let mean = abs_diff_sum / B::Scalar::from_f64(B::len_1d(&diff) as f64);
+        mean
+    }
+
+    fn grad_wrt_prediction(
+        &self,
+        pred: &B::Tensor1D,
+        target: &B::Tensor1D,
+    ) -> B::Tensor1D {
+        let diff = B::sub_1d(pred, target);
+        let sign = B::sign_1d(&diff);
+        let n = B::Scalar::from_f64(1.0 / (B::len_1d(pred) as f64));
+        B::scale_1d(n, &sign)
+    }
+}
