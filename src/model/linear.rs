@@ -1,6 +1,6 @@
 
 pub use crate::backend::{Backend, ScalarOps};
-pub use crate::model::{TrainableModel, Unfitted, Fitted};
+pub use crate::model::{TrainableModel, Unfitted, Fitted, ParamOps};
 use std::marker::PhantomData;
 
 
@@ -25,6 +25,22 @@ where
             weights: self.weights.clone(),
             bias: self.bias.clone(),
         }
+    }
+}
+
+impl <B> ParamOps<B> for LinearParams<B>
+where B: Backend
+{
+    fn add(&self, other: &Self) -> Self{
+        let w = B::add_1d(&self.weights, &other.weights); 
+        let b = self.bias + other.bias;
+        Self{weights: w, bias: b}
+    }
+    fn scale(&self, scalar: B::Scalar) -> Self{
+        let w = B::scale_1d(scalar, &self.weights); 
+        let b = self.bias * scalar;
+        Self{weights: w, bias: b}
+
     }
 }
 

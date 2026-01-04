@@ -6,8 +6,14 @@ pub trait Regularizer<B: Backend, M: TrainableModel<B>>{
     fn regularizer_penalty_grad(&self, model: &M) -> (B::Scalar, M::Gradients);
 }
 
-struct L2<B: Backend>{
+pub struct L2<B: Backend>{
     lambda: B::Scalar,
+}
+
+impl <B: Backend> L2<B>{
+    pub fn new(lambda: f64) -> Self{
+        Self{lambda: B::Scalar::from_f64(lambda)}
+    }
 }
 
 impl <B> Regularizer<B, LinearRegression::<B>> for L2<B>

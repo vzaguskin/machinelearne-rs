@@ -4,55 +4,62 @@ use std::fmt::{Debug, Display};
 use crate::{
     backend::{Backend, ScalarOps},
     loss::Loss,
-    model::TrainableModel,
+    model::{TrainableModel, ParamOps},
     optimizer::Optimizer,
+    regularizers::Regularizer,
 };
 
 // --- Основная структура (immutable после build) ---
-pub struct Trainer<B, L, O, M, P>
+pub struct Trainer<B, L, O, M, P, R>
 where
     B: Backend,
     L: Loss<B>,
     M: TrainableModel<B, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
+    R: Regularizer<B, M>
 {
     pub(crate) batch_size: usize,
     pub(crate) max_epochs: usize,
     pub(crate) loss_fn: L,
     pub(crate) optimizer: O,
+    pub(crate) regularizer: R,
     _phantom_backend: PhantomData<B>,
     _phantom_model: PhantomData<M>,
 }
 
 // --- Билдер ---
-pub struct TrainerBuilder<B, L, O, M, P>
+pub struct TrainerBuilder<B, L, O, M, P, R>
 where
     B: Backend,
     L: Loss<B>,
     M: TrainableModel<B, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
+    R: Regularizer<B, M>
 {
     batch_size: usize,
     max_epochs: usize,
     loss_fn: L,
     optimizer: O,
+    regularizer: R,
     _phantom_backend: PhantomData<B>,
     _phantom_model: PhantomData<M>,
 }
 
-impl<B, L, O, M, P> TrainerBuilder<B, L, O, M, P>
+impl<B, L, O, M, P, R> TrainerBuilder<B, L, O, M, P, R>
 where
     B: Backend,
     L: Loss<B>,
     M: TrainableModel<B, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
+    R: Regularizer<B, M>
 {
-    pub fn new(loss_fn: L, optimizer: O) -> Self {
+    pub fn new(loss_fn: L, optimizer: O, regularizer: R) -> Self {
         Self {
             batch_size: 32,
             max_epochs: 1000,
             loss_fn,
             optimizer,
+            regularizer,
             _phantom_backend: PhantomData,
             _phantom_model: PhantomData,
         }
@@ -68,12 +75,13 @@ where
         self
     }
 
-    pub fn build(self) -> Trainer<B, L, O, M, P> {
+    pub fn build(self) -> Trainer<B, L, O, M, P, R> {
         Trainer {
             batch_size: self.batch_size,
             max_epochs: self.max_epochs,
             loss_fn: self.loss_fn,
             optimizer: self.optimizer,
+            regularizer: self.regularizer,
             _phantom_backend: PhantomData,
             _phantom_model: PhantomData,
         }
@@ -81,13 +89,15 @@ where
 }
 
 // --- Реализация fit переносится в Trainer ---
-impl<B, L, O, M, P> Trainer<B, L, O, M, P>
+impl<B, L, O, M, P, R> Trainer<B, L, O, M, P, R>
 where
     B: Backend,
     B::Scalar: Debug + Display,
     L: Loss<B, Target = B::Tensor1D, Prediction = B::Tensor1D>,
     M: TrainableModel<B, Input = B::Tensor2D, Prediction = L::Prediction, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
+    R: Regularizer<B, M>,
+    P: ParamOps<B>
 {
     pub fn fit(
         &self,
@@ -128,9 +138,13 @@ where
 
                 let preds = model.forward(&x_tensor);
                 total_loss = total_loss + self.loss_fn.loss(&preds, &y_tensor);
+                let (reg_penalty, reg_grad) = self.regularizer.regularizer_penalty_grad(&model);
+                total_loss = total_loss + reg_penalty;
                 let grad_preds = self.loss_fn.grad_wrt_prediction(&preds, &y_tensor);
                 let grads = model.backward(&x_tensor, &grad_preds);
-                let new_params = self.optimizer.step(model.params(), &grads);
+
+                let total_grads = grads.add(&reg_grad);
+                let new_params = self.optimizer.step(model.params(), &total_grads);
                 model.update_params(&new_params);
             }
 
@@ -143,14 +157,15 @@ where
 }
 
 // --- Экспорт удобного конструктора ---
-impl<B, L, O, M, P> Trainer<B, L, O, M, P>
+impl<B, L, O, M, P, R> Trainer<B, L, O, M, P, R>
 where
     B: Backend,
     L: Loss<B>,
     M: TrainableModel<B, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
+    R: Regularizer<B, M>
 {
-    pub fn builder(loss_fn: L, optimizer: O) -> TrainerBuilder<B, L, O, M, P> {
-        TrainerBuilder::new(loss_fn, optimizer)
+    pub fn builder(loss_fn: L, optimizer: O, regularizer: R) -> TrainerBuilder<B, L, O, M, P, R> {
+        TrainerBuilder::new(loss_fn, optimizer, regularizer)
     }
 }
