@@ -131,6 +131,9 @@ pub trait Backend {
         s.sqrt()
     }
 
+    fn abs_1d(x: &Self::Tensor1D) -> Self::Tensor1D;
+    fn sign_1d(x: &Self::Tensor1D) -> Self::Tensor1D;
+
     // === Unsafe (unchecked) implementations — to be overridden efficiently ===
     #[doc(hidden)]
     fn _dot_unchecked(x: &Self::Tensor1D, y: &Self::Tensor1D) -> Self::Scalar;
