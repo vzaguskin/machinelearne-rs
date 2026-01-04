@@ -116,6 +116,7 @@ pub trait Backend {
         Self::_minus_vec_vec_unchecked(x, y)
     }
 
+
     fn add_1d(x: &Self::Tensor1D, y: &Self::Tensor1D) -> Self::Tensor1D {
         let nx = Self::len_1d(x);
         let ny = Self::len_1d(y);
@@ -133,6 +134,13 @@ pub trait Backend {
 
     fn abs_1d(x: &Self::Tensor1D) -> Self::Tensor1D;
     fn sign_1d(x: &Self::Tensor1D) -> Self::Tensor1D;
+
+    fn sigmoid_1d(x: &Self::Tensor1D) -> Self::Tensor1D;
+    fn maximum_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D;
+    fn neg_1d(x: &Self::Tensor1D) -> Self::Tensor1D;
+    fn exp_1d(x: &Self::Tensor1D) -> Self::Tensor1D;
+    fn log_1d(x: &Self::Tensor1D) -> Self::Tensor1D;
+    fn mul_1d(x: &Self::Tensor1D, y: &Self::Tensor1D) -> Self::Tensor1D;
 
     // === Unsafe (unchecked) implementations — to be overridden efficiently ===
     #[doc(hidden)]

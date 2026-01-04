@@ -97,6 +97,26 @@ impl Backend for CpuBackend {
 
     }
 
+    fn sigmoid_1d(x: &Vec<f64>) -> Vec<f64> {
+        x.iter().map(|&z| 1.0 / (1.0 + (-z).exp())).collect()
+    }
+
+    fn maximum_1d(a: &Vec<f64>, b: &Vec<f64>) -> Vec<f64> {
+        a.iter().zip(b).map(|(&x, &y)| x.max(y)).collect()
+    }
+
+    fn neg_1d(x: &Vec<f64>) -> Vec<f64> {
+        x.iter().map(|&v| -v).collect()
+    }
+
+    fn exp_1d(x: &Vec<f64>) -> Vec<f64> {
+        x.iter().map(|&v| v.exp()).collect()
+    }
+
+    fn log_1d(x: &Vec<f64>) -> Vec<f64> {
+        x.iter().map(|&v| v.ln()).collect()
+    }
+
     // === Unchecked BLAS-like implementations ===
     fn _dot_unchecked(x: &Vec<f64>, y: &Vec<f64>) -> f64 {
         x.iter().zip(y).map(|(a, b)| a * b).sum()
@@ -164,11 +184,23 @@ impl Backend for CpuBackend {
 
     }
 
+    fn mul_1d(x: &Vec<f64>, y: &Vec<f64>) -> Vec<f64>{
+        let mut out = Vec::with_capacity(x.len());
+        for (xi, yi) in x.iter().zip(y.iter()){
+            out.push(xi * yi);
+        }
+
+        out
+
+    }
+
     fn sum_1d(x: &Vec<f64>) -> f64{
 
         x.iter().sum()
 
     }
+
+    
     fn sum_2d(x: &Self::Tensor2D) -> f64{
         x.0.iter().sum()
     }
