@@ -1,8 +1,94 @@
-use super::{Backend};
+use super::{Backend, Backend_};
 #[derive(Clone, Debug)]
 pub struct CpuBackend;
 
 impl Backend for CpuBackend {
+    type Scalar = f64;
+    type Tensor1D = Vec<f64>;
+    type Tensor2D = (Vec<f64>, usize, usize); // (data, rows, cols)
+    type Device = ();
+
+    fn default_device() -> Self::Device{
+        ()
+    }
+
+    // --- Constructors ---
+    fn zeros_1d(len: usize) -> Self::Tensor1D{
+        vec![0.; len]
+    }
+    fn zeros_2d(rows: usize, cols: usize) -> Self::Tensor2D{
+        (vec![0.; rows * cols], rows, cols)
+    }
+    fn from_vec_1d(data: Vec<f32>) -> Self::Tensor1D{
+        data.into_iter().map(|x| {x as f64}).collect()
+    }
+    fn from_vec_2d(data: Vec<f32>, rows: usize, cols: usize) -> Self::Tensor2D{
+        (data.into_iter().map(|x| {x as f64}).collect(), rows, cols)
+    }
+
+    // --- Element-wise ops ---
+    fn add_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D{
+        a.iter().zip(b.iter()).map(|(a, b)| {a + b} ).collect()
+    }
+    fn sub_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D{
+        a.iter().zip(b.iter()).map(|(a, b)| {a - b} ).collect()
+    }
+    fn mul_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D{
+        a.iter().zip(b.iter()).map(|(a, b)| {a * b} ).collect()
+    }
+    fn mul_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D{
+        t.iter().map(|x| {*x * s}).collect()
+    }
+
+    // --- Reductions ---
+    fn mean_all_1d(t: &Self::Tensor1D) -> Self::Scalar{
+        t.iter().sum::<f64>() / t.len() as f64
+    }
+    fn sum_all_2d(t: &Self::Tensor2D) -> Self::Scalar{
+        t.0.iter().sum::<f64>()
+    }
+
+    fn sum_all_1d(t: &Self::Tensor1D) -> Self::Scalar{
+        t.iter().sum::<f64>()
+    }
+
+    // --- Scalar ops (for loss gradients, lr updates) ---
+    fn scalar_f64(value: f64) -> Self::Scalar{
+        value
+    }
+    fn scalar_mul_1d(s: &Self::Scalar, t: &Self::Tensor1D) -> Self::Tensor1D{
+        t.iter().map(|x| x * s).collect()
+    }
+
+    // --- Access (for metrics / debug) ---
+    fn to_vec_1d(t: &Self::Tensor1D) -> Vec<f64>{
+        t.clone()
+    }
+
+    fn len_1d(t: &Self::Tensor1D) -> usize{
+        t.len()
+    }
+
+    fn abs_1d(t: &Self::Tensor1D) -> Self::Tensor1D{
+        t.iter().map(|x| {x.abs()}).collect()
+    }
+
+    fn sign_1d(x: &Self::Tensor1D) -> Self::Tensor1D{
+        x.iter()
+        .map(|&x| {
+            if x > 0.0 {
+                1.0
+            } else if x < 0.0 {
+                -1.0
+            } else {
+                0.0 // субградиент в нуле — стандартный выбор
+            }
+        })
+        .collect()
+    }
+}
+
+impl Backend_ for CpuBackend {
     type Scalar = f64;
     type Tensor0D = f64;
     type Tensor1D = Vec<f64>;
