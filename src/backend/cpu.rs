@@ -40,6 +40,10 @@ impl Backend for CpuBackend {
         t.iter().map(|x| {*x * s}).collect()
     }
 
+    fn add_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D{
+        t.iter().map(|x| x + s).collect()
+    }
+
     // --- Reductions ---
     fn mean_all_1d(t: &Self::Tensor1D) -> Self::Scalar{
         t.iter().sum::<f64>() / t.len() as f64
@@ -55,9 +59,6 @@ impl Backend for CpuBackend {
     // --- Scalar ops (for loss gradients, lr updates) ---
     fn scalar_f64(value: f64) -> Self::Scalar{
         value
-    }
-    fn scalar_mul_1d(s: &Self::Scalar, t: &Self::Tensor1D) -> Self::Tensor1D{
-        t.iter().map(|x| x * s).collect()
     }
 
     // --- Access (for metrics / debug) ---
@@ -86,6 +87,34 @@ impl Backend for CpuBackend {
         })
         .collect()
     }
+
+    fn maximum_1d(a: &Vec<f64>, b: &Vec<f64>) -> Vec<f64> {
+        a.iter().zip(b).map(|(&x, &y)| x.max(y)).collect()
+    }
+
+    fn scale_1d(a: f64, x: &Vec<f64>) -> Vec<f64> {
+        x.iter().map(|&xi| a * xi).collect()
+    }
+
+    fn exp_1d(x: &Vec<f64>) -> Vec<f64> {
+        x.iter().map(|&v| v.exp()).collect()
+    }
+
+    fn sigmoid_1d(x: &Vec<f64>) -> Vec<f64> {
+        // Численно стабильная сигмоида:
+        // σ(z) = 1 / (1 + exp(-z))     if z >= 0
+        // σ(z) = exp(z) / (1 + exp(z)) if z < 0
+        x.iter()
+            .map(|&z| {
+                if z >= 0.0 {
+                    1.0 / (1.0 + (-z).exp())
+                } else {
+                    let ez = z.exp();
+                    ez / (1.0 + ez)
+                }
+            })
+            .collect()
+        }
 }
 
 impl Backend_ for CpuBackend {

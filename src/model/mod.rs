@@ -2,7 +2,8 @@ pub mod state;
 pub use state::{Unfitted, Fitted};
 
 pub mod linear;
-pub use crate::backend::{Backend, ScalarOps, Tensor};
+pub use crate::backend::backend::{Backend};
+pub use crate::backend::scalar::{ScalarOps, Scalar};
 
 
 
@@ -25,5 +26,5 @@ pub trait TrainableModel<B: Backend> {
 
 pub trait ParamOps<B: Backend>: Clone {
     fn add(&self, other: &Self) -> Self;
-    fn scale(&self, scalar: B::Scalar) -> Self;
+    fn scale(&self, scalar: Scalar<B>) -> Self;
 }

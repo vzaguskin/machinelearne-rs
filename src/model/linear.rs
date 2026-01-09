@@ -1,5 +1,8 @@
 
-pub use crate::backend::{Backend, ScalarOps};
+pub use crate::backend::backend::{Backend};
+pub use crate::backend::scalar::{ScalarOps, Scalar};
+pub use crate::backend::tensor1d::Tensor1D;
+use crate::loss::TensorLike;
 pub use crate::model::{TrainableModel, Unfitted, Fitted, ParamOps};
 use std::marker::PhantomData;
 
@@ -8,16 +11,16 @@ use std::marker::PhantomData;
 //#[derive(Clone)]
 pub struct LinearParams<B: Backend>
 where
-    B::Tensor1D: Clone,
+    Tensor1D<B>: Clone,
     B::Scalar: Clone,
 {
-    pub weights: B::Tensor1D,
-    pub bias: B::Scalar,
+    pub weights: Tensor1D<B>,
+    pub bias: Scalar<B>,
 }
 
 impl<B: Backend> Clone for LinearParams<B>
 where
-    B::Tensor1D: Clone,
+    Tensor1D<B>: Clone,
     B::Scalar: Clone,
 {
     fn clone(&self) -> Self {
@@ -32,12 +35,12 @@ impl <B> ParamOps<B> for LinearParams<B>
 where B: Backend
 {
     fn add(&self, other: &Self) -> Self{
-        let w = B::add_1d(&self.weights, &other.weights); 
+        let w = self.weights.add(&other.weights);
         let b = self.bias + other.bias;
         Self{weights: w, bias: b}
     }
-    fn scale(&self, scalar: B::Scalar) -> Self{
-        let w = B::scale_1d(scalar, &self.weights); 
+    fn scale(&self, scalar: Scalar<B>) -> Self{
+        let w = self.weights.scale(scalar); 
         let b = self.bias * scalar;
         Self{weights: w, bias: b}
 
