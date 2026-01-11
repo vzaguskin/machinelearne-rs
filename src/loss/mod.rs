@@ -47,7 +47,7 @@ where
         // We'll return (pred - target) — standard in many frameworks.
         let diff= pred.sub(&target);
         let n = Scalar::<B>::new(1. / (B::len_1d(&pred.data) as f64)); // or use backend method
-        diff.scale(n)
+        diff.scale(&n)
     }
 }
 
@@ -72,7 +72,7 @@ where
         let diff = pred.sub(&target);
         let sign = diff.sign();
         let n = Scalar::<B>::new(1.0) / pred.len();
-        sign.scale(n)
+        sign.scale(&n)
     }
 }
 
@@ -91,9 +91,9 @@ where
         let max_logits = logits.maximum(Self::Prediction::zeros(logits.len().data.to_f64() as usize));
         let term2 = logits
                                             .abs()
-                                            .scale(Scalar::<B>::new(-1.))
+                                            .scale(&Scalar::<B>::new(-1.))
                                             .exp()
-                                            .add_scalar(Scalar::<B>::new(1.))
+                                            .add_scalar(&Scalar::<B>::new(1.))
                                             .log();
         
         
@@ -105,6 +105,6 @@ where
     fn grad_wrt_prediction(&self, logits: &Self::Prediction, targets: &Self::Target) -> Self::Prediction {
         // d/dz BCE = sigmoid(z) - t
         let n = Scalar::<B>::new(1.0) / logits.len();
-        logits.sigmoid().sub(&targets).scale(n)
+        logits.sigmoid().sub(&targets).scale(&n)
     }
 }

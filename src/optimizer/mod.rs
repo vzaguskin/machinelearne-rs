@@ -1,5 +1,8 @@
+use crate::loss::TensorLike;
 use crate::model::linear::{LinearParams,};
-use crate::backend::{Backend, ScalarOps};
+use crate::backend::backend::{Backend};
+use crate::backend::scalar::{Scalar};
+use crate::backend::tensor1d::Tensor1D;
 
 pub trait Optimizer<B: Backend, P> {
     /// Выполняет шаг оптимизации: `params = params - lr * gradients`.
@@ -7,28 +10,28 @@ pub trait Optimizer<B: Backend, P> {
     fn step(&self, params: &P, gradients: &P) -> P;
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone)]
 pub struct SGD<B: Backend>{
-    lr: B::Scalar,
+    lr: Scalar<B>,
 }
 
 
 impl <B: Backend> SGD<B>{
     pub fn new(lr: f64) -> Self{
-        Self{lr: B::Scalar::from_f64(lr)}
+        Self{lr: Scalar::<B>::new(lr)}
     }
 }
 
 impl<B: Backend> Optimizer<B, LinearParams<B>> for SGD<B>
 where
-    B::Tensor1D: Clone,
-    B::Scalar: Clone,
+    Tensor1D<B>: Clone,
+    Scalar<B>: Clone,
 {
     fn step(&self, params: &LinearParams<B>, grads: &LinearParams<B>) -> LinearParams<B> {
         // weights_new = weights - lr * grad_weights
-        let neg_lr = B::Scalar::from_f64(0.) - self.lr;
-        let scaled_grad = B::scale_1d(neg_lr, &grads.weights);
-        let weights_update = B::add_1d(&params.weights, &scaled_grad);
+        let neg_lr = Scalar::<B>::new(0.) - self.lr.clone();
+        let scaled_grad = grads.weights.scale(&neg_lr);
+        let weights_update = params.weights.add(&scaled_grad);
         // bias_new = bias - lr * grad_bias
         let bias_update = params.bias - (self.lr * grads.bias);
 

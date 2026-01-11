@@ -3,6 +3,7 @@ pub mod scalar;
 pub mod tensorlike;
 pub mod backend;
 pub mod tensor1d;
+pub mod tensor2d;
 use std::marker::PhantomData;
 
 pub use self::cpu::CpuBackend;

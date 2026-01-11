@@ -10,6 +10,7 @@ pub trait TensorLike<B: Backend>{
     fn mul(&self, other: &Self) -> Self;
     fn div(&self, other: &Self) -> Self;
     fn mean_all(&self) -> Scalar<B>;      // агрегация до скаляра
+    fn sum(&self) -> Scalar<B>;
     fn scale(&self, other: Scalar<B>) -> Self;
 }
 
@@ -52,6 +53,13 @@ impl<B: Backend> TensorLike<B> for Tensor1D<B> {
     fn scale(&self, other: Scalar<B>) -> Self{
         Self {
             data: B::mul_scalar_1d(&self.data, &other.data),
+            backend: PhantomData,
+        }
+    }
+
+    fn sum(&self) -> Scalar<B>{
+        Scalar {
+            data: B::sum_all_1d(&self.data),
             backend: PhantomData,
         }
     }

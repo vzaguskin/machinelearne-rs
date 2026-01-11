@@ -29,8 +29,9 @@ impl ScalarOps for f64 {
     
 }
 
-
-pub struct Scalar <B: Backend> {
+#[derive(Clone, Debug, Copy)]
+pub struct Scalar <B: Backend> 
+{
     pub(crate) data: B::Scalar,
     pub(crate) backend: PhantomData<B>,
 }
@@ -42,7 +43,7 @@ impl <B: Backend> Scalar<B>{
 }
 
 // Арифметические операции через std::ops
-impl<B: Backend> std::ops::Add for Scalar<B> {
+impl<B: Backend+Copy> std::ops::Add for Scalar<B> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {

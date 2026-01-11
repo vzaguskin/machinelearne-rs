@@ -28,3 +28,13 @@ pub trait ParamOps<B: Backend>: Clone {
     fn add(&self, other: &Self) -> Self;
     fn scale(&self, scalar: Scalar<B>) -> Self;
 }
+
+pub trait InferenceModel<B: Backend>{
+    type InputSingle;
+    type OutputSingle;
+    type InputBatch;
+    type OutputBatch;
+    fn predict(&self, input: &Self::InputSingle) -> Self::OutputSingle;
+    fn predict_batch(&self, input: &Self::InputBatch) -> Self::OutputBatch;
+
+}
