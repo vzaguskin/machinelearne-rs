@@ -170,10 +170,6 @@ impl Backend for CpuBackend {
         a.iter().zip(b).map(|(&x, &y)| x.max(y)).collect()
     }
 
-    fn scale_1d(a: f64, x: &Vec<f64>) -> Vec<f64> {
-        x.iter().map(|&xi| a * xi).collect()
-    }
-
     fn exp_1d(x: &Vec<f64>) -> Vec<f64> {
         x.iter().map(|&v| v.exp()).collect()
     }

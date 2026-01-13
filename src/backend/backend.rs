@@ -56,7 +56,6 @@ pub trait Backend: Clone + Copy  + 'static {
     fn exp_2d(x: &Self::Tensor2D) -> Self::Tensor2D;
     fn log_2d(x: &Self::Tensor2D) -> Self::Tensor2D;
     fn sigmoid_2d(x: &Self::Tensor2D) -> Self::Tensor2D;
-    fn scale_1d(a: Self::Scalar, x: &Self::Tensor1D) -> Self::Tensor1D;
     fn matvec(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D;
     fn _matvec_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D;
     fn matvec_transposed(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D;
