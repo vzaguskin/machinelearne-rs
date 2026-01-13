@@ -1,5 +1,6 @@
 // examples/train_linear.rs или в тестах
-use machinelearne_rs::{backend::NdarrayBackend, 
+
+use machinelearne_rs::{ 
     Tensor1D, 
     dataset::memory::InMemoryDataset, 
     loss::MSELoss, 
@@ -7,9 +8,10 @@ use machinelearne_rs::{backend::NdarrayBackend,
     optimizer::SGD, 
     regularizers::NoRegularizer, 
     trainer::Trainer};
-
+#[cfg(feature = "ndarray")]
 fn main() {
 
+    use machinelearne_rs::backend::NdarrayBackend;
     let model = LinearRegression::<NdarrayBackend>::new(2); // 2 фичи
     let loss = MSELoss;
     let opt = SGD::new(0.1);
@@ -32,4 +34,11 @@ fn main() {
     let inp = Tensor1D::<NdarrayBackend>::new((&[4.0, 5.0]).to_vec());
     let pred = fitted_model.predict(&inp);
     println!("Prediction: {:?}", pred);
+}
+
+#[cfg(not(feature = "ndarray"))]
+fn main() {
+    println!("This example requires the `ndarray` feature. Run with:");
+    println!("cargo run --example train_linear_ndarray --features ndarray");
+    std::process::exit(1);
 }
