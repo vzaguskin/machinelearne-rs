@@ -1,46 +1,21 @@
 mod cpu;
+pub mod scalar;
+pub mod tensorlike;
+pub mod backend;
+pub mod tensor1d;
+pub mod tensor2d;
+
 pub use self::cpu::CpuBackend;
+pub use scalar::{ScalarOps, Scalar};
+pub use backend::Backend;
+
+pub use self::tensor1d::Tensor1D;
+pub use self::tensor2d::Tensor2D;
 
 /// Backend trait: абстракция над вычислительным движком (CPU, CUDA, ndarray, candle и т.д.)
 
-pub trait ScalarOps:
-    Clone
-    + Copy
-    + Send
-    + Sync
-    + std::ops::Add<Output = Self>
-    + std::ops::Mul<Output = Self>
-    + std::ops::Sub<Output = Self>
-    + std::ops::Div<Output = Self>
-{
-    fn sqrt(self) -> Self;
-    fn abs(self) -> Self;
-    fn zero() -> Self;
-    fn one() -> Self;
-    fn from_f64(v: f64) -> Self;
-    fn to_f64(self) -> f64;
-}
-
-// === Реализации для f64 (и f32, если нужно) ===
-impl ScalarOps for f64 {
-    fn sqrt(self) -> Self { self.sqrt() }
-    fn abs(self) -> Self { self.abs() }
-    fn zero() -> Self { 0.0 }
-    fn one() -> Self { 1.0 }
-    fn from_f64(v: f64) -> Self { v }
-    fn to_f64(self) -> f64 { self }
-    
-}
-
-
-pub enum Tensor<B: Backend> {
-    Scalar(B::Scalar),
-    Tensor0D(B::Tensor0D),
-    Tensor1D(B::Tensor1D),
-    Tensor2D(B::Tensor2D),
-}
  
-pub trait Backend {
+pub trait Backend_ {
     type Scalar: ScalarOps + Clone;
     type Tensor0D: Clone + Send + Sync;
     type Tensor1D: Clone + Send + Sync;

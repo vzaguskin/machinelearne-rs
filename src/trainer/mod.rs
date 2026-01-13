@@ -2,11 +2,12 @@
 use std::marker::PhantomData;
 use std::fmt::{Debug, Display};
 use crate::{
-    backend::{Backend, ScalarOps},
+    backend::{Backend, Tensor1D, Tensor2D, ScalarOps, Scalar},
     loss::Loss,
     model::{TrainableModel, ParamOps},
     optimizer::Optimizer,
     regularizers::Regularizer,
+    dataset::Dataset,
 };
 
 // --- Основная структура (immutable после build) ---
@@ -93,63 +94,44 @@ impl<B, L, O, M, P, R> Trainer<B, L, O, M, P, R>
 where
     B: Backend,
     B::Scalar: Debug + Display,
-    L: Loss<B, Target = B::Tensor1D, Prediction = B::Tensor1D>,
-    M: TrainableModel<B, Input = B::Tensor2D, Prediction = L::Prediction, Params = P, Gradients = P>,
+    L: Loss<B, Target = Tensor1D<B>, Prediction = Tensor1D<B>>,
+    M: TrainableModel<B, Input = Tensor2D<B>, Prediction = L::Prediction, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
     R: Regularizer<B, M>,
     P: ParamOps<B>
 {
-    pub fn fit(
-        &self,
-        mut model: M,
-        x: &[Vec<f64>],
-        y: &[f64],
-    ) -> Result<M::Output, String> {
-        if x.len() != y.len() {
-            return Err("x and y must have same length".into());
-        }
-        if x.is_empty() {
+    pub fn fit<D>(&self, mut model: M, dataset: &D) -> Result<M::Output, String>
+where
+    D: Dataset,
+    {
+
+        let n_total = dataset.len().ok_or("Dataset length unknown")?;
+        if n_total == 0 {
             return Err("Dataset is empty".into());
         }
-        let n_features = x[0].len();
-        let n = x.len();
-        let device = B::default_device();
 
         for epoch in 0..self.max_epochs {
-            let mut total_loss = B::Scalar::zero();
-
-            for i in (0..n).step_by(self.batch_size) {
-                let end = (i + self.batch_size).min(n);
-                let batch_x_raw = &x[i..end];
-                let batch_y_raw = &y[i..end];
-                let batch_size = batch_x_raw.len();
-
-                let mut x_tensor = B::zeros_2d(batch_size, n_features, &device);
-                for (row, features) in batch_x_raw.iter().enumerate() {
-                    for (col, &val) in features.iter().enumerate() {
-                        B::set_2d(&mut x_tensor, row, col, B::Scalar::from_f64(val));
-                    }
-                }
-
-                let mut y_tensor = B::zeros_1d(batch_size, &device);
-                for (idx, &val) in batch_y_raw.iter().enumerate() {
-                    B::set_1d(&mut y_tensor, idx, B::Scalar::from_f64(val));
-                }
-
-                let preds = model.forward(&x_tensor);
-                total_loss = total_loss + self.loss_fn.loss(&preds, &y_tensor);
+            let mut total_loss = Scalar::<B>::new(0.);
+            //let mut total_samples = 0;
+            for batch_result in dataset.batches::<B>(self.batch_size) {
+                let (batch_x, batch_y) = batch_result.map_err(|e| format!("Data error: {:?}", e))?;
+                //let mut total_loss = Scalar::<B>::new(0.);
+                let preds = model.forward(&batch_x);
+                total_loss = total_loss + self.loss_fn.loss(&preds, &batch_y);
                 let (reg_penalty, reg_grad) = self.regularizer.regularizer_penalty_grad(&model);
                 total_loss = total_loss + reg_penalty;
-                let grad_preds = self.loss_fn.grad_wrt_prediction(&preds, &y_tensor);
-                let grads = model.backward(&x_tensor, &grad_preds);
+                let grad_preds = self.loss_fn.grad_wrt_prediction(&preds, &batch_y);
+                let grad_preds_avg = grad_preds.scale(&(Scalar::<B>::new(1.) / batch_y.len()));
+                let grads = model.backward(&batch_x, &grad_preds_avg);
 
                 let total_grads = grads.add(&reg_grad);
                 let new_params = self.optimizer.step(model.params(), &total_grads);
                 model.update_params(&new_params);
             }
+        
 
-            let avg_loss = total_loss / B::Scalar::from_f64(n as f64);
-            println!("Epoch {}: loss = {}", epoch, avg_loss); // ← Display вместо Debug
+            let avg_loss = total_loss / Scalar::<B>::new(n_total as f64);
+            println!("Epoch {}: loss = {}", epoch, avg_loss.data.to_f64()); // ← Display вместо Debug
         }
 
         Ok(model.into_fitted())

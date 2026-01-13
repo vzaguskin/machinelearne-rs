@@ -1,11 +1,9 @@
 // examples/train_logistic.rs
-use machinelearne_rs::{
-    loss::BCEWithLogitsLoss,
-    model::linear::LinearRegressor, // будем использовать как линейный классификатор (выдаёт логит)
-    optimizer::SGD,
-    trainer::Trainer,
-    regularizers::NoRegularizer,
-};
+use machinelearne_rs::{CpuBackend, 
+    Tensor1D, 
+    dataset::memory::InMemoryDataset, 
+    loss::BCEWithLogitsLoss, 
+    model::linear::LinearRegressor, optimizer::SGD, regularizers::NoRegularizer, trainer::Trainer, model::InferenceModel, backend::scalar::Scalar};
 
 fn main() {
     // Бинарные данные: y = 1 если x1 + x2 > 3, иначе 0
@@ -30,10 +28,13 @@ fn main() {
         .max_epochs(1000)
         .build();
 
-    let fitted_model = trainer.fit(model, &x, &y).unwrap();
+   let dataset = InMemoryDataset::new(x, y).unwrap();
 
-    // Протестируем на новой точке
-    let logit = fitted_model.predict(&[2.5, 2.0]); // sum=4.5 → ожидаем y≈1
-    let prob = 1.0 / (1.0 + (-logit).exp());
-    println!("Logit: {:.3}, Probability: {:.3}", logit, prob);
+    let fitted_model = trainer.fit(model, &dataset).unwrap();
+    let logit = fitted_model.predict(&Tensor1D::<CpuBackend>::new((&[2.5, 2.0]).to_vec()));
+    let one = Scalar::<CpuBackend>::new(1.);
+    let minus_one = Scalar::<CpuBackend>::new(-1.);
+    let prob = one / (one + ( logit * minus_one));
+    let prob = prob.exp();
+    println!("Logit: {:?}, Probability: {:?}", logit, prob);
 }
