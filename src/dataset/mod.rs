@@ -4,7 +4,7 @@ pub mod memory;
 pub use self::memory::InMemoryDataset;
 
 pub trait Dataset {
-    type Error: Debug;
+    type Error: Debug + 'static;
     type Item: ?Sized;
 
     /// Возвращает общее число сэмплов (если известно)
@@ -16,7 +16,7 @@ pub trait Dataset {
     }
 
     /// Создаёт итератор по батчам заданного размера
-    fn batches<B: Backend>(&self, batch_size: usize) -> DatasetBatchIter<B, Self>
+    fn batches<'a, B: Backend>(&'a self, batch_size: usize) -> DatasetBatchIter<'a, B, Self>
     where
         Self: Sized,
     {

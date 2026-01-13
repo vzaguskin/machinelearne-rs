@@ -2,14 +2,11 @@
 use std::marker::PhantomData;
 use std::fmt::{Debug, Display};
 use crate::{
-    backend::backend::{Backend},
-    backend::scalar::{ScalarOps, Scalar},
+    backend::{Backend, Tensor1D, Tensor2D, ScalarOps, Scalar},
     loss::Loss,
     model::{TrainableModel, ParamOps},
     optimizer::Optimizer,
     regularizers::Regularizer,
-    backend::tensor1d::Tensor1D,
-    backend::tensor2d::Tensor2D,
     dataset::Dataset,
 };
 
@@ -124,7 +121,8 @@ where
                 let (reg_penalty, reg_grad) = self.regularizer.regularizer_penalty_grad(&model);
                 total_loss = total_loss + reg_penalty;
                 let grad_preds = self.loss_fn.grad_wrt_prediction(&preds, &batch_y);
-                let grads = model.backward(&batch_x, &grad_preds);
+                let grad_preds_avg = grad_preds.scale(&(Scalar::<B>::new(1.) / batch_y.len()));
+                let grads = model.backward(&batch_x, &grad_preds_avg);
 
                 let total_grads = grads.add(&reg_grad);
                 let new_params = self.optimizer.step(model.params(), &total_grads);

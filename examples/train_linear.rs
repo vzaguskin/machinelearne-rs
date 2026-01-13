@@ -3,7 +3,10 @@ use machinelearne_rs::{CpuBackend,
     Tensor1D, 
     dataset::memory::InMemoryDataset, 
     loss::MSELoss, 
-    model::linear::LinearRegressor, optimizer::SGD, regularizers::NoRegularizer, trainer::Trainer, model::InferenceModel};
+    model::{linear::LinearRegressor, InferenceModel}, 
+    optimizer::SGD, 
+    regularizers::NoRegularizer, 
+    trainer::Trainer};
 
 fn main() {
 

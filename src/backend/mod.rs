@@ -4,10 +4,9 @@ pub mod tensorlike;
 pub mod backend;
 pub mod tensor1d;
 pub mod tensor2d;
-use std::marker::PhantomData;
 
 pub use self::cpu::CpuBackend;
-pub use scalar::{ScalarOps};
+pub use scalar::{ScalarOps, Scalar};
 pub use backend::Backend;
 
 pub use self::tensor1d::Tensor1D;
