@@ -251,6 +251,10 @@ impl Backend for CpuBackend {
         CpuTensor2D::new(out, *cols, *rows)
 
     }
+
+    fn shape(t: &Self::Tensor2D) -> (usize, usize){
+        (t.1, t.2)
+    }
 }
 
 

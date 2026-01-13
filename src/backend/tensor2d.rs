@@ -116,4 +116,8 @@ impl<B: Backend> Tensor2D<B> {
             backend: PhantomData,
         }
     }
+
+    pub fn shape(&self) -> (usize, usize){
+        B::shape(&self.data)
+    }
 }

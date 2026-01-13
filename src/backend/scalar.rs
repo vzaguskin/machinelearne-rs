@@ -16,6 +16,7 @@ pub trait ScalarOps:
     fn one() -> Self;
     fn from_f64(v: f64) -> Self;
     fn to_f64(self) -> f64;
+    fn exp(self) -> Self;
 }
 
 // === Реализации для f64 (и f32, если нужно) ===
@@ -26,6 +27,7 @@ impl ScalarOps for f64 {
     fn one() -> Self { 1.0 }
     fn from_f64(v: f64) -> Self { v }
     fn to_f64(self) -> f64 { self }
+    fn exp(self) -> Self{self.exp()}
     
 }
 
@@ -39,6 +41,10 @@ pub struct Scalar <B: Backend>
 impl <B: Backend> Scalar<B>{
     pub fn new(f: f64) -> Self{
         Self{data: B::scalar_f64(f), backend: PhantomData}
+    }
+
+    pub fn exp(&self) -> Self{
+        Self{data: self.data.exp(), backend: PhantomData}
     }
 }
 

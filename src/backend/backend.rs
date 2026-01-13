@@ -62,4 +62,5 @@ pub trait Backend: Clone + Copy  + 'static {
     fn matvec_transposed(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D;
     fn _matvec_transposed_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D;
     fn transpose(t: &Self::Tensor2D) -> Self::Tensor2D;
+    fn shape(t: &Self::Tensor2D) -> (usize, usize);
 }

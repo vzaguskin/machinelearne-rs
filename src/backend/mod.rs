@@ -7,16 +7,13 @@ pub mod tensor2d;
 use std::marker::PhantomData;
 
 pub use self::cpu::CpuBackend;
-use scalar::{ScalarOps};
-use backend::Backend;
+pub use scalar::{ScalarOps};
+pub use backend::Backend;
+
+pub use self::tensor1d::Tensor1D;
+pub use self::tensor2d::Tensor2D;
 
 /// Backend trait: абстракция над вычислительным движком (CPU, CUDA, ndarray, candle и т.д.)
-
-
-pub struct Tensor2D<B: Backend> {
-    pub(crate) data: B::Tensor2D,
-    pub(crate) backend: PhantomData<B>,
-}
 
  
 pub trait Backend_ {

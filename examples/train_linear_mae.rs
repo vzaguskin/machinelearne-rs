@@ -1,10 +1,9 @@
 // examples/train_linear.rs или в тестах
-use machinelearne_rs::{
-    loss::{MAELoss}, 
-    model::linear::{LinearRegressor}, 
-    optimizer::SGD, trainer::Trainer,
-    regularizers::NoRegularizer,
-};
+use machinelearne_rs::{CpuBackend, 
+    Tensor1D, 
+    dataset::memory::InMemoryDataset, 
+    loss::MAELoss, 
+    model::linear::LinearRegressor, optimizer::SGD, regularizers::NoRegularizer, trainer::Trainer, model::InferenceModel};
 
 fn main() {
 
@@ -25,6 +24,8 @@ fn main() {
 ];
 let y = vec![3.0, 4.0, 5.0, 6.0, 30.0];
 
-    let fitted_model = trainer.fit(model, &x, &y).unwrap();
-    println!("Prediction: {}", fitted_model.predict(&[4.0, 5.0]));
+    let dataset = InMemoryDataset::new(x, y).unwrap();
+
+    let fitted_model = trainer.fit(model, &dataset).unwrap();
+    println!("Prediction: {:?}", fitted_model.predict(&Tensor1D::<CpuBackend>::new((&[4.0, 5.0]).to_vec())));
 }
