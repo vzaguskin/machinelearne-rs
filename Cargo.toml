@@ -7,9 +7,15 @@ edition = "2021"
 
 [dependencies]
 ndarray = { version = "0.16", optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
+bincode = { version = "1.3", optional = true }
+
+[dev-dependencies]
+tempfile = "3.10"
 
 [features]
-default = ["cpu"]
+default = ["cpu", "serde"]
+serde = ["dep:serde", "dep:bincode"]
 cpu = []
 ndarray = ["dep:ndarray"]
 # tch = ["dep:tch"]
