@@ -6,6 +6,7 @@ pub mod loss;
 pub mod trainer;
 pub mod regularizers;
 pub mod dataset;
+pub mod serialization;
 pub use backend::{Backend, ScalarOps, CpuBackend, Tensor1D, Tensor2D};
 
 #[cfg(test)]
