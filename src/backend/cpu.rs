@@ -329,3 +329,146 @@ mod matvec_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_constructors() {
+        // zeros_1d
+        let z1 = CpuBackend::zeros_1d(3);
+        assert_eq!(z1, vec![0.0, 0.0, 0.0]);
+
+        // zeros_2d
+        let z2 = CpuBackend::zeros_2d(2, 3);
+        assert_eq!(z2.0, vec![0.0; 6]);
+        assert_eq!((z2.1, z2.2), (2, 3));
+
+        // from_vec_1d
+        let v1 = CpuBackend::from_vec_1d(vec![1.0f32, 2.0, 3.0]);
+        assert_eq!(v1, vec![1.0, 2.0, 3.0]);
+
+        // from_vec_2d
+        let v2 = CpuBackend::from_vec_2d(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        assert_eq!(v2.0, vec![1.0, 2.0, 3.0, 4.0]);
+        assert_eq!((v2.1, v2.2), (2, 2));
+
+        // From<&[Vec<f64>]> for CpuTensor2D
+        let nested = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        let t = CpuTensor2D::from(&nested[..]);
+        assert_eq!(t.0, vec![1.0, 2.0, 3.0, 4.0]);
+        assert_eq!((t.1, t.2), (2, 2));
+    }
+
+    #[test]
+    fn test_elementwise_ops_1d() {
+        let a = vec![1.0, 2.0];
+        let b = vec![3.0, 4.0];
+
+        assert_eq!(CpuBackend::add_1d(&a, &b), vec![4.0, 6.0]);
+        assert_eq!(CpuBackend::sub_1d(&a, &b), vec![-2.0, -2.0]);
+        assert_eq!(CpuBackend::mul_1d(&a, &b), vec![3.0, 8.0]);
+        assert_eq!(CpuBackend::div_1d(&a, &b), vec![1.0/3.0, 0.5]);
+
+        assert_eq!(CpuBackend::add_scalar_1d(&a, &5.0), vec![6.0, 7.0]);
+        assert_eq!(CpuBackend::mul_scalar_1d(&a, &2.0), vec![2.0, 4.0]);
+    }
+
+    #[test]
+    fn test_elementwise_ops_2d() {
+        let a = CpuTensor2D::new(vec![1.0, 2.0], 1, 2);
+        let b = CpuTensor2D::new(vec![3.0, 4.0], 1, 2);
+
+        let add = CpuBackend::add_2d(&a, &b);
+        assert_eq!(add.0, vec![4.0, 6.0]);
+
+        let mul_s = CpuBackend::mul_scalar_2d(&a, &2.0);
+        assert_eq!(mul_s.0, vec![2.0, 4.0]);
+    }
+
+    #[test]
+    fn test_reductions() {
+        let v = vec![1.0, 2.0, 3.0];
+        assert_eq!(CpuBackend::sum_all_1d(&v), 6.0);
+        assert!((CpuBackend::mean_all_1d(&v) - 2.0).abs() < 1e-12);
+
+        let m = CpuTensor2D::new(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
+        assert_eq!(CpuBackend::sum_all_2d(&m), 10.0);
+        assert!((CpuBackend::mean_all_2d(&m) - 2.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_abs_and_sign() {
+        let v = vec![-2.0, 0.0, 3.0];
+        assert_eq!(CpuBackend::abs_1d(&v), vec![2.0, 0.0, 3.0]);
+        assert_eq!(CpuBackend::sign_1d(&v), vec![-1.0, 0.0, 1.0]);
+
+        let m = CpuTensor2D::new(vec![-1.0, 0.0, 2.0], 1, 3);
+        let sign_m = CpuBackend::sign_2d(&m);
+        assert_eq!(sign_m.0, vec![-1.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn test_math_functions() {
+        let v = vec![0.0, 1.0];
+        assert_eq!(CpuBackend::exp_1d(&v), vec![1.0, std::f64::consts::E]);
+        assert_eq!(CpuBackend::log_1d(&vec![1.0, std::f64::consts::E]), vec![0.0, 1.0]);
+
+        // sigmoid(0) = 0.5
+        let sig = CpuBackend::sigmoid_1d(&vec![0.0]);
+        assert!((sig[0] - 0.5).abs() < 1e-12);
+
+        // maximum
+        let a = vec![1.0, 3.0];
+        let b = vec![2.0, 2.0];
+        assert_eq!(CpuBackend::maximum_1d(&a, &b), vec![2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_transpose() {
+        let m = CpuTensor2D::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3); // 2x3
+        let t = CpuBackend::transpose(&m); // 3x2
+        assert_eq!(t.0, vec![1.0, 4.0, 2.0, 5.0, 3.0, 6.0]);
+        assert_eq!((t.1, t.2), (3, 2));
+
+        // Double transpose = original
+        let tt = CpuBackend::transpose(&t);
+        assert_eq!(tt.0, m.0);
+        assert_eq!((tt.1, tt.2), (2, 3));
+    }
+
+    #[test]
+    fn test_matvec() {
+        let m = CpuTensor2D::new(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
+        let v = vec![1.0, 0.0];
+        let res = CpuBackend::matvec(&m, &v);
+        assert_eq!(res, vec![1.0, 3.0]); // [1*1 + 2*0, 3*1 + 4*0]
+    }
+
+    #[test]
+    fn test_edge_cases() {
+        // Пустой тензор 1D
+        let empty1d = CpuBackend::zeros_1d(0);
+        assert_eq!(empty1d.len(), 0);
+        assert_eq!(CpuBackend::sum_all_1d(&empty1d), 0.0);
+
+        // Пустой тензор 2D
+        let empty2d = CpuBackend::zeros_2d(0, 0);
+        assert_eq!(empty2d.0.len(), 0);
+        assert_eq!(CpuBackend::sum_all_2d(&empty2d), 0.0);
+
+        // From empty nested vec
+        let t = CpuTensor2D::from(&[][..]);
+        assert_eq!(t.0.len(), 0);
+        assert_eq!((t.1, t.2), (0, 0));
+
+        // Деление на ноль — ожидаем panic или NaN? 
+        // В текущей реализации будет panic при делении на 0.0.
+        // Если это не желаемо — стоит обсудить, но пока покроем как есть.
+        let a = vec![1.0];
+        let b = vec![0.0];
+        let res = CpuBackend::div_1d(&a, &b);
+        assert!(res[0].is_infinite()); // или assert_panics, если хочешь явный контроль
+    }
+}

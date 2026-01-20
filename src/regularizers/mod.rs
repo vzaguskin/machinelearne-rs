@@ -49,3 +49,67 @@ where
         
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::CpuBackend;
+    use crate::model::linear::{LinearRegression, LinearParams, LinearModel, Fitted, InferenceModel};
+
+    #[test]
+    fn test_l2_regularizer() {
+        // Создаём параметры напрямую
+        let weights = Tensor1D::<CpuBackend>::new(vec![3.0f32, 4.0]);
+        let bias = Scalar::<CpuBackend>::new(1.0);
+        let params = LinearParams { weights, bias };
+
+        let model = LinearRegression::<CpuBackend>::from_params(params);
+
+
+        let lambda = 0.5;
+        let l2 = L2::<CpuBackend>::new(lambda);
+
+        let (penalty, grad) = l2.regularizer_penalty_grad(&model);
+
+        // ||w||² = 3² + 4² = 25
+        // penalty = λ * ||w||² = 0.5 * 25 = 12.5
+        assert!((penalty.data - 12.5).abs() < 1e-12);
+
+        // grad_w = 2 * λ * w = 2 * 0.5 * [3, 4] = [3, 4]
+        assert_eq!(grad.weights.to_vec(), vec![3.0, 4.0]);
+        // grad_b = 0
+        assert_eq!(grad.bias.data, 0.0);
+    }
+
+    #[test]
+    fn test_no_regularizer() {
+        let weights = Tensor1D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0]);
+        let bias = Scalar::<CpuBackend>::new(5.0);
+        let params = LinearParams { weights, bias };
+        let model = LinearRegression::<CpuBackend>::from_params(params);
+
+
+        let no_reg = NoRegularizer;
+        let (penalty, grad) = no_reg.regularizer_penalty_grad(&model);
+
+        assert_eq!(penalty.data, 0.0);
+        assert_eq!(grad.weights.to_vec(), vec![0.0, 0.0, 0.0]);
+        assert_eq!(grad.bias.data, 0.0);
+    }
+
+    #[test]
+    fn test_l2_zero_weights() {
+        let weights = Tensor1D::<CpuBackend>::zeros(2);
+        let bias = Scalar::<CpuBackend>::new(0.0);
+        let params = LinearParams { weights, bias };
+        let model = LinearRegression::<CpuBackend>::from_params(params);
+
+
+        let l2 = L2::<CpuBackend>::new(1.0);
+        let (penalty, grad) = l2.regularizer_penalty_grad(&model);
+
+        assert_eq!(penalty.data, 0.0);
+        assert_eq!(grad.weights.to_vec(), vec![0.0, 0.0]);
+        assert_eq!(grad.bias.data, 0.0);
+    }
+}

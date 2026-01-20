@@ -151,3 +151,141 @@ where
         TrainerBuilder::new(loss_fn, optimizer, regularizer)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        backend::CpuBackend,
+        dataset::memory::InMemoryDataset,
+        loss::{MSELoss},
+        model::linear::LinearRegression,
+        model::linear::InferenceModel,
+        optimizer::SGD,
+        regularizers::{L2, NoRegularizer},
+    };
+
+    #[test]
+    fn test_trainer_fit_linear_regression() {
+        // Создаём синтетический датасет: y = 2*x1 + 3*x2 + 1
+        let x = vec![
+            vec![1.0, 0.0],
+            vec![0.0, 1.0],
+            vec![1.0, 1.0],
+            vec![2.0, 3.0],
+        ];
+        let y = vec![3.0, 4.0, 6.0, 14.0]; // 2*2 + 3*3 + 1 = 4+9+1=14
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(2);
+        let loss = MSELoss;
+        let optimizer = SGD::new(0.1); // learning rate
+        let regularizer = NoRegularizer;
+
+        let trainer = Trainer::builder(loss, optimizer, regularizer)
+            .batch_size(4)
+            .max_epochs(100)
+            .build();
+
+        let fitted_model = trainer.fit(model, &dataset).unwrap();
+
+        // Проверим предсказания
+        let test_input = Tensor2D::<CpuBackend>::new(vec![1.0, 0.0, 0.0, 1.0], 2, 2);
+        let preds = fitted_model.predict_batch(&test_input);
+        let pred_vec = preds.to_vec();
+
+        // Ожидаем приближение к [3.0, 4.0]
+        assert!((pred_vec[0] - 3.0).abs() < 0.5);
+        assert!((pred_vec[1] - 4.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn test_trainer_with_l2_regularization() {
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0]; // y = 2*x
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let loss = MSELoss;
+        let optimizer = SGD::new(0.01);
+        let regularizer = L2::<CpuBackend>::new(1.0); // сильная регуляризация
+
+        let trainer = Trainer::builder(loss, optimizer, regularizer)
+            .batch_size(3)
+            .max_epochs(500)
+            .build();
+
+        let fitted_model = trainer.fit(model, &dataset).unwrap();
+        let weights = fitted_model.extract_params().weights;
+
+        // Без регуляризации вес был бы ~2.0, с L2 — меньше
+        assert!(weights[0] < 2.0);
+        assert!(weights[0] > 0.0);
+    }
+
+    #[test]
+    fn test_trainer_empty_dataset() {
+        let x = vec![];
+        let y = vec![];
+        let dataset = InMemoryDataset::new(x, y).unwrap_err(); // ← ошибка на этапе создания
+        // Но если бы датасет допускал пустоту:
+        // let trainer = ...;
+        // let result = trainer.fit(model, &empty_dataset);
+        // assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_trainer_unknown_dataset_length() {
+        // Создадим mock-датасет без len()
+        struct MockDatasetWithoutLen {
+    x: Vec<Vec<f32>>,
+    y: Vec<f32>,
+}
+
+impl Dataset for MockDatasetWithoutLen {
+    type Error = String; // ← меняем на String
+    type Item = ();
+
+    fn len(&self) -> Option<usize> {
+        None
+    }
+
+    fn get_batch<B: Backend>(
+        &self,
+        range: std::ops::Range<usize>,
+    ) -> Result<(Tensor2D<B>, Tensor1D<B>), Self::Error> {
+        let batch_x = &self.x[range.clone()];
+        let batch_y = &self.y[range];
+        let n = batch_x.len();
+        if n == 0 {
+            return Err("Empty batch".into());
+        }
+        let cols = batch_x[0].len();
+        let data = batch_x.iter().flat_map(|r| r.iter()).copied().collect();
+        Ok((
+            Tensor2D::new(data, n, cols),
+            Tensor1D::new(batch_y.to_vec()),
+        ))
+    }
+}
+
+        let dataset = MockDatasetWithoutLen {
+            x: vec![vec![1.0]],
+            y: vec![1.0],
+        };
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let loss = MSELoss;
+        let optimizer = SGD::new(0.1);
+        let regularizer = NoRegularizer;
+
+        let trainer = Trainer::builder(loss, optimizer, regularizer)
+            .batch_size(1)
+            .max_epochs(1)
+            .build();
+
+        let result = trainer.fit(model, &dataset);
+        assert!(result.is_err());
+
+    }
+}

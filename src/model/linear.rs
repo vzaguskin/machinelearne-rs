@@ -60,7 +60,6 @@ where B: Backend
 
     }
 }
-
 pub struct LinearModel<B: Backend, S> {
     params: LinearParams<B>,
     _state: std::marker::PhantomData<S>,
@@ -149,6 +148,10 @@ impl<B: Backend> LinearRegression<B> {
             weights: Tensor1D::<B>::zeros(n_features),
             bias: Scalar::<B>::new(0.),
         };
+        Self { params, _state: PhantomData }
+    }
+
+    pub fn from_params(params: LinearParams<B>) -> Self {
         Self { params, _state: PhantomData }
     }
 }

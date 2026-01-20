@@ -108,3 +108,85 @@ where
         logits.sigmoid().sub(&targets).scale(&n)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::CpuBackend;
+
+    #[test]
+    fn test_mse_loss() {
+        let pred = Tensor1D::<CpuBackend>::new(vec![3.0f32, 5.0]);
+        let target = Tensor1D::<CpuBackend>::new(vec![1.0f32, 2.0]);
+
+        let mse = MSELoss;
+        let loss_val = mse.loss(&pred, &target);
+        // ((3-1)^2 + (5-2)^2) / 2 = (4 + 9) / 2 = 6.5
+        assert!((loss_val.data - 6.5).abs() < 1e-12);
+
+        let grad = mse.grad_wrt_prediction(&pred, &target);
+        // grad = (pred - target) / n = [2.0, 3.0] / 2 = [1.0, 1.5]
+        let expected_grad = vec![1.0, 1.5];
+        assert_eq!(grad.to_vec(), expected_grad);
+    }
+
+    #[test]
+    fn test_mae_loss() {
+        let pred = Tensor1D::<CpuBackend>::new(vec![3.0f32, -1.0]);
+        let target = Tensor1D::<CpuBackend>::new(vec![1.0f32, 2.0]);
+
+        let mae = MAELoss;
+        let loss_val = mae.loss(&pred, &target);
+        // (|3-1| + |-1-2|) / 2 = (2 + 3) / 2 = 2.5
+        assert!((loss_val.data - 2.5).abs() < 1e-12);
+
+        let grad = mae.grad_wrt_prediction(&pred, &target);
+        // sign(pred - target) / n = [1.0, -1.0] / 2 = [0.5, -0.5]
+        let expected_grad = vec![0.5, -0.5];
+        assert_eq!(grad.to_vec(), expected_grad);
+    }
+
+    #[test]
+    fn test_bce_with_logits_loss() {
+        let logits = Tensor1D::<CpuBackend>::new(vec![0.0f32, 2.0, -2.0]); // sigmoid: [0.5, ~0.88, ~0.12]
+        let targets = Tensor1D::<CpuBackend>::new(vec![1.0f32, 1.0, 0.0]);
+
+        let bce = BCEWithLogitsLoss;
+        let loss_val = bce.loss(&logits, &targets);
+
+        // Expected (computed manually or via PyTorch):
+        // For z=0, t=1: -(0 + log(1+1)) = -log(2) ≈ -0.6931 → but formula gives: max(0,0) - 0*1 + log(1+1) = 0 + 0 + log(2) ≈ 0.6931
+        // For z=2, t=1: max(2,0) - 2*1 + log(1+exp(-2)) = 2 - 2 + log(1+0.135) ≈ 0.127
+        // For z=-2, t=0: max(-2,0)=0 - (-2)*0 + log(1+exp(-2)) = 0 + 0 + log(1.135) ≈ 0.127
+        // Mean ≈ (0.6931 + 0.127 + 0.127) / 3 ≈ 0.3156
+        let expected_loss = 0.3156;
+        assert!((loss_val.data - expected_loss).abs() < 1e-3);
+
+        let grad = bce.grad_wrt_prediction(&logits, &targets);
+        // grad = (sigmoid(z) - t) / n
+        let sig = vec![0.5, 1.0 / (1.0 + (-2.0f64).exp()), 1.0 / (1.0 + (2.0f64).exp())];
+        let expected_grad: Vec<f64> = sig
+            .iter()
+            .zip(targets.to_vec().iter())
+            .map(|(s, t)| (s - t) / 3.0)
+            .collect();
+        for (g, e) in grad.to_vec().iter().zip(expected_grad.iter()) {
+            assert!((g - e).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn test_bce_numerical_stability() {
+        // Large positive and negative logits
+        let logits = Tensor1D::<CpuBackend>::new(vec![100.0f32, -100.0]);
+        let targets = Tensor1D::<CpuBackend>::new(vec![1.0f32, 0.0]);
+
+        let bce = BCEWithLogitsLoss;
+        let loss_val = bce.loss(&logits, &targets);
+        // Should not overflow or produce NaN
+        assert!(loss_val.data.is_finite());
+
+        let grad = bce.grad_wrt_prediction(&logits, &targets);
+        assert!(grad.to_vec().iter().all(|&x| x.is_finite()));
+    }
+}

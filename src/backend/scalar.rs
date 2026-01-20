@@ -92,3 +92,63 @@ impl<B: Backend> std::ops::Div for Scalar<B> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::{CpuBackend}; // Убедись, что CpuBackend доступен
+
+    #[test]
+    fn test_scalar_ops_f64() {
+        let a = 4.0f64;
+        assert_eq!(a.sqrt(), 2.0);
+        assert_eq!(a.abs(), 4.0);
+        assert_eq!(f64::zero(), 0.0);
+        assert_eq!(f64::one(), 1.0);
+        assert_eq!(f64::from_f64(3.14), 3.14);
+        assert_eq!(3.14f64.to_f64(), 3.14);
+        assert_eq!(1.0f64.exp(), std::f64::consts::E);
+    }
+
+    #[test]
+    fn test_scalar_new_and_exp() {
+        let s: Scalar<CpuBackend> = Scalar::new(1.0);
+        assert_eq!(s.data, 1.0);
+
+        let e = s.exp();
+        assert!((e.data - std::f64::consts::E).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_scalar_arithmetic() {
+        let a: Scalar<CpuBackend> = Scalar::new(5.0);
+        let b: Scalar<CpuBackend> = Scalar::new(2.0);
+
+        let sum = a + b;
+        assert_eq!(sum.data, 7.0);
+
+        let diff = sum - Scalar::new(3.0);
+        assert_eq!(diff.data, 4.0);
+
+        let prod = diff * Scalar::new(0.5);
+        assert_eq!(prod.data, 2.0);
+
+        let quot = prod / Scalar::new(4.0);
+        assert_eq!(quot.data, 0.5);
+    }
+
+    #[test]
+    fn test_scalar_type_safety() {
+        // Этот код не должен компилироваться:
+        // let cpu_scalar: Scalar<CpuBackend> = Scalar::new(1.0);
+        // let ndarray_scalar: Scalar<NdarrayBackend> = Scalar::new(2.0);
+        // let _ = cpu_scalar + ndarray_scalar; // <-- ошибка типов
+
+        // Но мы можем проверить, что арифметика работает только внутри одного бэкенда.
+        // Тест проходит, если компиляция вышеуказанных строк невозможна — это гарантия Rust.
+        // Поэтому просто убедимся, что операции с одним бэкендом работают.
+        let x: Scalar<CpuBackend> = Scalar::new(10.0);
+        let y: Scalar<CpuBackend> = Scalar::new(3.0);
+        let _ = x / y; // должно компилироваться
+    }
+}
