@@ -35,4 +35,3 @@ jobs:
 
       - name: Run coverage with threshold
         run: cargo tarpaulin --out Xml --fail-under $COVERAGE_THRESHOLD
-

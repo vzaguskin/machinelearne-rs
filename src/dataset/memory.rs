@@ -1,6 +1,7 @@
 use std::ops::Range;
 use crate::backend::{Backend, Tensor1D, Tensor2D};
 use crate::dataset::Dataset;
+#[derive (Debug)]
 pub struct InMemoryDataset {
     x: Vec<Vec<f32>>,
     y: Vec<f32>,
@@ -46,5 +47,79 @@ impl Dataset for InMemoryDataset {
         let y_tensor = Tensor1D::<B>::new(batch_y.to_vec());
 
         Ok((x_tensor, y_tensor))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::CpuBackend;
+
+    #[test]
+    fn test_in_memory_dataset_new_success() {
+        let x = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        let y = vec![0.0, 1.0];
+        let dataset = InMemoryDataset::new(x, y);
+        assert!(dataset.is_ok());
+    }
+
+    #[test]
+    fn test_in_memory_dataset_new_mismatched_lengths() {
+        let x = vec![vec![1.0, 2.0]];
+        let y = vec![0.0, 1.0];
+        let dataset = InMemoryDataset::new(x, y);
+        assert!(dataset.is_err());
+        assert_eq!(dataset.unwrap_err(), "x and y must have same length");
+    }
+
+    #[test]
+    fn test_in_memory_dataset_new_empty() {
+        let x = vec![];
+        let y = vec![];
+        let dataset = InMemoryDataset::new(x, y);
+        assert!(dataset.is_err());
+        assert_eq!(dataset.unwrap_err(), "Dataset is empty");
+    }
+
+    #[test]
+    fn test_in_memory_dataset_new_uneven_rows() {
+        let x = vec![vec![1.0, 2.0], vec![3.0]]; // вторая строка короче
+        let y = vec![0.0, 1.0];
+        let dataset = InMemoryDataset::new(x, y);
+        assert!(dataset.is_err());
+        assert_eq!(
+            dataset.unwrap_err(),
+            "All rows must have the same number of features"
+        );
+    }
+
+    #[test]
+    fn test_in_memory_dataset_len() {
+        let x = vec![vec![1.0], vec![2.0]];
+        let y = vec![0.0, 1.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+        assert_eq!(dataset.len(), Some(2));
+    }
+
+    #[test]
+    fn test_in_memory_dataset_batches_integration() {
+        let x = vec![
+            vec![1.0, 0.0],
+            vec![0.0, 1.0],
+            vec![1.0, 1.0],
+        ];
+        let y = vec![1.0, 0.0, 1.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let mut batches = dataset.batches::<CpuBackend>(2);
+        let batch1 = batches.next().unwrap().unwrap();
+        assert_eq!(batch1.0.shape(), (2, 2));
+        assert_eq!(batch1.1.to_vec(), vec![1.0, 0.0]);
+
+        let batch2 = batches.next().unwrap().unwrap();
+        assert_eq!(batch2.0.shape(), (1, 2));
+        assert_eq!(batch2.1.to_vec(), vec![1.0]);
+
+        assert!(batches.next().is_none());
     }
 }
