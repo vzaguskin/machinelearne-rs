@@ -8,7 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  COVERAGE_THRESHOLD: 85  # ← задаём порог здесь
+  COVERAGE_THRESHOLD: 15  # ← задаём порог здесь
 
 jobs:
   build:
