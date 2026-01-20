@@ -36,9 +36,3 @@ jobs:
       - name: Run coverage with threshold
         run: cargo tarpaulin --out Xml --fail-under $COVERAGE_THRESHOLD
 
-      # Опционально: загрузить в Codecov
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          file: ./cobertura.xml
-          fail_ci_if_error: true
