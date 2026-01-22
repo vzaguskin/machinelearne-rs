@@ -258,11 +258,211 @@ fn _matvec_transposed_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self:
 }
 }
 
+
 #[cfg(test)]
 #[cfg(feature = "ndarray")]
 mod tests {
     use super::*;
-    use ndarray::Array1;
+    use ndarray::{Array1, Array2};
+
+    // Helper to create 2D tensor from nested vec
+    fn tensor2d_from(data: &[Vec<f64>]) -> NdarrayTensor2D {
+        NdarrayTensor2D::from(data)
+    }
+
+    #[test]
+    fn test_zeros_1d() {
+        let t = NdarrayBackend::zeros_1d(3);
+        assert_eq!(t.to_vec(), vec![0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_zeros_2d() {
+        let t = NdarrayBackend::zeros_2d(2, 3);
+        assert_eq!(NdarrayBackend::shape(&t), (2, 3));
+        assert_eq!(t.0.iter().sum::<f64>(), 0.0);
+    }
+
+    #[test]
+    fn test_from_vec_1d() {
+        let t = NdarrayBackend::from_vec_1d(vec![1.0, 2.0, 3.0]);
+        assert_eq!(t.to_vec(), vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_from_vec_2d() {
+        let t = NdarrayBackend::from_vec_2d(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
+        assert_eq!(NdarrayBackend::shape(&t), (2, 2));
+        assert_eq!(t.0, Array2::from_shape_vec((2, 2), vec![1.0, 2.0, 3.0, 4.0]).unwrap());
+    }
+
+    #[test]
+    fn test_from_nested_vec() {
+        let data = &[vec![1.0, 2.0], vec![3.0, 4.0]];
+        let t = tensor2d_from(data);
+        assert_eq!(t.0, Array2::from_shape_vec((2, 2), vec![1.0, 2.0, 3.0, 4.0]).unwrap());
+    }
+
+    #[test]
+    fn test_add_1d() {
+        let a = Array1::from_vec(vec![1.0, 2.0]);
+        let b = Array1::from_vec(vec![3.0, 4.0]);
+        let c = NdarrayBackend::add_1d(&a, &b);
+        assert_eq!(c.to_vec(), vec![4.0, 6.0]);
+    }
+
+    #[test]
+    fn test_add_2d() {
+        let a = tensor2d_from(&[vec![1.0, 2.0]]);
+        let b = tensor2d_from(&[vec![3.0, 4.0]]);
+        let c = NdarrayBackend::add_2d(&a, &b);
+        assert_eq!(c.0, Array2::from_shape_vec((1, 2), vec![4.0, 6.0]).unwrap());
+    }
+
+    #[test]
+    fn test_sub_1d() {
+        let a = Array1::from_vec(vec![5.0, 6.0]);
+        let b = Array1::from_vec(vec![2.0, 1.0]);
+        let c = NdarrayBackend::sub_1d(&a, &b);
+        assert_eq!(c.to_vec(), vec![3.0, 5.0]);
+    }
+
+    #[test]
+    fn test_sub_2d() {
+        let a = tensor2d_from(&[vec![5.0, 6.0]]);
+        let b = tensor2d_from(&[vec![2.0, 1.0]]);
+        let c = NdarrayBackend::sub_2d(&a, &b);
+        assert_eq!(c.0, Array2::from_shape_vec((1, 2), vec![3.0, 5.0]).unwrap());
+    }
+
+    #[test]
+    fn test_mul_1d() {
+        let a = Array1::from_vec(vec![2.0, 3.0]);
+        let b = Array1::from_vec(vec![4.0, 5.0]);
+        let c = NdarrayBackend::mul_1d(&a, &b);
+        assert_eq!(c.to_vec(), vec![8.0, 15.0]);
+    }
+
+    #[test]
+    fn test_mul_2d() {
+        let a = tensor2d_from(&[vec![2.0, 3.0]]);
+        let b = tensor2d_from(&[vec![4.0, 5.0]]);
+        let c = NdarrayBackend::mul_2d(&a, &b);
+        assert_eq!(c.0, Array2::from_shape_vec((1, 2), vec![8.0, 15.0]).unwrap());
+    }
+
+    #[test]
+    fn test_div_1d() {
+        let a = Array1::from_vec(vec![8.0, 15.0]);
+        let b = Array1::from_vec(vec![2.0, 3.0]);
+        let c = NdarrayBackend::div_1d(&a, &b);
+        assert_eq!(c.to_vec(), vec![4.0, 5.0]);
+    }
+
+    #[test]
+    fn test_div_2d() {
+        let a = tensor2d_from(&[vec![8.0, 15.0]]);
+        let b = tensor2d_from(&[vec![2.0, 3.0]]);
+        let c = NdarrayBackend::div_2d(&a, &b);
+        assert_eq!(c.0, Array2::from_shape_vec((1, 2), vec![4.0, 5.0]).unwrap());
+    }
+
+    #[test]
+    fn test_add_scalar_1d() {
+        let t = Array1::from_vec(vec![1.0, 2.0]);
+        let s = 10.0;
+        let out = NdarrayBackend::add_scalar_1d(&t, &s);
+        assert_eq!(out.to_vec(), vec![11.0, 12.0]);
+    }
+
+    #[test]
+    fn test_add_scalar_2d() {
+        let t = tensor2d_from(&[vec![1.0, 2.0]]);
+        let s = 10.0;
+        let out = NdarrayBackend::add_scalar_2d(&t, &s);
+        assert_eq!(out.0, Array2::from_shape_vec((1, 2), vec![11.0, 12.0]).unwrap());
+    }
+
+    #[test]
+    fn test_mul_scalar_1d() {
+        let t = Array1::from_vec(vec![2.0, 3.0]);
+        let s = 5.0;
+        let out = NdarrayBackend::mul_scalar_1d(&t, &s);
+        assert_eq!(out.to_vec(), vec![10.0, 15.0]);
+    }
+
+    #[test]
+    fn test_mul_scalar_2d() {
+        let t = tensor2d_from(&[vec![2.0, 3.0]]);
+        let s = 5.0;
+        let out = NdarrayBackend::mul_scalar_2d(&t, &s);
+        assert_eq!(out.0, Array2::from_shape_vec((1, 2), vec![10.0, 15.0]).unwrap());
+    }
+
+    #[test]
+    fn test_matvec() {
+        let a = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        let x = Array1::from_vec(vec![1.0, 2.0]);
+        let y = NdarrayBackend::matvec(&a, &x);
+        assert_eq!(y.to_vec(), vec![5.0, 11.0]); // 1*1+2*2=5, 3*1+4*2=11
+    }
+
+    #[test]
+    fn test_matvec_transposed() {
+        let a = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]); // 2x2
+        let x = Array1::from_vec(vec![1.0, 0.0]); // shape (2,)
+        let y = NdarrayBackend::matvec_transposed(&a, &x); // A^T @ x → (2,)
+        // A^T = [[1,3],[2,4]], so [1*1 + 3*0, 2*1 + 4*0] = [1, 2]
+        assert_eq!(y.to_vec(), vec![1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_transpose() {
+        let a = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        let at = NdarrayBackend::transpose(&a);
+        assert_eq!(NdarrayBackend::shape(&at), (2, 2));
+        assert_eq!(at.0, Array2::from_shape_vec((2, 2), vec![1.0, 3.0, 2.0, 4.0]).unwrap());
+    }
+
+    #[test]
+    fn test_shape() {
+        let a = tensor2d_from(&[vec![1.0, 2.0, 3.0]]);
+        assert_eq!(NdarrayBackend::shape(&a), (1, 3));
+    }
+
+    #[test]
+    fn test_len_1d() {
+        let t = Array1::from_vec(vec![1.0, 2.0, 3.0]);
+        assert_eq!(NdarrayBackend::len_1d(&t), 3);
+    }
+
+    #[test]
+    fn test_len_2d() {
+        let t = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        assert_eq!(NdarrayBackend::len_2d(&t), 2); // nrows
+    }
+
+    #[test]
+    fn test_to_vec_1d() {
+        let t = Array1::from_vec(vec![1.0, 2.0, 3.0]);
+        assert_eq!(NdarrayBackend::to_vec_1d(&t), vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_exp_1d() {
+        let t = Array1::from_vec(vec![0.0, 1.0]);
+        let out = NdarrayBackend::exp_1d(&t);
+        assert!((out[0] - 1.0).abs() < 1e-6);
+        assert!((out[1] - std::f64::consts::E).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_log_1d() {
+        let t = Array1::from_vec(vec![1.0, std::f64::consts::E]);
+        let out = NdarrayBackend::log_1d(&t);
+        assert!((out[0] - 0.0).abs() < 1e-6);
+        assert!((out[1] - 1.0).abs() < 1e-6);
+    }
 
     #[test]
     fn test_sigmoid_stability() {
@@ -272,5 +472,127 @@ mod tests {
         for (o, e) in out.iter().zip(expected) {
             assert!((o - e).abs() < 1e-6);
         }
+    }
+
+    #[test]
+    fn test_abs_1d() {
+        let t = Array1::from_vec(vec![-2.0, 3.0]);
+        let out = NdarrayBackend::abs_1d(&t);
+        assert_eq!(out.to_vec(), vec![2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_sign_1d() {
+        let t = Array1::from_vec(vec![-2.0, 0.0, 3.0]);
+        let out = NdarrayBackend::sign_1d(&t);
+        assert_eq!(out.to_vec(), vec![-1.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn test_maximum_1d() {
+        let a = Array1::from_vec(vec![1.0, 5.0, 3.0]);
+        let b = Array1::from_vec(vec![2.0, 4.0, 6.0]);
+        let out = NdarrayBackend::maximum_1d(&a, &b);
+        assert_eq!(out.to_vec(), vec![2.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn test_exp_2d() {
+        let t = tensor2d_from(&[vec![0.0, 1.0]]);
+        let out = NdarrayBackend::exp_2d(&t);
+        assert!((out.0[[0, 0]] - 1.0).abs() < 1e-6);
+        assert!((out.0[[0, 1]] - std::f64::consts::E).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_log_2d() {
+        let t = tensor2d_from(&[vec![1.0, std::f64::consts::E]]);
+        let out = NdarrayBackend::log_2d(&t);
+        assert!((out.0[[0, 0]] - 0.0).abs() < 1e-6);
+        assert!((out.0[[0, 1]] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_sigmoid_2d() {
+        let t = tensor2d_from(&[vec![-100.0, 0.0, 100.0]]);
+        let out = NdarrayBackend::sigmoid_2d(&t);
+        let expected = vec![0.0, 0.5, 1.0];
+        for (i, &e) in expected.iter().enumerate() {
+            assert!((out.0[[0, i]] - e).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn test_abs_2d() {
+        let t = tensor2d_from(&[vec![-2.0, 3.0]]);
+        let out = NdarrayBackend::abs_2d(&t);
+        assert_eq!(out.0, Array2::from_shape_vec((1, 2), vec![2.0, 3.0]).unwrap());
+    }
+
+    #[test]
+    fn test_sign_2d() {
+        let t = tensor2d_from(&[vec![-2.0, 0.0, 3.0]]);
+        let out = NdarrayBackend::sign_2d(&t);
+        assert_eq!(out.0, Array2::from_shape_vec((1, 3), vec![-1.0, 0.0, 1.0]).unwrap());
+    }
+
+    #[test]
+    fn test_maximum_2d() {
+        let a = tensor2d_from(&[vec![1.0, 5.0, 3.0]]);
+        let b = tensor2d_from(&[vec![2.0, 4.0, 6.0]]);
+        let out = NdarrayBackend::maximum_2d(&a, &b);
+        assert_eq!(out.0, Array2::from_shape_vec((1, 3), vec![2.0, 5.0, 6.0]).unwrap());
+    }
+
+    #[test]
+    fn test_sum_all_1d() {
+        let t = Array1::from_vec(vec![1.0, 2.0, 3.0]);
+        assert_eq!(NdarrayBackend::sum_all_1d(&t), 6.0);
+    }
+
+    #[test]
+    fn test_mean_all_1d() {
+        let t = Array1::from_vec(vec![1.0, 2.0, 3.0]);
+        assert!((NdarrayBackend::mean_all_1d(&t) - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_sum_all_2d() {
+        let t = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        assert_eq!(NdarrayBackend::sum_all_2d(&t), 10.0);
+    }
+
+    #[test]
+    fn test_mean_all_2d() {
+        let t = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        assert!((NdarrayBackend::mean_all_2d(&t) - 2.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_scalar_f64() {
+        assert_eq!(NdarrayBackend::scalar_f64(42.0), 42.0);
+    }
+
+    #[test]
+    fn test_empty_tensor_2d() {
+        let empty: &[Vec<f64>] = &[];
+        let t = tensor2d_from(empty);
+        assert_eq!(NdarrayBackend::shape(&t), (0, 0));
+    }
+
+    #[test]
+    #[should_panic(expected = "Shapes must match")]
+    fn test_maximum_1d_mismatch() {
+        let a = Array1::from_vec(vec![1.0]);
+        let b = Array1::from_vec(vec![1.0, 2.0]);
+        NdarrayBackend::maximum_1d(&a, &b);
+    }
+
+    #[test]
+    #[should_panic(expected = "Shapes must match")]
+    fn test_maximum_2d_mismatch() {
+        let a = tensor2d_from(&[vec![1.0]]);
+        let b = tensor2d_from(&[vec![1.0, 2.0]]);
+        NdarrayBackend::maximum_2d(&a, &b);
     }
 }
