@@ -1,4 +1,14 @@
-
+//! Linear models for regression and classification.
+//!
+//! This module implements a type-safe linear model with compile-time state tracking:
+//! - [`LinearRegression`] = `LinearModel<Unfitted>` — used during training.
+//! - [`LinearModel<Fitted>`] — inference-only, serializable predictor.
+//!
+//! The design follows [ADR-0001: separate-trainer-losses](https://github.com/vzaguskin/machinelearne-rs/issues/1):
+//! > *"Fitted model is free from training hyperparameters."*
+//!
+//! Supports L1/L2 regularization via loss functions and works with any backend implementing [`Backend`].
+//! 
 pub use crate::backend::backend::{Backend};
 pub use crate::backend::scalar::{ScalarOps, Scalar};
 pub use crate::backend::tensor1d::Tensor1D;
@@ -8,7 +18,10 @@ pub use crate::model::{TrainableModel, InferenceModel, Unfitted, Fitted, ParamOp
 use std::marker::PhantomData;
 
 
-
+/// Trainable parameters of a linear model: weights and bias.
+///
+/// Used internally by both [`TrainableModel`] and [`InferenceModel`] implementations.
+/// Implements [`ParamOps`] to support optimizer updates (e.g., SGD).
 #[derive(Clone)]
 pub struct LinearParams<B: Backend>
 where
@@ -19,6 +32,12 @@ where
     pub bias: Scalar<B>,
 }
 
+/// Serializable representation of linear model parameters.
+///
+/// Converts internal backend-specific tensors into plain `Vec<f32>` for storage.
+/// Used by [`InferenceModel::save_to_file`] and [`InferenceModel::load_from_file`].
+///
+/// ⚠️ Currently uses `f32` for compactness
 #[cfg(feature = "serde")]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct SerializableLinearParams {
@@ -60,19 +79,34 @@ where B: Backend
 
     }
 }
+
+/// A linear model with state encoded at the type level.
+///
+/// - When `S = Unfitted`: implements [`TrainableModel`] — used during training.
+/// - When `S = Fitted`: implements [`InferenceModel`] — used for prediction and serialization.
+///
+/// This enforces, at compile time, that you cannot call `predict()` on an untrained model.
 pub struct LinearModel<B: Backend, S> {
     params: LinearParams<B>,
     _state: std::marker::PhantomData<S>,
 }
 
 impl<B: Backend> LinearModel<B, Fitted> {
-    /// Create a new fitted linear model from params.
+    /// Creates a new fitted linear model from trained parameters.
+    ///
+    /// Typically called internally by [`TrainableModel::into_fitted`].
+    /// Useful for manual model construction or loading from external sources.
     pub fn new(params: LinearParams<B>) -> Self {
         Self{params, _state: std::marker::PhantomData::<Fitted>}
     }
 }
 
-
+/// Implements inference for a trained linear model: `y = w^T x + b`.
+///
+/// - Single-sample input: [`Tensor1D<B>`] → output: [`Scalar<B>`]
+/// - Batch input: [`Tensor2D<B>`] → output: [`Tensor1D<B>`]
+///
+/// Serialization uses [`SerializableLinearParams`] (see `save_to_file`/`load_from_file`).
 impl<B: Backend> InferenceModel<B> for LinearModel<B, Fitted> {
     type InputSingle = Tensor1D<B>;
     type InputBatch = Tensor2D<B>;
@@ -104,6 +138,12 @@ impl<B: Backend> InferenceModel<B> for LinearModel<B, Fitted> {
     }
 }
 
+/// Implements training interface for linear regression.
+///
+/// Forward pass: `X @ w + b`  
+/// Backward pass: computes gradients ∇w = X^T · grad, ∇b = sum(grad)
+///
+/// After training, convert to inference model via [`Self::into_fitted`].
 impl <B: Backend> TrainableModel<B> for LinearModel<B, Unfitted>{
    type Params = LinearParams<B>;
    type Gradients = LinearParams<B>;
@@ -140,9 +180,17 @@ impl <B: Backend> TrainableModel<B> for LinearModel<B, Unfitted>{
 
 }
 
+/// Alias for an **unfitted** linear regression model.
+///
+/// Equivalent to `LinearModel<Unfitted>`. Use this type when constructing
+/// a model for training with [`Trainer`].
 pub type LinearRegression<B> = LinearModel<B, Unfitted>;
 
 impl<B: Backend> LinearRegression<B> {
+    // Creates a new linear regression model with zero-initialized weights.
+    ///
+    /// # Parameters
+    /// - `n_features`: number of input features (dimensionality of `x`).
     pub fn new(n_features: usize) -> Self {
         let params = LinearParams {
             weights: Tensor1D::<B>::zeros(n_features),
@@ -150,13 +198,20 @@ impl<B: Backend> LinearRegression<B> {
         };
         Self { params, _state: PhantomData }
     }
-
+    
+    /// Constructs a model from explicit parameters (e.g., for testing or warm start).
     pub fn from_params(params: LinearParams<B>) -> Self {
         Self { params, _state: PhantomData }
     }
 }
 
-// Удобный алиас для CPU (в lib.rs или linear/mod.rs)
+// Convenient alias for CPU-based linear regression.
+///
+/// Example:
+/// ```rust
+/// use machinelearne_rs::model::linear::LinearRegressor;
+/// let model = LinearRegressor::new(10); // 10 features
+/// ```
 pub type LinearRegressor = LinearRegression<crate::backend::CpuBackend>;
 
 #[cfg(test)]
