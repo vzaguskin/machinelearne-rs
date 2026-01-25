@@ -1,6 +1,6 @@
-use crate::backend::backend::Backend;
 use crate::backend::scalar::Scalar;
 use crate::backend::tensor1d::Tensor1D;
+use crate::backend::Backend;
 use crate::loss::TensorLike;
 use crate::model::linear::LinearParams;
 
@@ -30,7 +30,7 @@ where
 {
     fn step(&self, params: &LinearParams<B>, grads: &LinearParams<B>) -> LinearParams<B> {
         // weights_new = weights - lr * grad_weights
-        let neg_lr = Scalar::<B>::new(0.) - self.lr.clone();
+        let neg_lr = Scalar::<B>::new(0.) - self.lr;
         let scaled_grad = grads.weights.scale(&neg_lr);
         let weights_update = params.weights.add(&scaled_grad);
         // bias_new = bias - lr * grad_bias

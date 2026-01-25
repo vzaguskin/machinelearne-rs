@@ -13,8 +13,8 @@ pub mod state;
 pub use state::{Fitted, Unfitted};
 
 pub mod linear;
-pub use crate::backend::backend::Backend;
 pub use crate::backend::scalar::{Scalar, ScalarOps};
+pub use crate::backend::Backend;
 use crate::serialization::SerializableParams;
 
 /// A model that can be trained: it computes forward passes, gradients, and updates its parameters.
@@ -92,7 +92,6 @@ pub trait ParamOps<B: Backend>: Clone {
 /// let weights = Tensor1D::<CpuBackend>::new(vec![3.0f32, 4.0]);
 /// let bias = Scalar::<CpuBackend>::new(1.0);
 /// let params = LinearParams { weights, bias };
-
 /// let model = LinearModel::<CpuBackend, Fitted>::from_params((&params).into()).unwrap();
 /// let input = Tensor1D::<CpuBackend>::new(vec![3.0, 4.0]);
 /// let pred = model.predict(&input); // ≈ 1*3 + 2*4 + 0.5 = 11.5
@@ -114,7 +113,7 @@ pub trait InferenceModel<B: Backend> {
         let bytes = self
             .extract_params()
             .to_bytes()
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
         std::fs::write(path, bytes)
     }
 

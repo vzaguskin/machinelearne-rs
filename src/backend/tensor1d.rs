@@ -68,6 +68,10 @@ impl<B: Backend> Tensor1D<B> {
         B::len_1d(&self.data)
     }
 
+    pub fn is_empty(&self) -> bool {
+        B::len_1d(&self.data) == 0
+    }
+
     pub fn scale(&self, a: &Scalar<B>) -> Self {
         Self {
             data: B::mul_scalar_1d(&self.data, &a.data),

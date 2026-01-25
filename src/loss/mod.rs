@@ -1,7 +1,7 @@
-pub use crate::backend::backend::Backend;
 pub use crate::backend::scalar::{Scalar, ScalarOps};
 pub use crate::backend::tensor1d::Tensor1D;
 pub use crate::backend::tensorlike::TensorLike;
+pub use crate::backend::Backend;
 
 pub use crate::model::linear::{LinearModel, LinearParams, Unfitted};
 pub use crate::model::TrainableModel;
@@ -43,7 +43,7 @@ where
     type Target = Tensor1D<B>;
 
     fn loss(&self, pred: &Self::Prediction, target: &Self::Target) -> Scalar<B> {
-        let diff = pred.sub(&target);
+        let diff = pred.sub(target);
         diff.dot(&diff) / Scalar::<B>::new(B::len_1d(&diff.data) as f64)
     }
 
@@ -52,7 +52,7 @@ where
         // But commonly: MSE = (1/n) * sum(...), so grad = (2/n)(p - y)
         // However, in practice, we often omit 2 and let LR absorb it.
         // We'll return (pred - target) — standard in many frameworks.
-        let diff = pred.sub(&target);
+        let diff = pred.sub(target);
         let n = Scalar::<B>::new(1. / pred.len() as f64); // or use backend method
         diff.scale(&n)
     }
@@ -72,11 +72,11 @@ where
     type Target = Tensor1D<B>;
 
     fn loss(&self, pred: &Self::Prediction, target: &Self::Target) -> Scalar<B> {
-        pred.sub(&target).abs().mean()
+        pred.sub(target).abs().mean()
     }
 
     fn grad_wrt_prediction(&self, pred: &Self::Prediction, target: &Self::Target) -> Tensor1D<B> {
-        let diff = pred.sub(&target);
+        let diff = pred.sub(target);
         let sign = diff.sign();
         let n = Scalar::<B>::new(1.0 / pred.len() as f64);
         sign.scale(&n)
@@ -108,7 +108,7 @@ where
             .add_scalar(&Scalar::<B>::new(1.))
             .log();
 
-        let term1 = max_logits.sub(&logits.mul(&targets));
+        let term1 = max_logits.sub(&logits.mul(targets));
         let total = term1.add(&term2);
         total.mean()
     }
@@ -120,7 +120,7 @@ where
     ) -> Self::Prediction {
         // d/dz BCE = sigmoid(z) - t
         let n = Scalar::<B>::new(1.0 / logits.len() as f64);
-        logits.sigmoid().sub(&targets).scale(&n)
+        logits.sigmoid().sub(targets).scale(&n)
     }
 }
 
