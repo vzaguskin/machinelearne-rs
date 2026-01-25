@@ -6,6 +6,13 @@ pub use crate::backend::tensor1d::Tensor1D;
 pub use crate::model::{TrainableModel};
 pub use crate::model::linear::{LinearModel, Unfitted, LinearParams};
 
+/// A trait for differentiable loss functions used during model training.
+///
+/// Implementors must define:
+/// - How to compute the scalar loss value (for logging/metrics).
+/// - How to compute the gradient of the loss w.r.t. the model's predictions.
+///
+/// This gradient is passed to the model's `backward()` method to update parameters.
 pub trait Loss<B: Backend> {
     type Prediction: TensorLike<B>;
     type Target: TensorLike<B>;
@@ -21,7 +28,11 @@ pub trait Loss<B: Backend> {
         target: &Self::Target,
     ) -> Self::Prediction;
 }
-
+/// Mean Squared Error (MSE) loss: `L = (1/n) * Σ(pred_i - target_i)^2`
+///
+/// Gradient w.r.t. prediction: `∂L/∂pred = (pred - target) / n`
+///
+/// Note: The factor of 2 is omitted, as it can be absorbed into the learning rate.
 pub struct MSELoss;
 
 impl<B: Backend> Loss<B> for MSELoss
@@ -46,11 +57,15 @@ where
         // However, in practice, we often omit 2 and let LR absorb it.
         // We'll return (pred - target) — standard in many frameworks.
         let diff= pred.sub(&target);
-        let n = Scalar::<B>::new(1. / (B::len_1d(&pred.data) as f64)); // or use backend method
+        let n = Scalar::<B>::new(1. / pred.len() as f64); // or use backend method
         diff.scale(&n)
     }
 }
 
+/// Mean Absolute Error (MAE) loss: `L = (1/n) * Σ|pred_i - target_i|`
+///
+/// Gradient w.r.t. prediction: `∂L/∂pred = sign(pred - target) / n`
+/// (subgradient is used at zero).
 pub struct MAELoss;
 
 impl<B: Backend> Loss<B> for MAELoss
@@ -71,11 +86,16 @@ where
     ) -> Tensor1D<B> {
         let diff = pred.sub(&target);
         let sign = diff.sign();
-        let n = Scalar::<B>::new(1.0) / pred.len();
+        let n = Scalar::<B>::new(1.0 / pred.len() as f64);
         sign.scale(&n)
     }
 }
-
+/// Binary Cross-Entropy loss with logits input (numerically stable).
+///
+/// Computes: `L = -(t * log(σ(z)) + (1-t) * log(1 - σ(z)))`
+/// using the stable formulation: `max(z,0) - z*t + log(1 + exp(-|z|))`
+///
+/// Gradient w.r.t. logits: `∂L/∂z = (σ(z) - t) / n`
 pub struct BCEWithLogitsLoss;
 
 impl<B: Backend> Loss<B> for BCEWithLogitsLoss
@@ -88,7 +108,7 @@ where
     fn loss(&self, logits: &Self::Prediction, targets: &Self::Target) -> Scalar<B>{
         // Numerically stable BCE: -(t * log(s(z)) + (1-t) * log(1 - s(z)))
         // = max(z, 0) - z * t + log(1 + exp(-|z|))
-        let max_logits = logits.maximum(Self::Prediction::zeros(logits.len().data.to_f64() as usize));
+        let max_logits = logits.maximum(Self::Prediction::zeros(logits.len()));
         let term2 = logits
                                             .abs()
                                             .scale(&Scalar::<B>::new(-1.))
@@ -104,7 +124,7 @@ where
 
     fn grad_wrt_prediction(&self, logits: &Self::Prediction, targets: &Self::Target) -> Self::Prediction {
         // d/dz BCE = sigmoid(z) - t
-        let n = Scalar::<B>::new(1.0) / logits.len();
+        let n = Scalar::<B>::new(1.0 / logits.len() as f64);
         logits.sigmoid().sub(&targets).scale(&n)
     }
 }

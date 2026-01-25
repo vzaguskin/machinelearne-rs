@@ -43,7 +43,7 @@ where
 {
     fn regularizer_penalty_grad(&self, model: &LinearRegression::<B>) -> (Scalar<B>, <LinearRegression<B> as TrainableModel<B>>::Gradients){
         let params = model.params();
-        let weight_grad = Tensor1D::<B>::zeros(params.weights.len().data.to_f64() as usize);
+        let weight_grad = Tensor1D::<B>::zeros(params.weights.len());
 
         (Scalar::<B>::new(0.), LinearParams::<B>{weights: weight_grad, bias: Scalar::<B>::new(0.)})
         
