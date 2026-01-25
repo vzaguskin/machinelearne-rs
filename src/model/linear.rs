@@ -9,10 +9,10 @@
 //!
 //! Supports L1/L2 regularization via loss functions and works with any backend implementing [`Backend`].
 //!
-pub use crate::backend::backend::Backend;
 pub use crate::backend::scalar::{Scalar, ScalarOps};
 pub use crate::backend::tensor1d::Tensor1D;
 pub use crate::backend::tensor2d::Tensor2D;
+pub use crate::backend::Backend;
 use crate::loss::TensorLike;
 pub use crate::model::{Fitted, InferenceModel, ParamOps, TrainableModel, Unfitted};
 use std::marker::PhantomData;
@@ -74,7 +74,7 @@ where
 {
     fn add(&self, other: &Self) -> Self {
         let w = self.weights.add(&other.weights);
-        let b = self.bias.clone() + other.bias.clone();
+        let b = self.bias + other.bias;
         Self {
             weights: w,
             bias: b,
@@ -82,7 +82,7 @@ where
     }
     fn scale(&self, scalar: Scalar<B>) -> Self {
         let w = self.weights.scale(&scalar);
-        let b = self.bias.clone() * scalar.clone();
+        let b = self.bias * scalar;
         Self {
             weights: w,
             bias: b,
@@ -129,7 +129,7 @@ impl<B: Backend> InferenceModel<B> for LinearModel<B, Fitted> {
 
     /// Predict on a single sample (feature vector).
     fn predict(&self, input: &Self::InputSingle) -> Self::OutputSingle {
-        self.params.weights.dot(input) + self.params.bias.clone()
+        self.params.weights.dot(input) + self.params.bias
     }
 
     fn predict_batch(&self, input: &Self::InputBatch) -> Self::OutputBatch {

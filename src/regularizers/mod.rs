@@ -1,17 +1,36 @@
-use crate::backend::backend::Backend;
-use crate::backend::scalar::{Scalar, ScalarOps};
+use crate::backend::scalar::Scalar;
+use crate::backend::Backend;
 use crate::loss::{LinearParams, Tensor1D};
 use crate::model::linear::LinearRegression;
 use crate::model::TrainableModel;
+/// Computes the regularization penalty and its gradient w.r.t. model parameters.
+///
+/// This trait enables pluggable regularization strategies (e.g., L2, L1) without
+/// modifying the model or trainer logic.
+///
+/// # Returns
+/// A tuple `(penalty, grad)` where:
+/// - `penalty` is a scalar value added to the total loss (for logging/metrics),
+/// - `grad` is the gradient of the penalty w.r.t. model parameters, to be combined
+///   with the data-driven gradient during backpropagation.
 pub trait Regularizer<B: Backend, M: TrainableModel<B>> {
     fn regularizer_penalty_grad(&self, model: &M) -> (Scalar<B>, M::Gradients);
 }
 
+/// L2 (ridge) regularization: penalty = λ * ||w||².
+///
+/// Only applies to weights; bias is not regularized (standard practice).
+///
+/// Gradient w.r.t. weights: ∂/∂w (λ * wᵀw) = 2λw.
 pub struct L2<B: Backend> {
     lambda: Scalar<B>,
 }
 
 impl<B: Backend> L2<B> {
+    /// Creates an L2 regularizer with strength `lambda`.
+    ///
+    /// # Arguments
+    /// * `lambda` — non-negative regularization coefficient (λ ≥ 0).
     pub fn new(lambda: f64) -> Self {
         Self {
             lambda: Scalar::<B>::new(lambda),
@@ -46,7 +65,9 @@ where
         )
     }
 }
-
+/// A no-op regularizer that adds zero penalty and zero gradient.
+///
+/// Useful as a default when no regularization is desired.
 pub struct NoRegularizer;
 
 impl<B> Regularizer<B, LinearRegression<B>> for NoRegularizer

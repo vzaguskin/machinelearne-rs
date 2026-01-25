@@ -36,9 +36,7 @@ impl Backend for CpuBackend {
     type Tensor2D = CpuTensor2D; // (data, rows, cols)
     type Device = ();
 
-    fn default_device() -> Self::Device {
-        ()
-    }
+    fn default_device() -> Self::Device {}
 
     // --- Constructors ---
     fn zeros_1d(len: usize) -> Self::Tensor1D {
