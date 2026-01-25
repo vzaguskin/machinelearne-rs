@@ -1,23 +1,29 @@
 // trainer/mod.rs
-use std::marker::PhantomData;
-use std::fmt::{Debug, Display};
 use crate::{
-    backend::{Backend, Tensor1D, Tensor2D, ScalarOps, Scalar},
+    backend::{Backend, Scalar, ScalarOps, Tensor1D, Tensor2D},
+    dataset::Dataset,
     loss::Loss,
-    model::{TrainableModel, ParamOps},
+    model::{ParamOps, TrainableModel},
     optimizer::Optimizer,
     regularizers::Regularizer,
-    dataset::Dataset,
 };
+use std::fmt::{Debug, Display};
+use std::marker::PhantomData;
 
-// --- Основная структура (immutable после build) ---
+/// Orchestrates the training loop for a `TrainableModel`.
+///
+/// Combines a loss function, optimizer, and regularizer to fit a model on a dataset.
+/// Once built via `TrainerBuilder`, it is immutable and can be reused across multiple models
+/// (as long as types match).
+///
+/// The `fit` method returns a `FittedModel` (via `IntoFitted`), which contains only inference logic.
 pub struct Trainer<B, L, O, M, P, R>
 where
     B: Backend,
     L: Loss<B>,
     M: TrainableModel<B, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
-    R: Regularizer<B, M>
+    R: Regularizer<B, M>,
 {
     pub(crate) batch_size: usize,
     pub(crate) max_epochs: usize,
@@ -28,14 +34,18 @@ where
     _phantom_model: PhantomData<M>,
 }
 
-// --- Билдер ---
+/// Fluent builder for constructing a `Trainer` with custom hyperparameters.
+///
+/// Defaults:
+/// - `batch_size`: 32
+/// - `max_epochs`: 1000
 pub struct TrainerBuilder<B, L, O, M, P, R>
 where
     B: Backend,
     L: Loss<B>,
     M: TrainableModel<B, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
-    R: Regularizer<B, M>
+    R: Regularizer<B, M>,
 {
     batch_size: usize,
     max_epochs: usize,
@@ -52,8 +62,14 @@ where
     L: Loss<B>,
     M: TrainableModel<B, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
-    R: Regularizer<B, M>
+    R: Regularizer<B, M>,
 {
+    /// Creates a new `TrainerBuilder` with the given components.
+    ///
+    /// # Arguments
+    /// * `loss_fn` — differentiable loss (e.g., `MSELoss`)
+    /// * `optimizer` — parameter updater (e.g., `SGD`)
+    /// * `regularizer` — optional penalty term (e.g., `L2` or `NoRegularizer`)
     pub fn new(loss_fn: L, optimizer: O, regularizer: R) -> Self {
         Self {
             batch_size: 32,
@@ -95,16 +111,32 @@ where
     B: Backend,
     B::Scalar: Debug + Display,
     L: Loss<B, Target = Tensor1D<B>, Prediction = Tensor1D<B>>,
-    M: TrainableModel<B, Input = Tensor2D<B>, Prediction = L::Prediction, Params = P, Gradients = P>,
+    M: TrainableModel<
+        B,
+        Input = Tensor2D<B>,
+        Prediction = L::Prediction,
+        Params = P,
+        Gradients = P,
+    >,
     O: Optimizer<B, P>,
     R: Regularizer<B, M>,
-    P: ParamOps<B>
+    P: ParamOps<B>,
 {
+    /// Trains the model on the provided dataset for up to `max_epochs`.
+    ///
+    /// # Returns
+    /// A fitted model ready for inference (`M::Output`), or an error if:
+    /// - The dataset is empty
+    /// - The dataset length is unknown (required for loss averaging)
+    /// - A batch fails to load
+    ///
+    /// # Notes
+    /// - Loss is averaged over the entire dataset per epoch.
+    /// - Gradients are averaged per batch before applying regularization.
     pub fn fit<D>(&self, mut model: M, dataset: &D) -> Result<M::Output, String>
-where
-    D: Dataset,
+    where
+        D: Dataset,
     {
-
         let n_total = dataset.len().ok_or("Dataset length unknown")?;
         if n_total == 0 {
             return Err("Dataset is empty".into());
@@ -114,21 +146,22 @@ where
             let mut total_loss = Scalar::<B>::new(0.);
             //let mut total_samples = 0;
             for batch_result in dataset.batches::<B>(self.batch_size) {
-                let (batch_x, batch_y) = batch_result.map_err(|e| format!("Data error: {:?}", e))?;
+                let (batch_x, batch_y) =
+                    batch_result.map_err(|e| format!("Data error: {:?}", e))?;
                 //let mut total_loss = Scalar::<B>::new(0.);
                 let preds = model.forward(&batch_x);
                 total_loss = total_loss + self.loss_fn.loss(&preds, &batch_y);
                 let (reg_penalty, reg_grad) = self.regularizer.regularizer_penalty_grad(&model);
                 total_loss = total_loss + reg_penalty;
                 let grad_preds = self.loss_fn.grad_wrt_prediction(&preds, &batch_y);
-                let grad_preds_avg = grad_preds.scale(&(Scalar::<B>::new(1. / batch_y.len() as f64)));
+                let grad_preds_avg =
+                    grad_preds.scale(&(Scalar::<B>::new(1. / batch_y.len() as f64)));
                 let grads = model.backward(&batch_x, &grad_preds_avg);
 
                 let total_grads = grads.add(&reg_grad);
                 let new_params = self.optimizer.step(model.params(), &total_grads);
                 model.update_params(&new_params);
             }
-        
 
             let avg_loss = total_loss / Scalar::<B>::new(n_total as f64);
             println!("Epoch {}: loss = {}", epoch, avg_loss.data.to_f64()); // ← Display вместо Debug
@@ -145,8 +178,11 @@ where
     L: Loss<B>,
     M: TrainableModel<B, Params = P, Gradients = P>,
     O: Optimizer<B, P>,
-    R: Regularizer<B, M>
+    R: Regularizer<B, M>,
 {
+    /// Convenience constructor that starts the builder pattern.
+    ///
+    /// Equivalent to `TrainerBuilder::new(...)`.
     pub fn builder(loss_fn: L, optimizer: O, regularizer: R) -> TrainerBuilder<B, L, O, M, P, R> {
         TrainerBuilder::new(loss_fn, optimizer, regularizer)
     }
@@ -158,11 +194,11 @@ mod tests {
     use crate::{
         backend::CpuBackend,
         dataset::memory::InMemoryDataset,
-        loss::{MSELoss},
-        model::linear::LinearRegression,
+        loss::MSELoss,
         model::linear::InferenceModel,
+        model::linear::LinearRegression,
         optimizer::SGD,
-        regularizers::{L2, NoRegularizer},
+        regularizers::{NoRegularizer, L2},
     };
 
     #[test]
@@ -228,46 +264,46 @@ mod tests {
         let x = vec![];
         let y = vec![];
         let dataset = InMemoryDataset::new(x, y).unwrap_err(); // ← ошибка на этапе создания
-        // Но если бы датасет допускал пустоту:
-        // let trainer = ...;
-        // let result = trainer.fit(model, &empty_dataset);
-        // assert!(result.is_err());
+                                                               // Но если бы датасет допускал пустоту:
+                                                               // let trainer = ...;
+                                                               // let result = trainer.fit(model, &empty_dataset);
+                                                               // assert!(result.is_err());
     }
 
     #[test]
     fn test_trainer_unknown_dataset_length() {
         // Создадим mock-датасет без len()
         struct MockDatasetWithoutLen {
-    x: Vec<Vec<f32>>,
-    y: Vec<f32>,
-}
-
-impl Dataset for MockDatasetWithoutLen {
-    type Error = String; // ← меняем на String
-    type Item = ();
-
-    fn len(&self) -> Option<usize> {
-        None
-    }
-
-    fn get_batch<B: Backend>(
-        &self,
-        range: std::ops::Range<usize>,
-    ) -> Result<(Tensor2D<B>, Tensor1D<B>), Self::Error> {
-        let batch_x = &self.x[range.clone()];
-        let batch_y = &self.y[range];
-        let n = batch_x.len();
-        if n == 0 {
-            return Err("Empty batch".into());
+            x: Vec<Vec<f32>>,
+            y: Vec<f32>,
         }
-        let cols = batch_x[0].len();
-        let data = batch_x.iter().flat_map(|r| r.iter()).copied().collect();
-        Ok((
-            Tensor2D::new(data, n, cols),
-            Tensor1D::new(batch_y.to_vec()),
-        ))
-    }
-}
+
+        impl Dataset for MockDatasetWithoutLen {
+            type Error = String; // ← меняем на String
+            type Item = ();
+
+            fn len(&self) -> Option<usize> {
+                None
+            }
+
+            fn get_batch<B: Backend>(
+                &self,
+                range: std::ops::Range<usize>,
+            ) -> Result<(Tensor2D<B>, Tensor1D<B>), Self::Error> {
+                let batch_x = &self.x[range.clone()];
+                let batch_y = &self.y[range];
+                let n = batch_x.len();
+                if n == 0 {
+                    return Err("Empty batch".into());
+                }
+                let cols = batch_x[0].len();
+                let data = batch_x.iter().flat_map(|r| r.iter()).copied().collect();
+                Ok((
+                    Tensor2D::new(data, n, cols),
+                    Tensor1D::new(batch_y.to_vec()),
+                ))
+            }
+        }
 
         let dataset = MockDatasetWithoutLen {
             x: vec![vec![1.0]],
@@ -286,6 +322,5 @@ impl Dataset for MockDatasetWithoutLen {
 
         let result = trainer.fit(model, &dataset);
         assert!(result.is_err());
-
     }
 }

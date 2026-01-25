@@ -8,15 +8,14 @@
 //! > *"Fitted model is free from training hyperparameters."*
 //!
 //! Supports L1/L2 regularization via loss functions and works with any backend implementing [`Backend`].
-//! 
-pub use crate::backend::backend::{Backend};
-pub use crate::backend::scalar::{ScalarOps, Scalar};
+//!
+pub use crate::backend::backend::Backend;
+pub use crate::backend::scalar::{Scalar, ScalarOps};
 pub use crate::backend::tensor1d::Tensor1D;
 pub use crate::backend::tensor2d::Tensor2D;
 use crate::loss::TensorLike;
-pub use crate::model::{TrainableModel, InferenceModel, Unfitted, Fitted, ParamOps};
+pub use crate::model::{Fitted, InferenceModel, ParamOps, TrainableModel, Unfitted};
 use std::marker::PhantomData;
-
 
 /// Trainable parameters of a linear model: weights and bias.
 ///
@@ -48,8 +47,13 @@ pub struct SerializableLinearParams {
 impl<B: Backend> From<&LinearParams<B>> for SerializableLinearParams {
     fn from(params: &LinearParams<B>) -> Self {
         // Предполагаем, что эти методы существуют в вашем бэкенде
-        let weights = params.weights.to_vec().into_iter().map(|x| {x as f32}).collect(); // Vec<f32>
-        let bias = params.bias.data.to_f64() as f32;        // f32
+        let weights = params
+            .weights
+            .to_vec()
+            .into_iter()
+            .map(|x| x as f32)
+            .collect(); // Vec<f32>
+        let bias = params.bias.data.to_f64() as f32; // f32
         Self { weights, bias }
     }
 }
@@ -64,19 +68,25 @@ impl<B: Backend> TryFrom<SerializableLinearParams> for LinearParams<B> {
     }
 }
 
-impl <B> ParamOps<B> for LinearParams<B>
-where B: Backend
+impl<B> ParamOps<B> for LinearParams<B>
+where
+    B: Backend,
 {
-    fn add(&self, other: &Self) -> Self{
+    fn add(&self, other: &Self) -> Self {
         let w = self.weights.add(&other.weights);
         let b = self.bias.clone() + other.bias.clone();
-        Self{weights: w, bias: b}
+        Self {
+            weights: w,
+            bias: b,
+        }
     }
-    fn scale(&self, scalar: Scalar<B>) -> Self{
-        let w = self.weights.scale(&scalar); 
+    fn scale(&self, scalar: Scalar<B>) -> Self {
+        let w = self.weights.scale(&scalar);
         let b = self.bias.clone() * scalar.clone();
-        Self{weights: w, bias: b}
-
+        Self {
+            weights: w,
+            bias: b,
+        }
     }
 }
 
@@ -97,7 +107,10 @@ impl<B: Backend> LinearModel<B, Fitted> {
     /// Typically called internally by [`TrainableModel::into_fitted`].
     /// Useful for manual model construction or loading from external sources.
     pub fn new(params: LinearParams<B>) -> Self {
-        Self{params, _state: std::marker::PhantomData::<Fitted>}
+        Self {
+            params,
+            _state: std::marker::PhantomData::<Fitted>,
+        }
     }
 }
 
@@ -115,14 +128,14 @@ impl<B: Backend> InferenceModel<B> for LinearModel<B, Fitted> {
     type ParamsRepr = SerializableLinearParams;
 
     /// Predict on a single sample (feature vector).
-    fn predict(&self, input: &Self::InputSingle) -> Self::OutputSingle
-    {
+    fn predict(&self, input: &Self::InputSingle) -> Self::OutputSingle {
         self.params.weights.dot(input) + self.params.bias.clone()
     }
 
-    fn predict_batch(&self, input: &Self::InputBatch) -> Self::OutputBatch{
-        input.dot(&self.params.weights).add_scalar(&self.params.bias)
-
+    fn predict_batch(&self, input: &Self::InputBatch) -> Self::OutputBatch {
+        input
+            .dot(&self.params.weights)
+            .add_scalar(&self.params.bias)
     }
 
     fn extract_params(&self) -> Self::ParamsRepr {
@@ -144,28 +157,26 @@ impl<B: Backend> InferenceModel<B> for LinearModel<B, Fitted> {
 /// Backward pass: computes gradients ∇w = X^T · grad, ∇b = sum(grad)
 ///
 /// After training, convert to inference model via [`Self::into_fitted`].
-impl <B: Backend> TrainableModel<B> for LinearModel<B, Unfitted>{
-   type Params = LinearParams<B>;
-   type Gradients = LinearParams<B>;
-   type Prediction = Tensor1D<B>;
-   type Input = Tensor2D<B>;
-   type Output = LinearModel<B, Fitted>;
+impl<B: Backend> TrainableModel<B> for LinearModel<B, Unfitted> {
+    type Params = LinearParams<B>;
+    type Gradients = LinearParams<B>;
+    type Prediction = Tensor1D<B>;
+    type Input = Tensor2D<B>;
+    type Output = LinearModel<B, Fitted>;
 
-    fn forward(&self, x: &Self::Input) -> Self::Prediction{
+    fn forward(&self, x: &Self::Input) -> Self::Prediction {
         x.dot(&self.params.weights).add_scalar(&self.params.bias)
     }
 
-    fn params(&self) -> &Self::Params{
+    fn params(&self) -> &Self::Params {
         &self.params
     }
-    
-    fn update_params(&mut self, params: &Self::Params){
-        self.params = params.clone();
 
+    fn update_params(&mut self, params: &Self::Params) {
+        self.params = params.clone();
     }
 
-    fn into_fitted(self) -> LinearModel<B, Fitted>
-    {
+    fn into_fitted(self) -> LinearModel<B, Fitted> {
         LinearModel::<B, Fitted>::new(self.params)
     }
 
@@ -177,7 +188,6 @@ impl <B: Backend> TrainableModel<B> for LinearModel<B, Unfitted>{
             bias: grad_bias,
         }
     }
-
 }
 
 /// Alias for an **unfitted** linear regression model.
@@ -196,12 +206,18 @@ impl<B: Backend> LinearRegression<B> {
             weights: Tensor1D::<B>::zeros(n_features),
             bias: Scalar::<B>::new(0.),
         };
-        Self { params, _state: PhantomData }
+        Self {
+            params,
+            _state: PhantomData,
+        }
     }
-    
+
     /// Constructs a model from explicit parameters (e.g., for testing or warm start).
     pub fn from_params(params: LinearParams<B>) -> Self {
-        Self { params, _state: PhantomData }
+        Self {
+            params,
+            _state: PhantomData,
+        }
     }
 }
 

@@ -1,7 +1,7 @@
-use std::ops::Range;
 use crate::backend::{Backend, Tensor1D, Tensor2D};
 use crate::dataset::Dataset;
-#[derive (Debug)]
+use std::ops::Range;
+#[derive(Debug)]
 pub struct InMemoryDataset {
     x: Vec<Vec<f32>>,
     y: Vec<f32>,
@@ -103,11 +103,7 @@ mod tests {
 
     #[test]
     fn test_in_memory_dataset_batches_integration() {
-        let x = vec![
-            vec![1.0, 0.0],
-            vec![0.0, 1.0],
-            vec![1.0, 1.0],
-        ];
+        let x = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0]];
         let y = vec![1.0, 0.0, 1.0];
         let dataset = InMemoryDataset::new(x, y).unwrap();
 

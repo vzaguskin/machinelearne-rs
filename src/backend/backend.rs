@@ -1,5 +1,5 @@
-use crate::backend::{ScalarOps};
-pub trait Backend: Clone + Copy  + 'static {
+use crate::backend::ScalarOps;
+pub trait Backend: Clone + Copy + 'static {
     type Scalar: ScalarOps + Clone;
     type Tensor1D: Clone + Send + Sync;
     type Tensor2D: Clone + Send + Sync;

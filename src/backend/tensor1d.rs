@@ -1,6 +1,6 @@
+use super::scalar::Scalar;
 use crate::backend::Backend;
 use std::marker::PhantomData;
-use super::scalar::Scalar;
 
 #[derive(Clone)]
 pub struct Tensor1D<B: Backend> {
@@ -42,69 +42,68 @@ impl<B: Backend> Tensor1D<B> {
     }
 
     pub fn dot(&self, other: &Self) -> Scalar<B> {
-        let prod = B::mul_1d(&self.data,&other.data);
+        let prod = B::mul_1d(&self.data, &other.data);
         let sum = B::sum_all_1d(&prod);
         Scalar {
             data: sum,
             backend: PhantomData,
         }
-    
     }
 
-    pub fn abs(&self) -> Self{
+    pub fn abs(&self) -> Self {
         Self {
             data: B::abs_1d(&self.data),
             backend: PhantomData,
         }
     }
 
-    pub fn sign(&self) -> Self{
+    pub fn sign(&self) -> Self {
         Self {
             data: B::sign_1d(&self.data),
             backend: PhantomData,
         }
     }
 
-    pub fn len(&self) -> usize{
+    pub fn len(&self) -> usize {
         B::len_1d(&self.data)
     }
 
-    pub fn scale(&self, a: &Scalar<B>) -> Self{
+    pub fn scale(&self, a: &Scalar<B>) -> Self {
         Self {
             data: B::mul_scalar_1d(&self.data, &a.data),
             backend: PhantomData,
         }
     }
 
-    pub fn add_scalar(&self, a: &Scalar<B>) -> Self{
+    pub fn add_scalar(&self, a: &Scalar<B>) -> Self {
         Self {
             data: B::add_scalar_1d(&self.data, &a.data),
             backend: PhantomData,
         }
     }
 
-    pub fn maximum(&self, other: Self) -> Self{
+    pub fn maximum(&self, other: Self) -> Self {
         Self {
             data: B::maximum_1d(&self.data, &other.data),
             backend: PhantomData,
         }
     }
 
-    pub fn exp(&self) -> Self{
+    pub fn exp(&self) -> Self {
         Self {
             data: B::exp_1d(&self.data),
             backend: PhantomData,
         }
     }
 
-    pub fn log(&self) -> Self{
+    pub fn log(&self) -> Self {
         Self {
             data: B::log_1d(&self.data),
             backend: PhantomData,
         }
     }
 
-    pub fn sigmoid(&self) -> Self{
+    pub fn sigmoid(&self) -> Self {
         Self {
             data: B::sigmoid_1d(&self.data),
             backend: PhantomData,
@@ -161,7 +160,7 @@ mod tests {
         // dot
         let b = Tensor1D::<CpuBackend>::new(vec![4.0f32, 5.0, 6.0]);
         let dot = a.dot(&b);
-        assert_eq!(dot.data, 1.0*4.0 + 2.0*5.0 + 3.0*6.0); // 32.0
+        assert_eq!(dot.data, 1.0 * 4.0 + 2.0 * 5.0 + 3.0 * 6.0); // 32.0
 
         // len
         let len = a.len();

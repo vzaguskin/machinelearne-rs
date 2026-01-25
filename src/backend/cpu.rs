@@ -1,4 +1,4 @@
-use super::{Backend};
+use super::Backend;
 #[derive(Clone, Debug, Copy)]
 pub struct CpuBackend;
 
@@ -21,7 +21,10 @@ impl From<&[Vec<f64>]> for CpuTensor2D {
         let rows = x.len();
         let cols = x[0].len();
         // Проверка одинаковой длины строк (опционально, но рекомендуется)
-        assert!(x.iter().all(|row| row.len() == cols), "All rows must have same length");
+        assert!(
+            x.iter().all(|row| row.len() == cols),
+            "All rows must have same length"
+        );
         let data: Vec<f64> = x.iter().flat_map(|row| row.iter()).copied().collect();
         CpuTensor2D::new(data, rows, cols)
     }
@@ -33,137 +36,152 @@ impl Backend for CpuBackend {
     type Tensor2D = CpuTensor2D; // (data, rows, cols)
     type Device = ();
 
-    fn default_device() -> Self::Device{
+    fn default_device() -> Self::Device {
         ()
     }
 
     // --- Constructors ---
-    fn zeros_1d(len: usize) -> Self::Tensor1D{
+    fn zeros_1d(len: usize) -> Self::Tensor1D {
         vec![0.; len]
     }
-    fn zeros_2d(rows: usize, cols: usize) -> Self::Tensor2D{
+    fn zeros_2d(rows: usize, cols: usize) -> Self::Tensor2D {
         CpuTensor2D::new(vec![0.; rows * cols], rows, cols)
     }
-    fn from_vec_1d(data: Vec<f32>) -> Self::Tensor1D{
-        data.into_iter().map(|x| {x as f64}).collect()
+    fn from_vec_1d(data: Vec<f32>) -> Self::Tensor1D {
+        data.into_iter().map(|x| x as f64).collect()
     }
-    fn from_vec_2d(data: Vec<f32>, rows: usize, cols: usize) -> Self::Tensor2D{
-        CpuTensor2D::new(data.into_iter().map(|x| {x as f64}).collect(), rows, cols)
+    fn from_vec_2d(data: Vec<f32>, rows: usize, cols: usize) -> Self::Tensor2D {
+        CpuTensor2D::new(data.into_iter().map(|x| x as f64).collect(), rows, cols)
     }
 
     // --- Element-wise ops ---
-    fn add_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D{
-        a.iter().zip(b.iter()).map(|(a, b)| {a + b} ).collect()
+    fn add_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
+        a.iter().zip(b.iter()).map(|(a, b)| a + b).collect()
     }
-    fn sub_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D{
-        a.iter().zip(b.iter()).map(|(a, b)| {a - b} ).collect()
+    fn sub_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
+        a.iter().zip(b.iter()).map(|(a, b)| a - b).collect()
     }
-    fn mul_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D{
-        a.iter().zip(b.iter()).map(|(a, b)| {a * b} ).collect()
+    fn mul_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
+        a.iter().zip(b.iter()).map(|(a, b)| a * b).collect()
     }
-    fn div_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D{
-        a.iter().zip(b.iter()).map(|(a, b)| {a / b} ).collect()
+    fn div_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
+        a.iter().zip(b.iter()).map(|(a, b)| a / b).collect()
     }
-    fn mul_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D{
-        t.iter().map(|x| {*x * s}).collect()
+    fn mul_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
+        t.iter().map(|x| *x * s).collect()
     }
 
-    fn add_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D{
+    fn add_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
         t.iter().map(|x| x + s).collect()
     }
 
-    fn mul_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D{
-        CpuTensor2D::new(t.0.iter().map(|x| {*x * s}).collect(), t.1, t.2)
+    fn mul_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
+        CpuTensor2D::new(t.0.iter().map(|x| *x * s).collect(), t.1, t.2)
     }
-    fn add_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D{
-        CpuTensor2D::new(t.0.iter().map(|x| {*x + s}).collect(), t.1, t.2)
+    fn add_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
+        CpuTensor2D::new(t.0.iter().map(|x| *x + s).collect(), t.1, t.2)
     }
 
     // --- Reductions ---
-    fn mean_all_1d(t: &Self::Tensor1D) -> Self::Scalar{
+    fn mean_all_1d(t: &Self::Tensor1D) -> Self::Scalar {
         t.iter().sum::<f64>() / t.len() as f64
     }
-    fn sum_all_2d(t: &Self::Tensor2D) -> Self::Scalar{
+    fn sum_all_2d(t: &Self::Tensor2D) -> Self::Scalar {
         t.0.iter().sum::<f64>()
     }
 
-    fn sum_all_1d(t: &Self::Tensor1D) -> Self::Scalar{
+    fn sum_all_1d(t: &Self::Tensor1D) -> Self::Scalar {
         t.iter().sum::<f64>()
     }
 
-    fn mean_all_2d(t: &Self::Tensor2D) -> Self::Scalar{
+    fn mean_all_2d(t: &Self::Tensor2D) -> Self::Scalar {
         t.0.iter().sum::<f64>() / t.0.len() as f64
     }
-    fn add_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D
-    {
-        CpuTensor2D::new(a.0.iter().zip(b.0.iter()).map(|(a, b)| {a + b} ).collect(), a.1, a.2)
+    fn add_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
+        CpuTensor2D::new(
+            a.0.iter().zip(b.0.iter()).map(|(a, b)| a + b).collect(),
+            a.1,
+            a.2,
+        )
     }
-    fn sub_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D{
-        CpuTensor2D::new(a.0.iter().zip(b.0.iter()).map(|(a, b)| {a - b} ).collect(), a.1, a.2)
+    fn sub_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
+        CpuTensor2D::new(
+            a.0.iter().zip(b.0.iter()).map(|(a, b)| a - b).collect(),
+            a.1,
+            a.2,
+        )
     }
-    fn mul_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D{
-        CpuTensor2D::new(a.0.iter().zip(b.0.iter()).map(|(a, b)| {a * b} ).collect(), a.1, a.2)
-
+    fn mul_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
+        CpuTensor2D::new(
+            a.0.iter().zip(b.0.iter()).map(|(a, b)| a * b).collect(),
+            a.1,
+            a.2,
+        )
     }
-    fn div_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D{
-        CpuTensor2D::new(a.0.iter().zip(b.0.iter()).map(|(a, b)| {a / b} ).collect(), a.1, a.2)
-
+    fn div_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
+        CpuTensor2D::new(
+            a.0.iter().zip(b.0.iter()).map(|(a, b)| a / b).collect(),
+            a.1,
+            a.2,
+        )
     }
 
     // --- Scalar ops (for loss gradients, lr updates) ---
-    fn scalar_f64(value: f64) -> Self::Scalar{
+    fn scalar_f64(value: f64) -> Self::Scalar {
         value
     }
 
     // --- Access (for metrics / debug) ---
-    fn to_vec_1d(t: &Self::Tensor1D) -> Vec<f64>{
+    fn to_vec_1d(t: &Self::Tensor1D) -> Vec<f64> {
         t.clone()
     }
 
-    fn len_1d(t: &Self::Tensor1D) -> usize{
+    fn len_1d(t: &Self::Tensor1D) -> usize {
         t.len()
     }
 
-    fn len_2d(t: &Self::Tensor2D) -> usize{
+    fn len_2d(t: &Self::Tensor2D) -> usize {
         t.1
     }
 
-    fn abs_1d(t: &Self::Tensor1D) -> Self::Tensor1D{
-        t.iter().map(|x| {x.abs()}).collect()
+    fn abs_1d(t: &Self::Tensor1D) -> Self::Tensor1D {
+        t.iter().map(|x| x.abs()).collect()
     }
 
-    fn abs_2d(t: &Self::Tensor2D) -> Self::Tensor2D{
-        CpuTensor2D::new(t.0.iter().map(|x| {x.abs()}).collect(), t.1, t.2)
+    fn abs_2d(t: &Self::Tensor2D) -> Self::Tensor2D {
+        CpuTensor2D::new(t.0.iter().map(|x| x.abs()).collect(), t.1, t.2)
     }
 
-    fn sign_1d(x: &Self::Tensor1D) -> Self::Tensor1D{
+    fn sign_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
         x.iter()
-        .map(|&x| {
-            if x > 0.0 {
-                1.0
-            } else if x < 0.0 {
-                -1.0
-            } else {
-                0.0 // субградиент в нуле — стандартный выбор
-            }
-        })
-        .collect()
+            .map(|&x| {
+                if x > 0.0 {
+                    1.0
+                } else if x < 0.0 {
+                    -1.0
+                } else {
+                    0.0 // субградиент в нуле — стандартный выбор
+                }
+            })
+            .collect()
     }
 
-    fn sign_2d(x: &Self::Tensor2D) -> Self::Tensor2D{
-        CpuTensor2D::new(x.0.iter()
-        .map(|&x| {
-            if x > 0.0 {
-                1.0
-            } else if x < 0.0 {
-                -1.0
-            } else {
-                0.0 // субградиент в нуле — стандартный выбор
-            }
-        })
-        .collect(),
-        x.1,
-        x.2)
+    fn sign_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
+        CpuTensor2D::new(
+            x.0.iter()
+                .map(|&x| {
+                    if x > 0.0 {
+                        1.0
+                    } else if x < 0.0 {
+                        -1.0
+                    } else {
+                        0.0 // субградиент в нуле — стандартный выбор
+                    }
+                })
+                .collect(),
+            x.1,
+            x.2,
+        )
     }
 
     fn maximum_1d(a: &Vec<f64>, b: &Vec<f64>) -> Vec<f64> {
@@ -192,18 +210,18 @@ impl Backend for CpuBackend {
                 }
             })
             .collect()
-        }
+    }
 
-    fn maximum_2d(x: &Self::Tensor2D, other: &Self::Tensor2D) -> Self::Tensor2D{
+    fn maximum_2d(x: &Self::Tensor2D, other: &Self::Tensor2D) -> Self::Tensor2D {
         CpuTensor2D::new(Self::maximum_1d(&x.0, &other.0), x.1, x.2)
     }
-    fn exp_2d(x: &Self::Tensor2D) -> Self::Tensor2D{
+    fn exp_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
         CpuTensor2D::new(Self::exp_1d(&x.0), x.1, x.2)
     }
-    fn log_2d(x: &Self::Tensor2D) -> Self::Tensor2D{
+    fn log_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
         CpuTensor2D::new(Self::log_1d(&x.0), x.1, x.2)
     }
-    fn sigmoid_2d(x: &Self::Tensor2D) -> Self::Tensor2D{
+    fn sigmoid_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
         CpuTensor2D::new(Self::sigmoid_1d(&x.0), x.1, x.2)
     }
     fn _matvec_unchecked(a: &CpuTensor2D, x: &Vec<f64>) -> Vec<f64> {
@@ -222,38 +240,34 @@ impl Backend for CpuBackend {
     fn matvec(a: &CpuTensor2D, x: &Vec<f64>) -> Vec<f64> {
         //TODO: check
         Self::_matvec_unchecked(a, x)
-
     }
 
-    fn _matvec_transposed_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D{
+    fn _matvec_transposed_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D {
         //todo - efficient implementation
         Self::_matvec_unchecked(&Self::transpose(a), x)
     }
 
-    fn matvec_transposed(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D{
+    fn matvec_transposed(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D {
         Self::_matvec_transposed_unchecked(a, x)
     }
 
-    fn transpose(a: &CpuTensor2D) -> Self::Tensor2D{
+    fn transpose(a: &CpuTensor2D) -> Self::Tensor2D {
         //TODO: return view slice
-        let CpuTensor2D(inp, rows, cols ) = a;
-        let mut out = Vec::with_capacity( cols * rows);
-        for col in 0..*cols{
-            for row in 0..*rows{
+        let CpuTensor2D(inp, rows, cols) = a;
+        let mut out = Vec::with_capacity(cols * rows);
+        for col in 0..*cols {
+            for row in 0..*rows {
                 out.push(inp[row * cols + col]);
             }
         }
 
         CpuTensor2D::new(out, *cols, *rows)
-
     }
 
-    fn shape(t: &Self::Tensor2D) -> (usize, usize){
+    fn shape(t: &Self::Tensor2D) -> (usize, usize) {
         (t.1, t.2)
     }
 }
-
-
 
 #[cfg(test)]
 mod matvec_tests {
@@ -261,7 +275,6 @@ mod matvec_tests {
 
     #[test]
     fn test_matvec_transpose() {
-
         // Пример 1: X — (3, 2), v — (3,)
         // X = [[1.0, 2.0],
         //      [3.0, 4.0],
@@ -315,7 +328,6 @@ mod matvec_tests {
 
     #[test]
     fn test_matvec_transpose_consistency_with_transpose_and_matvec() {
-
         let x = CpuTensor2D::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2); // (3,2)
         let v = vec![1.0, 0.0, 2.0];
 
@@ -369,7 +381,7 @@ mod tests {
         assert_eq!(CpuBackend::add_1d(&a, &b), vec![4.0, 6.0]);
         assert_eq!(CpuBackend::sub_1d(&a, &b), vec![-2.0, -2.0]);
         assert_eq!(CpuBackend::mul_1d(&a, &b), vec![3.0, 8.0]);
-        assert_eq!(CpuBackend::div_1d(&a, &b), vec![1.0/3.0, 0.5]);
+        assert_eq!(CpuBackend::div_1d(&a, &b), vec![1.0 / 3.0, 0.5]);
 
         assert_eq!(CpuBackend::add_scalar_1d(&a, &5.0), vec![6.0, 7.0]);
         assert_eq!(CpuBackend::mul_scalar_1d(&a, &2.0), vec![2.0, 4.0]);
@@ -413,7 +425,10 @@ mod tests {
     fn test_math_functions() {
         let v = vec![0.0, 1.0];
         assert_eq!(CpuBackend::exp_1d(&v), vec![1.0, std::f64::consts::E]);
-        assert_eq!(CpuBackend::log_1d(&vec![1.0, std::f64::consts::E]), vec![0.0, 1.0]);
+        assert_eq!(
+            CpuBackend::log_1d(&vec![1.0, std::f64::consts::E]),
+            vec![0.0, 1.0]
+        );
 
         // sigmoid(0) = 0.5
         let sig = CpuBackend::sigmoid_1d(&vec![0.0]);
@@ -463,7 +478,7 @@ mod tests {
         assert_eq!(t.0.len(), 0);
         assert_eq!((t.1, t.2), (0, 0));
 
-        // Деление на ноль — ожидаем panic или NaN? 
+        // Деление на ноль — ожидаем panic или NaN?
         // В текущей реализации будет panic при делении на 0.0.
         // Если это не желаемо — стоит обсудить, но пока покроем как есть.
         let a = vec![1.0];

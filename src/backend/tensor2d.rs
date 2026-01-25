@@ -1,7 +1,7 @@
-use crate::backend::Backend;
-use std::marker::PhantomData;
 use super::scalar::Scalar;
 use super::tensor1d::Tensor1D;
+use crate::backend::Backend;
+use std::marker::PhantomData;
 
 #[derive(Clone)]
 pub struct Tensor2D<B: Backend> {
@@ -43,7 +43,6 @@ impl<B: Backend> Tensor2D<B> {
             data: B::matvec(&self.data, &other.data),
             backend: PhantomData,
         }
-    
     }
 
     pub fn tdot(&self, other: &Tensor1D<B>) -> Tensor1D<B> {
@@ -51,73 +50,72 @@ impl<B: Backend> Tensor2D<B> {
             data: B::matvec_transposed(&self.data, &other.data),
             backend: PhantomData,
         }
-    
     }
 
-    pub fn abs(&self) -> Self{
+    pub fn abs(&self) -> Self {
         Self {
             data: B::abs_2d(&self.data),
             backend: PhantomData,
         }
     }
 
-    pub fn sign(&self) -> Self{
+    pub fn sign(&self) -> Self {
         Self {
             data: B::sign_2d(&self.data),
             backend: PhantomData,
         }
     }
 
-    pub fn len(&self) -> Scalar<B>{
+    pub fn len(&self) -> Scalar<B> {
         Scalar {
             data: B::scalar_f64(B::len_2d(&self.data) as f64),
             backend: PhantomData,
         }
     }
 
-    pub fn scale(&self, a: Scalar<B>) -> Self{
+    pub fn scale(&self, a: Scalar<B>) -> Self {
         Self {
             data: B::mul_scalar_2d(&self.data, &a.data),
             backend: PhantomData,
         }
     }
 
-    pub fn add_scalar(&self, a: Scalar<B>) -> Self{
+    pub fn add_scalar(&self, a: Scalar<B>) -> Self {
         Self {
             data: B::add_scalar_2d(&self.data, &a.data),
             backend: PhantomData,
         }
     }
 
-    pub fn maximum(&self, other: Self) -> Self{
+    pub fn maximum(&self, other: Self) -> Self {
         Self {
             data: B::maximum_2d(&self.data, &other.data),
             backend: PhantomData,
         }
     }
 
-    pub fn exp(&self) -> Self{
+    pub fn exp(&self) -> Self {
         Self {
             data: B::exp_2d(&self.data),
             backend: PhantomData,
         }
     }
 
-    pub fn log(&self) -> Self{
+    pub fn log(&self) -> Self {
         Self {
             data: B::log_2d(&self.data),
             backend: PhantomData,
         }
     }
 
-    pub fn sigmoid(&self) -> Self{
+    pub fn sigmoid(&self) -> Self {
         Self {
             data: B::sigmoid_2d(&self.data),
             backend: PhantomData,
         }
     }
 
-    pub fn shape(&self) -> (usize, usize){
+    pub fn shape(&self) -> (usize, usize) {
         B::shape(&self.data)
     }
 }
@@ -126,7 +124,6 @@ impl<B: Backend> Tensor2D<B> {
 mod tests {
     use super::*;
     use crate::backend::CpuBackend;
-
 
     #[test]
     fn test_tensor2d_matvec_ops() {

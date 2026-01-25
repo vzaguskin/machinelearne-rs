@@ -1,21 +1,21 @@
 pub mod backend;
 
+pub mod dataset;
+pub mod loss;
 pub mod model;
 pub mod optimizer;
-pub mod loss;
-pub mod trainer;
 pub mod regularizers;
-pub mod dataset;
 pub mod serialization;
-pub use backend::{Backend, ScalarOps, CpuBackend, Tensor1D, Tensor2D};
+pub mod trainer;
+pub use backend::{Backend, CpuBackend, ScalarOps, Tensor1D, Tensor2D};
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::backend::CpuBackend;
     use crate::loss::{Loss, MSELoss};
+    use crate::model::linear::{InferenceModel, LinearModel, TrainableModel, Unfitted};
     use crate::optimizer::{Optimizer, SGD};
-    use crate::model::linear::{TrainableModel, LinearModel, Unfitted, InferenceModel};
 
     // Вспомогательная функция для создания (n, 1) матрицы из столбца
     fn col_to_tensor2d<B: Backend>(col: &[f32]) -> Tensor2D<B> {
@@ -25,7 +25,7 @@ mod tests {
         Tensor2D::<B>::new(data, n, 1)
     }
 
-    fn slice_to_tensor1d<B: Backend>(slice: &[f32]) -> Tensor1D<B>  {
+    fn slice_to_tensor1d<B: Backend>(slice: &[f32]) -> Tensor1D<B> {
         Tensor1D::<B>::new(slice.to_vec())
     }
 
@@ -49,23 +49,24 @@ mod tests {
             let new_params = optimizer.step(&model.params(), &grads);
             model.update_params(&new_params);
             if epoch % 5 == 0 {
-            let loss_val = Loss::<CpuBackend>::loss(&loss_fn, &pred, &y_tensor);
-            let w = &model.params().weights.to_vec()[0];
-            let b = model.params().bias.data.to_f64();
-            println!("Epoch {}: loss={:.6}, w={:.4}, b={:.4}, pred={:?}", epoch, 
-                    loss_val.data.to_f64(), w, b,
-                    pred.to_vec());
-}
+                let loss_val = Loss::<CpuBackend>::loss(&loss_fn, &pred, &y_tensor);
+                let w = &model.params().weights.to_vec()[0];
+                let b = model.params().bias.data.to_f64();
+                println!(
+                    "Epoch {}: loss={:.6}, w={:.4}, b={:.4}, pred={:?}",
+                    epoch,
+                    loss_val.data.to_f64(),
+                    w,
+                    b,
+                    pred.to_vec()
+                );
+            }
         }
 
         let fitted = model.into_fitted();
         let inp = slice_to_tensor1d::<CpuBackend>(&[2.5]);
         let pred = fitted.predict(&inp).data.to_f64();
-        assert!(
-            (pred - 2.5).abs() < 0.1,
-            "Expected ~2.5, got {}",
-            pred
-        );
+        assert!((pred - 2.5).abs() < 0.1, "Expected ~2.5, got {}", pred);
     }
 
     #[test]
@@ -76,7 +77,6 @@ mod tests {
 
         let x_tensor = col_to_tensor2d(x_data);
         let y_tensor = slice_to_tensor1d(y_data);
-
 
         let mut model = LinearModel::<CpuBackend, Unfitted>::new(1);
 
@@ -96,8 +96,20 @@ mod tests {
         let p1 = fitted.predict(&slice_to_tensor1d::<CpuBackend>(&[1.0]));
         let p3 = fitted.predict(&slice_to_tensor1d::<CpuBackend>(&[3.0]));
 
-        assert!((p0.data.to_f64() - 1.0).abs() < 0.2, "p0 = {}", p0.data.to_f64());
-        assert!((p1.data.to_f64() - 3.0).abs() < 0.2, "p1 = {}", p1.data.to_f64());
-        assert!((p3.data.to_f64() - 7.0).abs() < 0.3, "p3 = {}", p3.data.to_f64());
+        assert!(
+            (p0.data.to_f64() - 1.0).abs() < 0.2,
+            "p0 = {}",
+            p0.data.to_f64()
+        );
+        assert!(
+            (p1.data.to_f64() - 3.0).abs() < 0.2,
+            "p1 = {}",
+            p1.data.to_f64()
+        );
+        assert!(
+            (p3.data.to_f64() - 7.0).abs() < 0.3,
+            "p3 = {}",
+            p3.data.to_f64()
+        );
     }
 }

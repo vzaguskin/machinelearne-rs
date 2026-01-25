@@ -1,10 +1,10 @@
-pub use crate::backend::backend::{Backend};
+pub use crate::backend::backend::Backend;
 pub use crate::backend::scalar::{Scalar, ScalarOps};
-pub use crate::backend::tensorlike::TensorLike;
 pub use crate::backend::tensor1d::Tensor1D;
+pub use crate::backend::tensorlike::TensorLike;
 
-pub use crate::model::{TrainableModel};
-pub use crate::model::linear::{LinearModel, Unfitted, LinearParams};
+pub use crate::model::linear::{LinearModel, LinearParams, Unfitted};
+pub use crate::model::TrainableModel;
 
 /// A trait for differentiable loss functions used during model training.
 ///
@@ -47,16 +47,12 @@ where
         diff.dot(&diff) / Scalar::<B>::new(B::len_1d(&diff.data) as f64)
     }
 
-    fn grad_wrt_prediction(
-        &self,
-        pred: &Self::Prediction,
-        target: &Self::Target,
-    ) -> Tensor1D<B> {
+    fn grad_wrt_prediction(&self, pred: &Self::Prediction, target: &Self::Target) -> Tensor1D<B> {
         // d/dp ( (p - y)^2 ) = 2(p - y)
         // But commonly: MSE = (1/n) * sum(...), so grad = (2/n)(p - y)
         // However, in practice, we often omit 2 and let LR absorb it.
         // We'll return (pred - target) — standard in many frameworks.
-        let diff= pred.sub(&target);
+        let diff = pred.sub(&target);
         let n = Scalar::<B>::new(1. / pred.len() as f64); // or use backend method
         diff.scale(&n)
     }
@@ -75,15 +71,11 @@ where
     type Prediction = Tensor1D<B>;
     type Target = Tensor1D<B>;
 
-    fn loss(&self, pred: &Self::Prediction, target: &Self::Target) -> Scalar<B>{
+    fn loss(&self, pred: &Self::Prediction, target: &Self::Target) -> Scalar<B> {
         pred.sub(&target).abs().mean()
     }
 
-    fn grad_wrt_prediction(
-        &self,
-        pred: &Self::Prediction,
-        target: &Self::Target,
-    ) -> Tensor1D<B> {
+    fn grad_wrt_prediction(&self, pred: &Self::Prediction, target: &Self::Target) -> Tensor1D<B> {
         let diff = pred.sub(&target);
         let sign = diff.sign();
         let n = Scalar::<B>::new(1.0 / pred.len() as f64);
@@ -105,24 +97,27 @@ where
     type Prediction = Tensor1D<B>;
     type Target = Tensor1D<B>;
 
-    fn loss(&self, logits: &Self::Prediction, targets: &Self::Target) -> Scalar<B>{
+    fn loss(&self, logits: &Self::Prediction, targets: &Self::Target) -> Scalar<B> {
         // Numerically stable BCE: -(t * log(s(z)) + (1-t) * log(1 - s(z)))
         // = max(z, 0) - z * t + log(1 + exp(-|z|))
         let max_logits = logits.maximum(Self::Prediction::zeros(logits.len()));
         let term2 = logits
-                                            .abs()
-                                            .scale(&Scalar::<B>::new(-1.))
-                                            .exp()
-                                            .add_scalar(&Scalar::<B>::new(1.))
-                                            .log();
-        
-        
+            .abs()
+            .scale(&Scalar::<B>::new(-1.))
+            .exp()
+            .add_scalar(&Scalar::<B>::new(1.))
+            .log();
+
         let term1 = max_logits.sub(&logits.mul(&targets));
         let total = term1.add(&term2);
         total.mean()
     }
 
-    fn grad_wrt_prediction(&self, logits: &Self::Prediction, targets: &Self::Target) -> Self::Prediction {
+    fn grad_wrt_prediction(
+        &self,
+        logits: &Self::Prediction,
+        targets: &Self::Target,
+    ) -> Self::Prediction {
         // d/dz BCE = sigmoid(z) - t
         let n = Scalar::<B>::new(1.0 / logits.len() as f64);
         logits.sigmoid().sub(&targets).scale(&n)
@@ -184,7 +179,11 @@ mod tests {
 
         let grad = bce.grad_wrt_prediction(&logits, &targets);
         // grad = (sigmoid(z) - t) / n
-        let sig = vec![0.5, 1.0 / (1.0 + (-2.0f64).exp()), 1.0 / (1.0 + (2.0f64).exp())];
+        let sig = vec![
+            0.5,
+            1.0 / (1.0 + (-2.0f64).exp()),
+            1.0 / (1.0 + (2.0f64).exp()),
+        ];
         let expected_grad: Vec<f64> = sig
             .iter()
             .zip(targets.to_vec().iter())
