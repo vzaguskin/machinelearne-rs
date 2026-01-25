@@ -121,7 +121,7 @@ where
                 let (reg_penalty, reg_grad) = self.regularizer.regularizer_penalty_grad(&model);
                 total_loss = total_loss + reg_penalty;
                 let grad_preds = self.loss_fn.grad_wrt_prediction(&preds, &batch_y);
-                let grad_preds_avg = grad_preds.scale(&(Scalar::<B>::new(1.) / batch_y.len()));
+                let grad_preds_avg = grad_preds.scale(&(Scalar::<B>::new(1. / batch_y.len() as f64)));
                 let grads = model.backward(&batch_x, &grad_preds_avg);
 
                 let total_grads = grads.add(&reg_grad);

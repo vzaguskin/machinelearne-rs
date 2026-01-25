@@ -65,11 +65,8 @@ impl<B: Backend> Tensor1D<B> {
         }
     }
 
-    pub fn len(&self) -> Scalar<B>{
-        Scalar {
-            data: B::scalar_f64(B::len_1d(&self.data) as f64),
-            backend: PhantomData,
-        }
+    pub fn len(&self) -> usize{
+        B::len_1d(&self.data)
     }
 
     pub fn scale(&self, a: &Scalar<B>) -> Self{
@@ -168,7 +165,7 @@ mod tests {
 
         // len
         let len = a.len();
-        assert_eq!(len.data, 3.0);
+        assert_eq!(len, 3);
     }
 
     #[test]
