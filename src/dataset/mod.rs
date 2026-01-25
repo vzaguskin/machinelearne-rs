@@ -1,5 +1,5 @@
-use std::{fmt::Debug, ops::Range};
 use crate::backend::{Backend, Tensor1D, Tensor2D};
+use std::{fmt::Debug, ops::Range};
 pub mod memory;
 pub use self::memory::InMemoryDataset;
 
@@ -94,9 +94,7 @@ mod tests {
             let start = range.start;
 
             // X: (n, 2) — делаем уникальные значения, например: [start*2, start*2+1, ...]
-            let x_data: Vec<f32> = (0..n * 2)
-                .map(|i| (start * 2 + i) as f32)
-                .collect();
+            let x_data: Vec<f32> = (0..n * 2).map(|i| (start * 2 + i) as f32).collect();
             let x = Tensor2D::<B>::new(x_data, n, 2);
 
             // y: (n,) — смещаем на start

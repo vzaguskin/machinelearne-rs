@@ -21,35 +21,53 @@ pub trait ScalarOps:
 
 // === Реализации для f64 (и f32, если нужно) ===
 impl ScalarOps for f64 {
-    fn sqrt(self) -> Self { self.sqrt() }
-    fn abs(self) -> Self { self.abs() }
-    fn zero() -> Self { 0.0 }
-    fn one() -> Self { 1.0 }
-    fn from_f64(v: f64) -> Self { v }
-    fn to_f64(self) -> f64 { self }
-    fn exp(self) -> Self{self.exp()}
-    
+    fn sqrt(self) -> Self {
+        self.sqrt()
+    }
+    fn abs(self) -> Self {
+        self.abs()
+    }
+    fn zero() -> Self {
+        0.0
+    }
+    fn one() -> Self {
+        1.0
+    }
+    fn from_f64(v: f64) -> Self {
+        v
+    }
+    fn to_f64(self) -> f64 {
+        self
+    }
+    fn exp(self) -> Self {
+        self.exp()
+    }
 }
 
 #[derive(Clone, Debug, Copy)]
-pub struct Scalar <B: Backend> 
-{
+pub struct Scalar<B: Backend> {
     pub(crate) data: B::Scalar,
     pub(crate) backend: PhantomData<B>,
 }
 
-impl <B: Backend> Scalar<B>{
-    pub fn new(f: f64) -> Self{
-        Self{data: B::scalar_f64(f), backend: PhantomData}
+impl<B: Backend> Scalar<B> {
+    pub fn new(f: f64) -> Self {
+        Self {
+            data: B::scalar_f64(f),
+            backend: PhantomData,
+        }
     }
 
-    pub fn exp(&self) -> Self{
-        Self{data: self.data.exp(), backend: PhantomData}
+    pub fn exp(&self) -> Self {
+        Self {
+            data: self.data.exp(),
+            backend: PhantomData,
+        }
     }
 }
 
 // Арифметические операции через std::ops
-impl<B: Backend+Copy> std::ops::Add for Scalar<B> {
+impl<B: Backend + Copy> std::ops::Add for Scalar<B> {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
@@ -96,7 +114,7 @@ impl<B: Backend> std::ops::Div for Scalar<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::{CpuBackend}; // Убедись, что CpuBackend доступен
+    use crate::backend::CpuBackend; // Убедись, что CpuBackend доступен
 
     #[test]
     fn test_scalar_ops_f64() {

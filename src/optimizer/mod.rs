@@ -1,8 +1,8 @@
-use crate::loss::TensorLike;
-use crate::model::linear::{LinearParams,};
-use crate::backend::backend::{Backend};
-use crate::backend::scalar::{Scalar};
+use crate::backend::backend::Backend;
+use crate::backend::scalar::Scalar;
 use crate::backend::tensor1d::Tensor1D;
+use crate::loss::TensorLike;
+use crate::model::linear::LinearParams;
 
 pub trait Optimizer<B: Backend, P> {
     /// Выполняет шаг оптимизации: `params = params - lr * gradients`.
@@ -11,14 +11,15 @@ pub trait Optimizer<B: Backend, P> {
 }
 
 #[derive(Clone)]
-pub struct SGD<B: Backend>{
+pub struct SGD<B: Backend> {
     lr: Scalar<B>,
 }
 
-
-impl <B: Backend> SGD<B>{
-    pub fn new(lr: f64) -> Self{
-        Self{lr: Scalar::<B>::new(lr)}
+impl<B: Backend> SGD<B> {
+    pub fn new(lr: f64) -> Self {
+        Self {
+            lr: Scalar::<B>::new(lr),
+        }
     }
 }
 

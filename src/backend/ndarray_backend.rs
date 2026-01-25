@@ -1,5 +1,5 @@
+use super::Backend;
 use ndarray::{Array1, Array2, Ix1, Ix2};
-use super::{Backend};
 
 #[derive(Clone, Debug, Copy)]
 pub struct NdarrayBackend;
@@ -26,7 +26,9 @@ impl super::Backend for NdarrayBackend {
     type Tensor2D = NdarrayTensor2D;
     type Device = (); // CPU-only for now
 
-    fn default_device() -> Self::Device { () }
+    fn default_device() -> Self::Device {
+        ()
+    }
 
     fn zeros_1d(len: usize) -> Self::Tensor1D {
         Array1::zeros(len)
@@ -71,193 +73,188 @@ impl super::Backend for NdarrayBackend {
         (shape[0], shape[1])
     }
 
+    // --- Element-wise non-linear ops (1D) ---
 
-   // --- Element-wise non-linear ops (1D) ---
+    fn exp_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
+        x.mapv(f64::exp)
+    }
 
-fn exp_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
-    x.mapv(f64::exp)
+    fn log_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
+        x.mapv(f64::ln)
+    }
+
+    fn sigmoid_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
+        // Численно стабильная сигмоида через ndarray
+        x.mapv(|z| {
+            if z >= 0.0 {
+                1.0 / (1.0 + (-z).exp())
+            } else {
+                let ez = z.exp();
+                ez / (1.0 + ez)
+            }
+        })
+    }
+
+    fn abs_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
+        x.mapv(f64::abs)
+    }
+
+    fn sign_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
+        x.mapv(|x| {
+            if x > 0.0 {
+                1.0
+            } else if x < 0.0 {
+                -1.0
+            } else {
+                0.0
+            }
+        })
+    }
+
+    fn maximum_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
+        assert_eq!(a.len(), b.len(), "Shapes must match");
+        a.iter().zip(b.iter()).map(|(&x, &y)| x.max(y)).collect()
+    }
+
+    // --- 2D versions (delegating to 1D via flat view or direct map) ---
+
+    fn exp_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(x.0.mapv(f64::exp))
+    }
+
+    fn log_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(x.0.mapv(f64::ln))
+    }
+
+    fn sigmoid_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(x.0.mapv(|z| {
+            if z >= 0.0 {
+                1.0 / (1.0 + (-z).exp())
+            } else {
+                let ez = z.exp();
+                ez / (1.0 + ez)
+            }
+        }))
+    }
+
+    fn abs_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(x.0.mapv(f64::abs))
+    }
+
+    fn sign_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(x.0.mapv(|x| {
+            if x > 0.0 {
+                1.0
+            } else if x < 0.0 {
+                -1.0
+            } else {
+                0.0
+            }
+        }))
+    }
+
+    fn maximum_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
+        let (rows, cols) = a.0.dim();
+        assert_eq!(a.0.dim(), b.0.dim(), "Shapes must match");
+        let data: Vec<f64> =
+            a.0.iter()
+                .zip(b.0.iter())
+                .map(|(&x, &y)| x.max(y))
+                .collect();
+        NdarrayTensor2D(Array2::from_shape_vec((rows, cols), data).unwrap())
+    }
+
+    // --- Reductions (already partially covered, but for completeness) ---
+
+    fn sum_all_1d(t: &Self::Tensor1D) -> Self::Scalar {
+        t.sum()
+    }
+
+    fn mean_all_1d(t: &Self::Tensor1D) -> Self::Scalar {
+        t.mean().unwrap()
+    }
+
+    fn sum_all_2d(t: &Self::Tensor2D) -> Self::Scalar {
+        t.0.sum()
+    }
+
+    fn mean_all_2d(t: &Self::Tensor2D) -> Self::Scalar {
+        t.0.mean().unwrap()
+    }
+
+    // --- Scalar and access helpers ---
+
+    fn scalar_f64(value: f64) -> Self::Scalar {
+        value
+    }
+
+    fn len_1d(t: &Self::Tensor1D) -> usize {
+        t.len()
+    }
+
+    fn len_2d(t: &Self::Tensor2D) -> usize {
+        t.0.nrows() // или .len() / ncols(), но nrows — прямой аналог твоему rows
+    }
+
+    fn to_vec_1d(t: &Self::Tensor1D) -> Vec<f64> {
+        t.to_vec()
+    }
+
+    // --- Element-wise binary ops (1D) ---
+
+    fn sub_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
+        a - b
+    }
+
+    fn mul_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
+        a * b
+    }
+
+    fn div_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
+        a / b
+    }
+
+    fn mul_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
+        t.mapv(|x| x * *s)
+    }
+
+    fn add_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
+        t.mapv(|x| x + *s)
+    }
+
+    // --- 2D scalar and binary ops ---
+
+    fn add_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
+        NdarrayTensor2D(t.0.mapv(|x| x + *s))
+    }
+
+    fn add_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(&a.0 + &b.0)
+    }
+
+    fn sub_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(&a.0 - &b.0)
+    }
+
+    fn mul_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(&a.0 * &b.0)
+    }
+
+    fn div_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(&a.0 / &b.0)
+    }
+
+    // --- "Unchecked" matvec helpers (для совместимости с CpuBackend) ---
+    // В ndarray они не нужны, но трейт требует — делаем просто обёртки
+
+    fn _matvec_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D {
+        Self::matvec(a, x)
+    }
+
+    fn _matvec_transposed_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D {
+        Self::matvec_transposed(a, x)
+    }
 }
-
-fn log_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
-    x.mapv(f64::ln)
-}
-
-fn sigmoid_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
-    // Численно стабильная сигмоида через ndarray
-    x.mapv(|z| {
-        if z >= 0.0 {
-            1.0 / (1.0 + (-z).exp())
-        } else {
-            let ez = z.exp();
-            ez / (1.0 + ez)
-        }
-    })
-}
-
-fn abs_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
-    x.mapv(f64::abs)
-}
-
-fn sign_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
-    x.mapv(|x| {
-        if x > 0.0 {
-            1.0
-        } else if x < 0.0 {
-            -1.0
-        } else {
-            0.0
-        }
-    })
-}
-
-fn maximum_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
-    assert_eq!(a.len(), b.len(), "Shapes must match");
-    a.iter()
-        .zip(b.iter())
-        .map(|(&x, &y)| x.max(y))
-        .collect()
-}
-
-// --- 2D versions (delegating to 1D via flat view or direct map) ---
-
-fn exp_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
-    NdarrayTensor2D(x.0.mapv(f64::exp))
-}
-
-fn log_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
-    NdarrayTensor2D(x.0.mapv(f64::ln))
-}
-
-fn sigmoid_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
-    NdarrayTensor2D(x.0.mapv(|z| {
-        if z >= 0.0 {
-            1.0 / (1.0 + (-z).exp())
-        } else {
-            let ez = z.exp();
-            ez / (1.0 + ez)
-        }
-    }))
-}
-
-fn abs_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
-    NdarrayTensor2D(x.0.mapv(f64::abs))
-}
-
-fn sign_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
-    NdarrayTensor2D(x.0.mapv(|x| {
-        if x > 0.0 {
-            1.0
-        } else if x < 0.0 {
-            -1.0
-        } else {
-            0.0
-        }
-    }))
-}
-
-fn maximum_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
-    let (rows, cols) = a.0.dim();
-    assert_eq!(a.0.dim(), b.0.dim(), "Shapes must match");
-    let data: Vec<f64> = a.0
-        .iter()
-        .zip(b.0.iter())
-        .map(|(&x, &y)| x.max(y))
-        .collect();
-    NdarrayTensor2D(Array2::from_shape_vec((rows, cols), data).unwrap())
-}
-
-// --- Reductions (already partially covered, but for completeness) ---
-
-fn sum_all_1d(t: &Self::Tensor1D) -> Self::Scalar {
-    t.sum()
-}
-
-fn mean_all_1d(t: &Self::Tensor1D) -> Self::Scalar {
-    t.mean().unwrap()
-}
-
-fn sum_all_2d(t: &Self::Tensor2D) -> Self::Scalar {
-    t.0.sum()
-}
-
-fn mean_all_2d(t: &Self::Tensor2D) -> Self::Scalar {
-    t.0.mean().unwrap()
-}
-
-// --- Scalar and access helpers ---
-
-fn scalar_f64(value: f64) -> Self::Scalar {
-    value
-}
-
-fn len_1d(t: &Self::Tensor1D) -> usize {
-    t.len()
-}
-
-fn len_2d(t: &Self::Tensor2D) -> usize {
-    t.0.nrows() // или .len() / ncols(), но nrows — прямой аналог твоему rows
-}
-
-fn to_vec_1d(t: &Self::Tensor1D) -> Vec<f64> {
-    t.to_vec()
-}
-
-// --- Element-wise binary ops (1D) ---
-
-fn sub_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
-    a - b
-}
-
-fn mul_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
-    a * b
-}
-
-fn div_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
-    a / b
-}
-
-fn mul_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
-    t.mapv(|x| x * *s)
-}
-
-fn add_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
-    t.mapv(|x| x + *s)
-}
-
-// --- 2D scalar and binary ops ---
-
-fn add_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
-    NdarrayTensor2D(t.0.mapv(|x| x + *s))
-}
-
-fn add_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
-    NdarrayTensor2D(&a.0 + &b.0)
-}
-
-fn sub_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
-    NdarrayTensor2D(&a.0 - &b.0)
-}
-
-fn mul_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
-    NdarrayTensor2D(&a.0 * &b.0)
-}
-
-fn div_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
-    NdarrayTensor2D(&a.0 / &b.0)
-}
-
-// --- "Unchecked" matvec helpers (для совместимости с CpuBackend) ---
-// В ndarray они не нужны, но трейт требует — делаем просто обёртки
-
-fn _matvec_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D {
-    Self::matvec(a, x)
-}
-
-fn _matvec_transposed_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D {
-    Self::matvec_transposed(a, x)
-}
-}
-
 
 #[cfg(test)]
 #[cfg(feature = "ndarray")]
@@ -293,14 +290,20 @@ mod tests {
     fn test_from_vec_2d() {
         let t = NdarrayBackend::from_vec_2d(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
         assert_eq!(NdarrayBackend::shape(&t), (2, 2));
-        assert_eq!(t.0, Array2::from_shape_vec((2, 2), vec![1.0, 2.0, 3.0, 4.0]).unwrap());
+        assert_eq!(
+            t.0,
+            Array2::from_shape_vec((2, 2), vec![1.0, 2.0, 3.0, 4.0]).unwrap()
+        );
     }
 
     #[test]
     fn test_from_nested_vec() {
         let data = &[vec![1.0, 2.0], vec![3.0, 4.0]];
         let t = tensor2d_from(data);
-        assert_eq!(t.0, Array2::from_shape_vec((2, 2), vec![1.0, 2.0, 3.0, 4.0]).unwrap());
+        assert_eq!(
+            t.0,
+            Array2::from_shape_vec((2, 2), vec![1.0, 2.0, 3.0, 4.0]).unwrap()
+        );
     }
 
     #[test]
@@ -348,7 +351,10 @@ mod tests {
         let a = tensor2d_from(&[vec![2.0, 3.0]]);
         let b = tensor2d_from(&[vec![4.0, 5.0]]);
         let c = NdarrayBackend::mul_2d(&a, &b);
-        assert_eq!(c.0, Array2::from_shape_vec((1, 2), vec![8.0, 15.0]).unwrap());
+        assert_eq!(
+            c.0,
+            Array2::from_shape_vec((1, 2), vec![8.0, 15.0]).unwrap()
+        );
     }
 
     #[test]
@@ -380,7 +386,10 @@ mod tests {
         let t = tensor2d_from(&[vec![1.0, 2.0]]);
         let s = 10.0;
         let out = NdarrayBackend::add_scalar_2d(&t, &s);
-        assert_eq!(out.0, Array2::from_shape_vec((1, 2), vec![11.0, 12.0]).unwrap());
+        assert_eq!(
+            out.0,
+            Array2::from_shape_vec((1, 2), vec![11.0, 12.0]).unwrap()
+        );
     }
 
     #[test]
@@ -396,7 +405,10 @@ mod tests {
         let t = tensor2d_from(&[vec![2.0, 3.0]]);
         let s = 5.0;
         let out = NdarrayBackend::mul_scalar_2d(&t, &s);
-        assert_eq!(out.0, Array2::from_shape_vec((1, 2), vec![10.0, 15.0]).unwrap());
+        assert_eq!(
+            out.0,
+            Array2::from_shape_vec((1, 2), vec![10.0, 15.0]).unwrap()
+        );
     }
 
     #[test]
@@ -412,7 +424,7 @@ mod tests {
         let a = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]); // 2x2
         let x = Array1::from_vec(vec![1.0, 0.0]); // shape (2,)
         let y = NdarrayBackend::matvec_transposed(&a, &x); // A^T @ x → (2,)
-        // A^T = [[1,3],[2,4]], so [1*1 + 3*0, 2*1 + 4*0] = [1, 2]
+                                                           // A^T = [[1,3],[2,4]], so [1*1 + 3*0, 2*1 + 4*0] = [1, 2]
         assert_eq!(y.to_vec(), vec![1.0, 2.0]);
     }
 
@@ -421,7 +433,10 @@ mod tests {
         let a = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
         let at = NdarrayBackend::transpose(&a);
         assert_eq!(NdarrayBackend::shape(&at), (2, 2));
-        assert_eq!(at.0, Array2::from_shape_vec((2, 2), vec![1.0, 3.0, 2.0, 4.0]).unwrap());
+        assert_eq!(
+            at.0,
+            Array2::from_shape_vec((2, 2), vec![1.0, 3.0, 2.0, 4.0]).unwrap()
+        );
     }
 
     #[test]
@@ -526,14 +541,20 @@ mod tests {
     fn test_abs_2d() {
         let t = tensor2d_from(&[vec![-2.0, 3.0]]);
         let out = NdarrayBackend::abs_2d(&t);
-        assert_eq!(out.0, Array2::from_shape_vec((1, 2), vec![2.0, 3.0]).unwrap());
+        assert_eq!(
+            out.0,
+            Array2::from_shape_vec((1, 2), vec![2.0, 3.0]).unwrap()
+        );
     }
 
     #[test]
     fn test_sign_2d() {
         let t = tensor2d_from(&[vec![-2.0, 0.0, 3.0]]);
         let out = NdarrayBackend::sign_2d(&t);
-        assert_eq!(out.0, Array2::from_shape_vec((1, 3), vec![-1.0, 0.0, 1.0]).unwrap());
+        assert_eq!(
+            out.0,
+            Array2::from_shape_vec((1, 3), vec![-1.0, 0.0, 1.0]).unwrap()
+        );
     }
 
     #[test]
@@ -541,7 +562,10 @@ mod tests {
         let a = tensor2d_from(&[vec![1.0, 5.0, 3.0]]);
         let b = tensor2d_from(&[vec![2.0, 4.0, 6.0]]);
         let out = NdarrayBackend::maximum_2d(&a, &b);
-        assert_eq!(out.0, Array2::from_shape_vec((1, 3), vec![2.0, 5.0, 6.0]).unwrap());
+        assert_eq!(
+            out.0,
+            Array2::from_shape_vec((1, 3), vec![2.0, 5.0, 6.0]).unwrap()
+        );
     }
 
     #[test]

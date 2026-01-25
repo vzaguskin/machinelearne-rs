@@ -1,15 +1,15 @@
 use crate::backend::scalar::Scalar;
 use std::marker::PhantomData;
 
-use super::{Backend};
 use super::tensor1d::Tensor1D;
+use super::Backend;
 
-pub trait TensorLike<B: Backend>{
+pub trait TensorLike<B: Backend> {
     fn sub(&self, other: &Self) -> Self;
     fn add(&self, other: &Self) -> Self;
     fn mul(&self, other: &Self) -> Self;
     fn div(&self, other: &Self) -> Self;
-    fn mean_all(&self) -> Scalar<B>;      // агрегация до скаляра
+    fn mean_all(&self) -> Scalar<B>; // агрегация до скаляра
     fn sum(&self) -> Scalar<B>;
     fn scale(&self, other: Scalar<B>) -> Self;
 }
@@ -50,14 +50,14 @@ impl<B: Backend> TensorLike<B> for Tensor1D<B> {
         }
     }
 
-    fn scale(&self, other: Scalar<B>) -> Self{
+    fn scale(&self, other: Scalar<B>) -> Self {
         Self {
             data: B::mul_scalar_1d(&self.data, &other.data),
             backend: PhantomData,
         }
     }
 
-    fn sum(&self) -> Scalar<B>{
+    fn sum(&self) -> Scalar<B> {
         Scalar {
             data: B::sum_all_1d(&self.data),
             backend: PhantomData,
@@ -68,8 +68,8 @@ impl<B: Backend> TensorLike<B> for Tensor1D<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::CpuBackend;
     use crate::backend::tensor1d::Tensor1D;
+    use crate::backend::CpuBackend;
 
     #[test]
     fn test_tensorlike_for_tensor1d() {
@@ -109,7 +109,10 @@ mod tests {
     // Дополнительно: проверим, что generic-функция работает
     #[test]
     fn test_generic_function_over_tensorlike() {
-        fn mean_squared_error<T: TensorLike<CpuBackend>>(pred: &T, target: &T) -> Scalar<CpuBackend> {
+        fn mean_squared_error<T: TensorLike<CpuBackend>>(
+            pred: &T,
+            target: &T,
+        ) -> Scalar<CpuBackend> {
             let diff = pred.sub(target);
             let sq = diff.mul(&diff);
             sq.mean_all()
