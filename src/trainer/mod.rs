@@ -10,7 +10,13 @@ use crate::{
     dataset::Dataset,
 };
 
-// --- Основная структура (immutable после build) ---
+/// Orchestrates the training loop for a `TrainableModel`.
+///
+/// Combines a loss function, optimizer, and regularizer to fit a model on a dataset.
+/// Once built via `TrainerBuilder`, it is immutable and can be reused across multiple models
+/// (as long as types match).
+///
+/// The `fit` method returns a `FittedModel` (via `IntoFitted`), which contains only inference logic.
 pub struct Trainer<B, L, O, M, P, R>
 where
     B: Backend,
@@ -28,7 +34,11 @@ where
     _phantom_model: PhantomData<M>,
 }
 
-// --- Билдер ---
+/// Fluent builder for constructing a `Trainer` with custom hyperparameters.
+///
+/// Defaults:
+/// - `batch_size`: 32
+/// - `max_epochs`: 1000
 pub struct TrainerBuilder<B, L, O, M, P, R>
 where
     B: Backend,
@@ -54,6 +64,12 @@ where
     O: Optimizer<B, P>,
     R: Regularizer<B, M>
 {
+    /// Creates a new `TrainerBuilder` with the given components.
+    ///
+    /// # Arguments
+    /// * `loss_fn` — differentiable loss (e.g., `MSELoss`)
+    /// * `optimizer` — parameter updater (e.g., `SGD`)
+    /// * `regularizer` — optional penalty term (e.g., `L2` or `NoRegularizer`)
     pub fn new(loss_fn: L, optimizer: O, regularizer: R) -> Self {
         Self {
             batch_size: 32,
@@ -100,6 +116,17 @@ where
     R: Regularizer<B, M>,
     P: ParamOps<B>
 {
+    /// Trains the model on the provided dataset for up to `max_epochs`.
+    ///
+    /// # Returns
+    /// A fitted model ready for inference (`M::Output`), or an error if:
+    /// - The dataset is empty
+    /// - The dataset length is unknown (required for loss averaging)
+    /// - A batch fails to load
+    ///
+    /// # Notes
+    /// - Loss is averaged over the entire dataset per epoch.
+    /// - Gradients are averaged per batch before applying regularization.
     pub fn fit<D>(&self, mut model: M, dataset: &D) -> Result<M::Output, String>
 where
     D: Dataset,
@@ -147,6 +174,9 @@ where
     O: Optimizer<B, P>,
     R: Regularizer<B, M>
 {
+        /// Convenience constructor that starts the builder pattern.
+        ///
+        /// Equivalent to `TrainerBuilder::new(...)`.
     pub fn builder(loss_fn: L, optimizer: O, regularizer: R) -> TrainerBuilder<B, L, O, M, P, R> {
         TrainerBuilder::new(loss_fn, optimizer, regularizer)
     }

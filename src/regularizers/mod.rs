@@ -54,7 +54,7 @@ where
 mod tests {
     use super::*;
     use crate::backend::CpuBackend;
-    use crate::model::linear::{LinearRegression, LinearParams, LinearModel, Fitted, InferenceModel};
+    use crate::model::linear::{LinearRegression, LinearParams};
 
     #[test]
     fn test_l2_regularizer() {
