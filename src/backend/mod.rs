@@ -28,7 +28,7 @@
 //! use machinelearne_rs::backend::{Backend, CpuBackend, Tensor1D, Tensor2D};
 //!
 //! // Backend selection via type parameter
-//! let x: Tensor1D<CpuBackend> = Tensor1D::new(vec![1.0, 2.0, 3.0]);
+//! let x: Tensor1D<CpuBackend> = Tensor1D::new(vec![1.0, 2.0]);
 //! let w: Tensor2D<CpuBackend> = Tensor2D::new(vec![0.5, 0.5, 0.5, 0.5], 2, 2);
 //!
 //! // Operations work identically across backends
@@ -46,7 +46,7 @@
 //! See `cpu.rs` for a reference implementation.
 
 #[cfg(feature = "cpu")]
-mod cpu;
+pub mod cpu;
 #[cfg(feature = "cpu")]
 /// Pure-Rust CPU backend implementation with zero external dependencies.
 pub use cpu::{CpuBackend, CpuTensor2D};
