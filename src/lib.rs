@@ -1,12 +1,86 @@
+//! # rust-ml
+//!
+//! A type-safe machine learning library in Rust with pluggable backends and strict
+//! separation between training and inference phases.
+//!
+//! ## Core Design Principles
+//!
+//! - **Stateful Type Safety**: Models carry their training state in the type system
+//!   (`Unfitted` vs `Fitted`), preventing invalid operations at compile time.
+//! - **Training/Inference Separation**: Trained models contain only prediction parameters;
+//!   training logic lives in separate components (losses, optimizers, trainers).
+//! - **Backend Agnosticism**: Abstract `Backend` trait enables CPU/GPU implementations
+//!   without changing model code.
+//! - **Zero-Cost Abstractions**: Generics and traits provide flexibility without runtime overhead.
+//!
+//! ## Quick Start
+//!
+//! ```rust
+//! use machinelearne_rs::backend::CpuBackend;
+//! use machinelearne_rs::model::linear::{LinearModel, Unfitted};
+//! use machinelearne_rs::loss::MSELoss;
+//! use machinelearne_rs::optimizer::SGD;
+//!
+//! // Create an untrained linear model (1 input feature)
+//! let mut model = LinearModel::<CpuBackend, Unfitted>::new(1);
+//!
+//! // Training loop (simplified)
+//! // for epoch in 0..100 {
+//! //     let pred = model.forward(&x_tensor);
+//! //     let grad = MSELoss::grad_wrt_prediction(&pred, &y_tensor);
+//! //     let grads = model.backward(&x_tensor, &grad);
+//! //     let new_params = SGD::new(0.01).step(model.params(), &grads);
+//! //     model.update_params(&new_params);
+//! // }
+//!
+//! // Convert to inference-optimized model
+//! // let fitted = model.into_fitted();
+//! // let prediction = fitted.predict(&input_tensor);
+//! ```
+//!
+//! ## Module Structure
+//!
+//! - `backend` — Tensor abstractions and computation primitives (`Tensor1D`, `Tensor2D`)
+//! - `model` — ML model implementations with stateful type parameters
+//! - `loss` — Differentiable loss functions (MSE, CrossEntropy, etc.)
+//! - `optimizer` — Parameter update algorithms (SGD, Adam)
+//! - `trainer` — High-level training loop orchestration
+//! - `regularizers` — Weight regularization strategies (L1, L2)
+//! - `dataset` — Data loading and preprocessing utilities
+//! - `serialization` — Model persistence formats
+//!
+//! ## Example Projects
+//!
+//! See the `examples/` directory for complete training pipelines demonstrating:
+//! - Linear regression with SGD
+//! - Regularization techniques
+//! - Custom backend integration
+//! - Model serialization workflows
+
 pub mod backend;
 
+/// Data loading utilities and dataset abstractions.
 pub mod dataset;
+
+/// Differentiable loss functions for model training.
 pub mod loss;
+
+/// Machine learning models with compile-time state safety.
 pub mod model;
+
+/// Optimization algorithms for parameter updates.
 pub mod optimizer;
+
+/// Weight regularization strategies to prevent overfitting.
 pub mod regularizers;
+
+/// Model persistence and format conversion utilities.
 pub mod serialization;
+
+/// High-level training loop orchestration.
 pub mod trainer;
+
+/// Re-export of core backend types for convenient usage.
 pub use backend::{Backend, CpuBackend, ScalarOps, Tensor1D, Tensor2D};
 
 #[cfg(test)]
@@ -17,7 +91,7 @@ mod tests {
     use crate::model::linear::{InferenceModel, LinearModel, TrainableModel, Unfitted};
     use crate::optimizer::{Optimizer, SGD};
 
-    // Вспомогательная функция для создания (n, 1) матрицы из столбца
+    // Helper function to create (n, 1) matrix from column data
     fn col_to_tensor2d<B: Backend>(col: &[f32]) -> Tensor2D<B> {
         let n = col.len();
         let mut data = vec![0.0; n];
