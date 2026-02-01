@@ -409,19 +409,31 @@ impl<B: Backend> Tensor2D<B> {
 
     /// Computes element-wise natural logarithm: `ln(x)`.
     ///
-    /// # Panics
-    /// Panics for non-positive values (backend-dependent behavior).
+    /// # Behavior for edge cases (IEEE 754 compliant)
+    /// - `x > 0.0` → `ln(x)` (finite value)
+    /// - `x == 0.0` → `-∞` (`f64::NEG_INFINITY`)
+    /// - `x < 0.0` → `NaN` (`f64::NAN`)
+    ///
+    /// Does **not** panic — follows standard floating-point semantics used by
+    /// NumPy, PyTorch, and TensorFlow.
+    ///
+    /// # Numerical stability in ML
+    /// For loss functions involving logarithms (e.g., cross-entropy):
+    /// - Avoid raw `log(x)` on unnormalized probabilities — use `log_softmax` instead
+    /// - Clip inputs when necessary: `log(max(x, ε))` with `ε = 1e-12` to avoid `-inf`
+    /// - `-inf` propagates through computations and will cause `NaN` in gradients
     ///
     /// # Example
     /// ```
-    /// use machinelearne_rs::backend::CpuBackend;
-    /// use machinelearne_rs::backend::Tensor2D;
+    /// use machinelearne_rs::backend::{CpuBackend, Tensor2D};
     ///
-    /// let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0f32], 1, 2);
+    /// let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 0.0, -1.0], 1, 3);
     /// let log_t = t.log();
     /// let values = log_t.ravel().to_vec();
-    /// assert!((values[0] - 0.0).abs() < 1e-12);
-    /// assert!((values[1] - 0.693147).abs() < 1e-6); // ln(2) ≈ 0.693147
+    ///
+    /// assert!((values[0] - 0.0).abs() < 1e-12);      // ln(1) = 0
+    /// assert!(values[1].is_infinite() && values[1] < 0.0); // ln(0) = -inf
+    /// assert!(values[2].is_nan());                   // ln(-1) = NaN
     /// ```
     pub fn log(&self) -> Self {
         Self {
@@ -491,5 +503,284 @@ impl<B: Backend> Tensor2D<B> {
             data: B::ravel_2d(&self.data),
             backend: PhantomData,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::{CpuBackend, Tensor1D};
+
+    #[test]
+    fn test_new_constructor_valid() {
+        // Standard 2x3 matrix
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3);
+        assert_eq!(t.shape(), (2, 3));
+        assert_eq!(t.ravel().to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "Inconsistent shape")]
+    fn test_new_constructor_invalid_shape() {
+        // Should panic when data length != rows * cols
+        let _ = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0], 2, 2); // 3 != 4
+    }
+
+    #[test]
+    fn test_zeros_constructor() {
+        let t = Tensor2D::<CpuBackend>::zeros(3, 4);
+        assert_eq!(t.shape(), (3, 4));
+        assert_eq!(t.ravel().to_vec(), vec![0.0; 12]);
+        assert_eq!(t.mean().to_f64(), 0.0);
+    }
+
+    #[test]
+    fn test_sub_shape_mismatch_panics() {
+        let a = Tensor2D::<CpuBackend>::zeros(2, 3);
+        let b = Tensor2D::<CpuBackend>::zeros(3, 2);
+
+        // Should panic when shapes don't match
+        std::panic::catch_unwind(|| {
+            let _ = a.sub(&b);
+        })
+        .unwrap_err();
+    }
+
+    #[test]
+    fn test_dot_shape_validation() {
+        let mat = Tensor2D::<CpuBackend>::zeros(3, 4); // 3x4 matrix
+        let vec_wrong = Tensor1D::<CpuBackend>::zeros(3); // Should be length 4
+
+        // Should panic: columns (4) != vector length (3)
+        std::panic::catch_unwind(|| {
+            let _ = mat.dot(&vec_wrong);
+        })
+        .unwrap_err();
+    }
+
+    #[test]
+    fn test_tdot_shape_validation() {
+        let mat = Tensor2D::<CpuBackend>::zeros(3, 4); // 3x4 matrix
+        let vec_wrong = Tensor1D::<CpuBackend>::zeros(4); // Should be length 3
+
+        // Should panic: rows (3) != vector length (4)
+        std::panic::catch_unwind(|| {
+            let _ = mat.tdot(&vec_wrong);
+        })
+        .unwrap_err();
+    }
+
+    #[test]
+    fn test_abs_negative_values() {
+        let t = Tensor2D::<CpuBackend>::new(vec![-5.0f32, -0.0, 3.0, -2.5], 2, 2);
+        let abs_t = t.abs();
+
+        let values = abs_t.ravel().to_vec();
+        assert_eq!(values[0], 5.0);
+        assert_eq!(values[1], 0.0); // -0.0 becomes +0.0
+        assert_eq!(values[2], 3.0);
+        assert_eq!(values[3], 2.5);
+    }
+
+    #[test]
+    fn test_sign_edge_cases() {
+        let t = Tensor2D::<CpuBackend>::new(vec![-3.0f32, -0.0, 0.0, 4.2], 2, 2);
+        let sign_t = t.sign();
+
+        let values = sign_t.ravel().to_vec();
+        assert_eq!(values[0], -1.0);
+        assert_eq!(values[1], -0.0); // sign of -0.0 is -0.0 in IEEE 754
+        assert_eq!(values[2], 0.0);
+        assert_eq!(values[3], 1.0);
+    }
+
+    #[test]
+    fn test_len_returns_row_count() {
+        let t = Tensor2D::<CpuBackend>::zeros(7, 3);
+        let len_scalar = t.len();
+        assert_eq!(len_scalar.to_f64(), 7.0); // Returns ROW count, not total elements
+    }
+
+    #[test]
+    fn test_scale_negative_scalar() {
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(-2.0);
+        let scaled = t.scale(s);
+
+        let values = scaled.ravel().to_vec();
+        assert_eq!(values, vec![-2.0, -4.0, -6.0, -8.0]);
+    }
+
+    #[test]
+    fn test_add_scalar_negative() {
+        let t = Tensor2D::<CpuBackend>::new(vec![5.0f32, -3.0, 0.0, 2.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(-10.0);
+        let shifted = t.add_scalar(s);
+
+        let values = shifted.ravel().to_vec();
+        assert_eq!(values, vec![-5.0, -13.0, -10.0, -8.0]);
+    }
+
+    #[test]
+    fn test_maximum_elementwise() {
+        let a = Tensor2D::<CpuBackend>::new(vec![1.0f32, 5.0, -2.0, 0.0], 2, 2);
+        let b = Tensor2D::<CpuBackend>::new(vec![3.0f32, 2.0, -5.0, 4.0], 2, 2);
+        let max_ab = a.maximum(b);
+
+        let values = max_ab.ravel().to_vec();
+        assert_eq!(values, vec![3.0, 5.0, -2.0, 4.0]); // Element-wise max
+    }
+
+    #[test]
+    fn test_exp_numerical_behavior() {
+        let t = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0, -1.0, 1000.0], 2, 2);
+        let exp_t = t.exp();
+
+        let values = exp_t.ravel().to_vec();
+        assert!((values[0] - 1.0).abs() < 1e-12); // e^0 = 1
+        assert!((values[1] - std::f64::consts::E).abs() < 1e-6); // e^1 ≈ 2.718
+        assert!((values[2] - 0.367879).abs() < 1e-6); // e^-1 ≈ 0.367879
+        assert!(values[3].is_infinite()); // Overflow to INF
+    }
+
+    #[test]
+    fn test_log_zero_returns_negative_infinity() {
+        let t = Tensor2D::<CpuBackend>::new(vec![0.0f32], 1, 1);
+        let result = t.log();
+        let values = result.ravel().to_vec();
+        assert!(
+            values[0].is_infinite(),
+            "log(0.0) should return -inf, got {}",
+            values[0]
+        );
+        assert!(values[0] < 0.0, "log(0.0) should be negative infinity");
+    }
+
+    #[test]
+    fn test_log_negative_returns_nan() {
+        let t = Tensor2D::<CpuBackend>::new(vec![-1.0f32, -0.001, -100.0], 1, 3);
+        let result = t.log();
+        let values = result.ravel().to_vec();
+
+        assert!(
+            values[0].is_nan(),
+            "log(-1.0) should return NaN, got {}",
+            values[0]
+        );
+        assert!(values[1].is_nan(), "log(-0.001) should return NaN");
+        assert!(values[2].is_nan(), "log(-100.0) should return NaN");
+    }
+
+    #[test]
+    fn test_log_positive_values() {
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, std::f32::consts::E, 10.0], 1, 3);
+        let result = t.log();
+        let values = result.ravel().to_vec();
+
+        assert!((values[0] - 0.0).abs() < 1e-12, "log(1.0) = 0.0");
+        assert!((values[1] - 1.0).abs() < 1e-6, "log(e) = 1.0");
+        assert!((values[2] - 2.302585).abs() < 1e-6, "log(10.0) ≈ 2.302585");
+    }
+
+    #[test]
+    fn test_log_valid_inputs() {
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, std::f32::consts::E, 10.0], 1, 3);
+        let result = t.log();
+        let values = result.ravel().to_vec();
+
+        assert!((values[0] - 0.0).abs() < 1e-12, "log(1.0) = 0.0");
+        assert!((values[1] - 1.0).abs() < 1e-6, "log(e) = 1.0");
+        assert!((values[2] - 2.302585).abs() < 1e-6, "log(10.0) ≈ 2.302585");
+    }
+
+    #[test]
+    fn test_log_small_positive_values() {
+        // Critical for numerical stability in ML (e.g., log-probabilities)
+        let t = Tensor2D::<CpuBackend>::new(vec![1e-20f32, 1e-10, 1e-5], 1, 3);
+        let result = t.log();
+        let values = result.ravel().to_vec();
+
+        // Should not panic or return NaN for tiny positive values
+        assert!(!values[0].is_nan(), "log(1e-20) should not be NaN");
+        assert!(!values[1].is_nan(), "log(1e-10) should not be NaN");
+        assert!(!values[2].is_nan(), "log(1e-5) should not be NaN");
+
+        // Verify approximate values
+        assert!((values[0] + 46.0517).abs() < 0.1, "log(1e-20) ≈ -46.05");
+    }
+
+    #[test]
+    fn test_sigmoid_numerical_stability() {
+        let t = Tensor2D::<CpuBackend>::new(vec![-1000.0f32, 0.0, 1000.0], 1, 3);
+        let sig = t.sigmoid();
+
+        let values = sig.ravel().to_vec();
+        assert!(values[0] < 1e-15); // ≈0.0 for large negative
+        assert!((values[1] - 0.5).abs() < 1e-12); // Exactly 0.5 at zero
+        assert!(values[2] > 1.0 - 1e-15); // ≈1.0 for large positive
+    }
+
+    #[test]
+    fn test_ravel_row_major_order() {
+        // 3x2 matrix: [[1,2],
+        //              [3,4],
+        //              [5,6]]
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
+        let flat = t.ravel();
+
+        // Row-major flattening: [1,2,3,4,5,6]
+        assert_eq!(flat.to_vec(), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn test_empty_tensor_constructors() {
+        // Valid empty tensors (0 rows or 0 cols)
+        let t1 = Tensor2D::<CpuBackend>::zeros(0, 5);
+        assert_eq!(t1.shape(), (0, 5));
+
+        let t2 = Tensor2D::<CpuBackend>::zeros(5, 0);
+        assert_eq!(t2.shape(), (5, 0));
+
+        let t3 = Tensor2D::<CpuBackend>::zeros(0, 0);
+        assert_eq!(t3.shape(), (0, 0));
+    }
+
+    #[test]
+    #[should_panic(expected = "empty")]
+    fn test_mean_empty_tensor_panics() {
+        let t = Tensor2D::<CpuBackend>::zeros(0, 0);
+        let _ = t.mean(); // Should panic on empty tensor
+    }
+
+    #[test]
+    fn test_clone_semantics() {
+        let original = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let mut clone = original.clone();
+
+        // Modify clone via backend operations (simulated by creating new tensor)
+        let modified = clone.sub(&Tensor2D::<CpuBackend>::zeros(2, 2));
+
+        // Original should remain unchanged
+        assert_eq!(original.ravel().to_vec(), vec![1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(modified.ravel().to_vec(), vec![1.0, 2.0, 3.0, 4.0]); // Still same values
+    }
+
+    #[test]
+    fn test_dot_and_tdot_consistency() {
+        // Verify that dot and tdot produce transposed results
+        let a = Tensor2D::<CpuBackend>::new(
+            vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0], // 2x3 matrix
+            2,
+            3,
+        );
+        let x = Tensor1D::<CpuBackend>::new(vec![1.0f32, 0.0, 0.0]); // Length 3
+
+        // A @ x = [1*1 + 2*0 + 3*0, 4*1 + 5*0 + 6*0] = [1, 4]
+        let y = a.dot(&x);
+        assert_eq!(y.to_vec(), vec![1.0, 4.0]);
+
+        // Aᵀ @ y should reconstruct x scaled by row norms (not exact inverse, but dimensionally correct)
+        let x_recon = a.tdot(&y);
+        assert_eq!(x_recon.len(), 3); // Should be length 3 (columns of original)
     }
 }

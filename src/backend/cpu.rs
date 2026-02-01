@@ -280,10 +280,22 @@ impl Backend for CpuBackend {
     /// Element-wise subtraction of two 2D tensors.
     ///
     /// # Panics
-    /// Panics if tensors have different shapes.
+    /// Panics if tensors have different shapes (rows or columns mismatch).
+    ///
+    /// # Why panic instead of silent truncation?
+    /// Silent truncation via `.zip()` would produce mathematically invalid results
+    /// (e.g., subtracting a 3×2 matrix from 2×3) without any indication of error.
+    /// This violates the principle of least surprise and makes debugging extremely hard.
     fn sub_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
+        if a.1 != b.1 || a.2 != b.2 {
+            panic!(
+                "sub_2d: shape mismatch — cannot subtract ({}, {}) from ({}, {}). \
+             Shapes must be identical for element-wise operations.",
+                a.1, a.2, b.1, b.2
+            );
+        }
         CpuTensor2D::new(
-            a.0.iter().zip(b.0.iter()).map(|(a, b)| a - b).collect(),
+            a.0.iter().zip(b.0.iter()).map(|(x, y)| x - y).collect(),
             a.1,
             a.2,
         )
@@ -330,15 +342,32 @@ impl Backend for CpuBackend {
 
     /// Computes the arithmetic mean of all elements in a 2D tensor.
     ///
-    /// # Returns
-    /// * Mean value as `f64`
-    /// * Returns `0.0` for empty tensors (by convention)
+    /// # Panics
+    /// Panics if the tensor is empty (0 elements). This follows the "fail fast" principle
+    /// common in numerical libraries — an empty tensor almost always indicates a bug in
+    /// data preprocessing or batch construction rather than a legitimate edge case.
+    ///
+    /// # Why panic instead of returning 0.0 or NaN?
+    /// - `0.0` is mathematically incorrect and masks critical bugs (e.g., empty batches)
+    /// - `NaN` propagates silently through computations, making root cause analysis harder
+    /// - Immediate panic forces developers to fix data pipeline issues early
+    ///
+    /// # Example of legitimate use
+    /// ```should_panic
+    /// # use machinelearne_rs::backend::{Tensor2D, CpuBackend};
+    /// let empty = Tensor2D::<CpuBackend>::zeros(0, 5);
+    /// let m = empty.mean(); // PANIC: empty tensor detected
+    /// ```
     fn mean_all_2d(t: &Self::Tensor2D) -> Self::Scalar {
         if t.0.is_empty() {
-            0.0
-        } else {
-            t.0.iter().sum::<f64>() / t.0.len() as f64
+            panic!(
+                "mean_all_2d: cannot compute mean of empty tensor (shape: {:?}). \
+             This likely indicates a bug in data loading or batch construction. \
+             Check: batch size = 0, empty dataset partition, or incorrect slicing.",
+                t.0.len()
+            );
         }
+        t.0.iter().sum::<f64>() / t.0.len() as f64
     }
 
     /// Computes the sum of all elements in a 2D tensor.
@@ -423,14 +452,33 @@ impl Backend for CpuBackend {
         x.iter().map(|&v| v.exp()).collect()
     }
 
-    /// Element-wise natural logarithm (`ln(x)`).
+    /// Computes element-wise natural logarithm: `ln(x)`.
     ///
-    /// # Panics
-    /// Panics if any element is ≤ 0.0.
+    /// # Behavior for edge cases (IEEE 754 compliant)
+    /// - `x > 0.0` → finite value `ln(x)`
+    /// - `x == 0.0` → `-∞` (`f64::NEG_INFINITY`)
+    /// - `x < 0.0` → `NaN` (`f64::NAN`)
+    ///
+    /// Does **not** panic — follows standard floating-point semantics used by
+    /// NumPy, PyTorch, and TensorFlow.
+    ///
+    /// # Numerical stability in ML
+    /// For loss functions involving logarithms (e.g., cross-entropy):
+    /// - Avoid raw `log(x)` on unnormalized probabilities — use `log_softmax` instead
+    /// - Clip inputs when necessary: `log(max(x, ε))` with `ε = 1e-12` to avoid `-inf`
+    ///
+    /// # Example
+    /// ```
+    /// # use machinelearne_rs::backend::{Tensor1D, CpuBackend};
+    /// let x = Tensor1D::<CpuBackend>::new(vec![1.0f32, 0.0, -1.0]);
+    /// let y = x.log();  // Returns [0.0, -inf, NaN]
+    /// assert!((y.to_vec()[0] - 0.0).abs() < 1e-12); // ln(1) = 0
+    /// assert!(y.to_vec()[1].is_infinite() && y.to_vec()[1] < 0.0); // ln(0) = -inf
+    /// assert!(y.to_vec()[2].is_nan()); // ln(-1) = NaN
+    /// ```
     fn log_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
         x.iter().map(|&v| v.ln()).collect()
     }
-
     /// Element-wise sigmoid function with numerical stability.
     ///
     /// Computed as:
@@ -830,5 +878,17 @@ mod tests {
         let b = vec![0.0];
         let res = CpuBackend::div_1d(&a, &b);
         assert!(res[0].is_infinite()); // или assert_panics, если хочешь явный контроль
+    }
+
+    #[test]
+    fn test_ravel_2d_row_major_order() {
+        // Create a 2x3 matrix: [[1.0, 2.0, 3.0],
+        //                       [4.0, 5.0, 6.0]]
+        // Larger matrix to verify no data corruption
+        let data: Vec<f64> = (0..12).map(|i| i as f64).collect();
+        let matrix = CpuTensor2D::new(data.clone(), 3, 4);
+        let flattened = CpuBackend::ravel_2d(&matrix);
+
+        assert_eq!(flattened.to_vec(), data);
     }
 }

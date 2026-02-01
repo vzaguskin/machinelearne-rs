@@ -582,8 +582,8 @@ impl super::Backend for NdarrayBackend {
     //Returns copy of the inner 1d vector
     fn ravel_2d(x: &Self::Tensor2D) -> Self::Tensor1D {
         x.0.clone()
-            .into_shape_with_order(x.0.len())
-            .expect("Failed to ravel 2D tensor")
+            .into_dimensionality::<Ix1>()
+            .expect("Failed to ravel 2D tensor: shape conversion error")
     }
 }
 
