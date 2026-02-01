@@ -351,4 +351,7 @@ pub trait Backend: Clone + Copy + 'static {
 
     /// Returns the shape of a 2D tensor as (rows, cols).
     fn shape(t: &Self::Tensor2D) -> (usize, usize);
+
+    //Flattens 2d tensor into 1d tensor
+    fn ravel_2d(x: &Self::Tensor2D) -> Self::Tensor1D;
 }

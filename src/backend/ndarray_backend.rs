@@ -578,6 +578,13 @@ impl super::Backend for NdarrayBackend {
     fn _matvec_transposed_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D {
         Self::matvec_transposed(a, x)
     }
+
+    //Returns copy of the inner 1d vector
+    fn ravel_2d(x: &Self::Tensor2D) -> Self::Tensor1D {
+        x.0.clone()
+            .into_shape_with_order(x.0.len())
+            .expect("Failed to ravel 2D tensor")
+    }
 }
 
 #[cfg(test)]

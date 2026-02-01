@@ -607,6 +607,11 @@ impl Backend for CpuBackend {
     fn shape(t: &Self::Tensor2D) -> (usize, usize) {
         (t.1, t.2)
     }
+
+    //Returns copy of the inner 1d vector
+    fn ravel_2d(x: &Self::Tensor2D) -> Self::Tensor1D {
+        x.0.clone()
+    }
 }
 
 #[cfg(test)]
