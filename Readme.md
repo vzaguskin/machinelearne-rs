@@ -69,9 +69,9 @@ fn main() {
 ## 📦 Current Features
 
 - **Models**: `LinearRegressor`
-- **Losses**: `MSELoss`
+- **Losses**: `MSELoss` `MAELoss`, `BCEWithLogitsLoss`
 - **Optimizers**: `SGD`
-- **Regularizers**: `NoRegularizer` (L2 planned)
+- **Regularizers**: `NoRegularizer` `L1`, `L2`
 - **Backends**: `CpuBackend` (dense `f32` tensors)
 - **Datasets**: In-memory only (`InMemoryDataset`)
 
