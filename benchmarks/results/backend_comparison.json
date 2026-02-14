@@ -1,0 +1,68 @@
+{
+  "results": [
+    {
+      "backend": "CpuBackend",
+      "mae": 0.6505098938941956,
+      "mse": 0.6942987442016602,
+      "n_features": 1,
+      "r2": 0.5235257148742676,
+      "train_time_ms": 350
+    },
+    {
+      "backend": "NdarrayBackend",
+      "mae": 0.6505098938941956,
+      "mse": 0.6942987442016602,
+      "n_features": 1,
+      "r2": 0.5235257148742676,
+      "train_time_ms": 1080
+    },
+    {
+      "backend": "CpuBackend",
+      "mae": 0.6350887417793274,
+      "mse": 0.6963497400283813,
+      "n_features": 2,
+      "r2": 0.5221182107925415,
+      "train_time_ms": 590
+    },
+    {
+      "backend": "NdarrayBackend",
+      "mae": 0.6350887417793274,
+      "mse": 0.6963497400283813,
+      "n_features": 2,
+      "r2": 0.5221182107925415,
+      "train_time_ms": 1427
+    },
+    {
+      "backend": "CpuBackend",
+      "mae": 0.6105396151542664,
+      "mse": 0.6669540405273438,
+      "n_features": 4,
+      "r2": 0.542291522026062,
+      "train_time_ms": 757
+    },
+    {
+      "backend": "NdarrayBackend",
+      "mae": 0.6105396151542664,
+      "mse": 0.6669540405273438,
+      "n_features": 4,
+      "r2": 0.542291522026062,
+      "train_time_ms": 1488
+    },
+    {
+      "backend": "CpuBackend",
+      "mae": 0.524415135383606,
+      "mse": 0.4904271066188812,
+      "n_features": 8,
+      "r2": 0.6634360551834106,
+      "train_time_ms": 1374
+    },
+    {
+      "backend": "NdarrayBackend",
+      "mae": 0.524415135383606,
+      "mse": 0.4904271066188812,
+      "n_features": 8,
+      "r2": 0.6634360551834106,
+      "train_time_ms": 1866
+    }
+  ]
+}
