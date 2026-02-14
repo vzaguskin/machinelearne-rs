@@ -80,6 +80,31 @@ class BenchmarkReport:
 
         return results
 
+    def parse_rust_metrics(self) -> Dict[int, Dict[str, Any]]:
+        """
+        Parse Rust metrics from rust_metrics.json file.
+
+        Returns a dictionary mapping feature count to metrics dict.
+        """
+        metrics_file = self.results_dir / "rust_metrics.json"
+
+        if not metrics_file.exists():
+            print(f"Warning: Rust metrics not found at {metrics_file}")
+            return {}
+
+        with open(metrics_file) as f:
+            data = json.load(f)
+
+        results = {}
+        for item in data.get("results", []):
+            n_features = item.get("n_features")
+            if n_features is not None:
+                # Only include results with valid metrics (not null/NaN)
+                if item.get("mse") is not None and item.get("mse") != "":
+                    results[n_features] = item
+
+        return results
+
     def get_rust_version(self) -> str:
         """Get Rust version."""
         try:
@@ -117,7 +142,8 @@ class BenchmarkReport:
     def generate_report(self):
         """Generate the complete benchmark report."""
         sklearn_results = self.parse_sklearn_results()
-        rust_results = self.parse_rust_criterion_results()
+        rust_metrics = self.parse_rust_metrics()
+        rust_criterion = self.parse_rust_criterion_results()
 
         with open(self.report_path, "w") as f:
             # Header
@@ -142,38 +168,45 @@ class BenchmarkReport:
             f.write("- **Split:** 80% train / 20% test\n")
             f.write("\n")
 
-            # Sklearn Results
+            # Side-by-Side Comparison
+            if sklearn_results and rust_metrics:
+                f.write("## Side-by-Side Comparison\n\n")
+                f.write("### Linear Regression (scikit-learn vs machinelearne-rs)\n\n")
+                self._write_side_by_side_comparison(f, sklearn_results, rust_metrics)
+                f.write("\n")
+
+            # Sklearn Results (full table)
             if sklearn_results:
-                f.write("## scikit-learn Results\n\n")
+                f.write("## scikit-learn Full Results\n\n")
                 self._write_sklearn_table(f, sklearn_results)
                 f.write("\n")
 
-            # Rust Results
-            if rust_results:
-                f.write("## Rust (machinelearne-rs) Results\n\n")
-                self._write_rust_table(f, rust_results)
+            # Rust Metrics Summary
+            if rust_metrics:
+                f.write("## Rust (machinelearne-rs) Metrics Summary\n\n")
+                self._write_rust_metrics_table(f, rust_metrics)
                 f.write("\n")
 
-            # Comparison
-            if sklearn_results and rust_results:
-                f.write("## Performance Comparison\n\n")
-                self._write_comparison(f, sklearn_results, rust_results)
+            # Rust Criterion Timings
+            if rust_criterion:
+                f.write("## Rust (machinelearne-rs) Criterion Benchmarks\n\n")
+                self._write_rust_table(f, rust_criterion)
                 f.write("\n")
 
             # Analysis
             f.write("## Analysis\n\n")
             f.write("### Key Findings\n\n")
-            self._write_analysis(f, sklearn_results, rust_results)
+            self._write_analysis(f, sklearn_results, rust_metrics, rust_criterion)
             f.write("\n")
 
             # Recommendations
             f.write("## Recommendations\n\n")
             f.write("### For Users\n\n")
-            self._write_recommendations(f, sklearn_results, rust_results)
+            self._write_recommendations(f, sklearn_results, rust_metrics)
             f.write("\n")
 
             f.write("### For Developers\n\n")
-            self._write_dev_recommendations(f, sklearn_results, rust_results)
+            self._write_dev_recommendations(f, sklearn_results, rust_metrics)
             f.write("\n")
 
             # Appendix
@@ -200,7 +233,84 @@ class BenchmarkReport:
 
         print(f"Report generated at: {self.report_path}")
         print(f"Total sklearn results: {len(sklearn_results)}")
-        print(f"Total rust results: {len(rust_results)}")
+        print(f"Total rust metrics: {len(rust_metrics)}")
+        print(f"Total rust criterion: {len(rust_criterion)}")
+
+    def _write_rust_metrics_table(self, f, results: Dict[int, Dict[str, Any]]):
+        """Write Rust metrics summary table."""
+        f.write("| Features | Train Time (ms) | MSE | MAE | R² |\n")
+        f.write("|----------|-----------------|-----|-----|-----|\n")
+
+        for n_features, metrics in sorted(results.items()):
+            train_time = metrics.get("train_time_ms", "N/A")
+            mse = metrics.get("mse", "N/A")
+            mae = metrics.get("mae", "N/A")
+            r2 = metrics.get("r2", "N/A")
+
+            # Format numbers if available
+            train_time_str = f"{train_time:.2f}" if train_time != "N/A" else "N/A"
+            mse_str = f"{mse:.4f}" if mse != "N/A" else "N/A"
+            mae_str = f"{mae:.4f}" if mae != "N/A" else "N/A"
+            r2_str = f"{r2:.4f}" if r2 != "N/A" else "N/A"
+
+            f.write(f"| {n_features} | {train_time_str} | {mse_str} | {mae_str} | {r2_str} |\n")
+
+    def _write_side_by_side_comparison(
+        self,
+        f,
+        sklearn_results: List[Dict[str, Any]],
+        rust_metrics: Dict[int, Dict[str, Any]],
+    ):
+        """Write side-by-side comparison table."""
+        f.write("| Implementation | Features | Train Time (ms) | Pred Time (ms) | MSE | MAE | R² |\n")
+        f.write("|--------------|----------|-----------------|----------------|-----|-----|-----|\n")
+
+        # Get sklearn LinearRegression results grouped by features
+        sklearn_by_features = {}
+        for r in sklearn_results:
+            if "LinearRegression" in r.get("model", ""):
+                n_features = int(r.get("n_features", 0))
+                if n_features not in sklearn_by_features:
+                    sklearn_by_features[n_features] = r
+
+        # Write comparisons for each feature count
+        for n_features in sorted(sklearn_by_features.keys()):
+            sklearn = sklearn_by_features[n_features]
+            rust = rust_metrics.get(n_features)
+
+            # Sklearn row
+            sklearn_train = sklearn.get("train_time_mean_ms", 0)
+            sklearn_pred = sklearn.get("pred_time_mean_ms", 0)
+            sklearn_mse = sklearn.get("mse", 0)
+            sklearn_mae = sklearn.get("mae", 0)
+            sklearn_r2 = sklearn.get("r2", 0)
+
+            f.write(
+                f"| scikit-learn | {n_features} | "
+                f"{sklearn_train:.2f} | {sklearn_pred:.2f} | "
+                f"{sklearn_mse:.4f} | {sklearn_mae:.4f} | {sklearn_r2:.4f} |\n"
+            )
+
+            # Rust row (if available)
+            if rust:
+                rust_train = rust.get("train_time_ms", 0)
+                rust_mse = rust.get("mse", 0)
+                rust_mae = rust.get("mae", 0)
+                rust_r2 = rust.get("r2", 0)
+
+                # Compute speedup
+                train_speedup = sklearn_train / rust_train if rust_train > 0 else 0
+                mse_diff = ((rust_mse - sklearn_mse) / sklearn_mse * 100) if sklearn_mse > 0 else 0
+
+                f.write(
+                    f"| machinelearne-rs | {n_features} | "
+                    f"{rust_train:.2f} ({train_speedup:.2f}x) | N/A | "
+                    f"{rust_mse:.4f} ({mse_diff:+.1f}%) | {rust_mae:.4f} | {rust_r2:.4f} |\n"
+                )
+            else:
+                f.write(f"| machinelearne-rs | {n_features} | N/A | N/A | N/A | N/A | N/A |\n")
+
+            f.write("| | | | | | |\n")  # Empty row for spacing
 
     def _write_sklearn_table(self, f, results: List[Dict[str, Any]]):
         """Write sklearn results table."""
@@ -263,9 +373,43 @@ class BenchmarkReport:
         self,
         f,
         sklearn_results: List[Dict[str, Any]],
-        rust_results: Dict[str, float],
+        rust_metrics: Dict[int, Dict[str, Any]],
+        rust_criterion: Dict[str, float],
     ):
         """Write analysis section."""
+
+        # Calculate performance gaps
+        if rust_metrics and sklearn_results:
+            f.write("### Performance Gaps\n\n")
+
+            # Get sklearn LinearRegression results
+            sklearn_lr = {}
+            for r in sklearn_results:
+                if "LinearRegression" in r.get("model", ""):
+                    n_features = int(r.get("n_features", 0))
+                    sklearn_lr[n_features] = r
+
+            for n_features in sorted(rust_metrics.keys()):
+                sklearn = sklearn_lr.get(n_features)
+                rust = rust_metrics[n_features]
+
+                if sklearn and rust:
+                    sklearn_time = sklearn.get("train_time_mean_ms", 0)
+                    rust_time = rust.get("train_time_ms", 0)
+                    sklearn_mse = sklearn.get("mse", 0)
+                    rust_mse = rust.get("mse", 0)
+
+                    speedup = sklearn_time / rust_time if rust_time > 0 else 0
+                    mse_diff_pct = ((rust_mse - sklearn_mse) / sklearn_mse * 100) if sklearn_mse > 0 else 0
+
+                    f.write(f"**{n_features} Features:**\n")
+                    f.write(f"- Training: scikit-learn {sklearn_time:.2f}ms vs Rust {rust_time:.2f}ms ")
+                    f.write(f"({speedup:.2f}x faster for sklearn)\n")
+                    f.write(f"- Accuracy (MSE): sklearn {sklearn_mse:.4f} vs Rust {rust_mse:.4f} ")
+                    f.write(f"({mse_diff_pct:+.1f}% difference)\n\n")
+
+        f.write("### Key Findings\n\n")
+
         f.write("1. **Training Performance:** ")
         f.write("Comparison of training times across different feature counts.\n\n")
 
@@ -285,7 +429,7 @@ class BenchmarkReport:
         self,
         f,
         sklearn_results: List[Dict[str, Any]],
-        rust_results: Dict[str, float],
+        rust_metrics: Dict[int, Dict[str, Any]],
     ):
         """Write user recommendations."""
         f.write("- **For production use:** ")
@@ -301,7 +445,7 @@ class BenchmarkReport:
         self,
         f,
         sklearn_results: List[Dict[str, Any]],
-        rust_results: Dict[str, float],
+        rust_metrics: Dict[int, Dict[str, Any]],
     ):
         """Write developer recommendations."""
         f.write("1. **Optimization Opportunities:**\n")

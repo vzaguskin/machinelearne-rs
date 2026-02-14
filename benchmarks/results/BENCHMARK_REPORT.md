@@ -1,6 +1,6 @@
 # Benchmark Comparison: machinelearne-rs vs scikit-learn
 
-**Generated:** 2026-02-14 23:53:06
+**Generated:** 2026-02-15 00:48:18
 
 ## Environment
 
@@ -19,7 +19,26 @@
 - **Target:** Median House Value (in $100,000s)
 - **Split:** 80% train / 20% test
 
-## scikit-learn Results
+## Side-by-Side Comparison
+
+### Linear Regression (scikit-learn vs machinelearne-rs)
+
+| Implementation | Features | Train Time (ms) | Pred Time (ms) | MSE | MAE | R² |
+|--------------|----------|-----------------|----------------|-----|-----|-----|
+| scikit-learn | 1 | 0.85 | 0.08 | 0.7091 | 0.6299 | 0.4589 |
+| machinelearne-rs | 1 | 331.00 (0.00x) | N/A | 0.9110 (+28.5%) | 0.7286 | 0.3748 |
+| | | | | | |
+| scikit-learn | 2 | 0.61 | 0.06 | 0.6630 | 0.6060 | 0.4941 |
+| machinelearne-rs | 2 | 415.00 (0.00x) | N/A | 1.1379 (+71.6%) | 0.8053 | 0.2191 |
+| | | | | | |
+| scikit-learn | 4 | 0.72 | 0.07 | 0.6436 | 0.5804 | 0.5089 |
+| machinelearne-rs | 4 | 662.00 (0.00x) | N/A | 1.8282 (+184.1%) | 1.0489 | -0.2546 |
+| | | | | | |
+| scikit-learn | 8 | 2.08 | 0.08 | 0.5559 | 0.5332 | 0.5758 |
+| machinelearne-rs | 8 | N/A | N/A | N/A | N/A | N/A |
+| | | | | | |
+
+## scikit-learn Full Results
 
 | Model | Features | Train Time (ms) | Pred Time (ms) | MSE | MAE | R² |
 |-------|----------|-----------------|----------------|-----|-----|-----|
@@ -44,7 +63,15 @@
 | SGDRegressor lr adaptive features 0 1 2 3 4 5 6 7 | 8.0 | 34.39 ± 4.36 | 0.09 ± 0.05 | 6971646923003376.0000 | 55462164.8197 | -5320206926819254.0000 |
 | RANSACRegressor features 0 1 | 2.0 | 11.92 ± 1.58 | 0.12 ± 0.02 | 0.7590 | 0.6057 | 0.4208 |
 
-## Rust (machinelearne-rs) Results
+## Rust (machinelearne-rs) Metrics Summary
+
+| Features | Train Time (ms) | MSE | MAE | R² |
+|----------|-----------------|-----|-----|-----|
+| 1 | 331.00 | 0.9110 | 0.7286 | 0.3748 |
+| 2 | 415.00 | 1.1379 | 0.8053 | 0.2191 |
+| 4 | 662.00 | 1.8282 | 1.0489 | -0.2546 |
+
+## Rust (machinelearne-rs) Criterion Benchmarks
 
 | Benchmark | Mean Time (ms) |
 |-----------|----------------|
@@ -58,18 +85,23 @@
 | train_4_features_with_metrics | 37.4616 |
 | train_8_features_with_metrics | 62.4508 |
 
-## Performance Comparison
-
-### Training Time Comparison
-
-| Features | Sklearn (ms) | Rust (ms) | Speedup |
-|----------|-------------|-----------|---------|
-| 1.0 | 0.85 | 24.00 | 0.04x |
-| 2.0 | 0.61 | 28.04 | 0.02x |
-| 4.0 | 0.72 | 37.46 | 0.02x |
-| 8.0 | 2.08 | 62.45 | 0.03x |
-
 ## Analysis
+
+### Key Findings
+
+### Performance Gaps
+
+**1 Features:**
+- Training: scikit-learn 0.85ms vs Rust 331.00ms (0.00x faster for sklearn)
+- Accuracy (MSE): sklearn 0.7091 vs Rust 0.9110 (+28.5% difference)
+
+**2 Features:**
+- Training: scikit-learn 0.61ms vs Rust 415.00ms (0.00x faster for sklearn)
+- Accuracy (MSE): sklearn 0.6630 vs Rust 1.1379 (+71.6% difference)
+
+**4 Features:**
+- Training: scikit-learn 0.72ms vs Rust 662.00ms (0.00x faster for sklearn)
+- Accuracy (MSE): sklearn 0.6436 vs Rust 1.8282 (+184.1% difference)
 
 ### Key Findings
 
