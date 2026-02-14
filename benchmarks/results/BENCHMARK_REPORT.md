@@ -1,6 +1,6 @@
 # Benchmark Comparison: machinelearne-rs vs scikit-learn
 
-**Generated:** 2026-02-15 00:48:18
+**Generated:** 2026-02-15 01:46:54
 
 ## Environment
 
@@ -26,16 +26,16 @@
 | Implementation | Features | Train Time (ms) | Pred Time (ms) | MSE | MAE | R² |
 |--------------|----------|-----------------|----------------|-----|-----|-----|
 | scikit-learn | 1 | 0.85 | 0.08 | 0.7091 | 0.6299 | 0.4589 |
-| machinelearne-rs | 1 | 331.00 (0.00x) | N/A | 0.9110 (+28.5%) | 0.7286 | 0.3748 |
+| machinelearne-rs | 1 | 341.00 (0.00x) | N/A | 0.6943 (-2.1%) | 0.6505 | 0.5235 |
 | | | | | | |
 | scikit-learn | 2 | 0.61 | 0.06 | 0.6630 | 0.6060 | 0.4941 |
-| machinelearne-rs | 2 | 415.00 (0.00x) | N/A | 1.1379 (+71.6%) | 0.8053 | 0.2191 |
+| machinelearne-rs | 2 | 436.00 (0.00x) | N/A | 0.6963 (+5.0%) | 0.6351 | 0.5221 |
 | | | | | | |
 | scikit-learn | 4 | 0.72 | 0.07 | 0.6436 | 0.5804 | 0.5089 |
-| machinelearne-rs | 4 | 662.00 (0.00x) | N/A | 1.8282 (+184.1%) | 1.0489 | -0.2546 |
+| machinelearne-rs | 4 | 698.00 (0.00x) | N/A | 0.6670 (+3.6%) | 0.6105 | 0.5423 |
 | | | | | | |
 | scikit-learn | 8 | 2.08 | 0.08 | 0.5559 | 0.5332 | 0.5758 |
-| machinelearne-rs | 8 | N/A | N/A | N/A | N/A | N/A |
+| machinelearne-rs | 8 | 1264.00 (0.00x) | N/A | 0.4904 (-11.8%) | 0.5244 | 0.6634 |
 | | | | | | |
 
 ## scikit-learn Full Results
@@ -67,9 +67,10 @@
 
 | Features | Train Time (ms) | MSE | MAE | R² |
 |----------|-----------------|-----|-----|-----|
-| 1 | 331.00 | 0.9110 | 0.7286 | 0.3748 |
-| 2 | 415.00 | 1.1379 | 0.8053 | 0.2191 |
-| 4 | 662.00 | 1.8282 | 1.0489 | -0.2546 |
+| 1 | 341.00 | 0.6943 | 0.6505 | 0.5235 |
+| 2 | 436.00 | 0.6963 | 0.6351 | 0.5221 |
+| 4 | 698.00 | 0.6670 | 0.6105 | 0.5423 |
+| 8 | 1264.00 | 0.4904 | 0.5244 | 0.6634 |
 
 ## Rust (machinelearne-rs) Criterion Benchmarks
 
@@ -92,16 +93,20 @@
 ### Performance Gaps
 
 **1 Features:**
-- Training: scikit-learn 0.85ms vs Rust 331.00ms (0.00x faster for sklearn)
-- Accuracy (MSE): sklearn 0.7091 vs Rust 0.9110 (+28.5% difference)
+- Training: scikit-learn 0.85ms vs Rust 341.00ms (0.00x faster for sklearn)
+- Accuracy (MSE): sklearn 0.7091 vs Rust 0.6943 (-2.1% difference)
 
 **2 Features:**
-- Training: scikit-learn 0.61ms vs Rust 415.00ms (0.00x faster for sklearn)
-- Accuracy (MSE): sklearn 0.6630 vs Rust 1.1379 (+71.6% difference)
+- Training: scikit-learn 0.61ms vs Rust 436.00ms (0.00x faster for sklearn)
+- Accuracy (MSE): sklearn 0.6630 vs Rust 0.6963 (+5.0% difference)
 
 **4 Features:**
-- Training: scikit-learn 0.72ms vs Rust 662.00ms (0.00x faster for sklearn)
-- Accuracy (MSE): sklearn 0.6436 vs Rust 1.8282 (+184.1% difference)
+- Training: scikit-learn 0.72ms vs Rust 698.00ms (0.00x faster for sklearn)
+- Accuracy (MSE): sklearn 0.6436 vs Rust 0.6670 (+3.6% difference)
+
+**8 Features:**
+- Training: scikit-learn 2.08ms vs Rust 1264.00ms (0.00x faster for sklearn)
+- Accuracy (MSE): sklearn 0.5559 vs Rust 0.4904 (-11.8% difference)
 
 ### Key Findings
 
