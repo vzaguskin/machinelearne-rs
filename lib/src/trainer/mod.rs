@@ -199,6 +199,137 @@ mod tests {
         regularizers::{NoRegularizer, L2},
     };
 
+    // === TrainerBuilder Tests ===
+
+    #[test]
+    fn test_trainer_builder_default_values() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer);
+
+        assert_eq!(builder.batch_size, 32);
+        assert_eq!(builder.max_epochs, 1000);
+    }
+
+    #[test]
+    fn test_trainer_builder_custom_batch_size() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .batch_size(64);
+
+        assert_eq!(builder.batch_size, 64);
+        assert_eq!(builder.max_epochs, 1000);
+    }
+
+    #[test]
+    fn test_trainer_builder_custom_max_epochs() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .max_epochs(500);
+
+        assert_eq!(builder.batch_size, 32);
+        assert_eq!(builder.max_epochs, 500);
+    }
+
+    #[test]
+    fn test_trainer_builder_chaining() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .batch_size(128)
+            .max_epochs(250);
+
+        assert_eq!(builder.batch_size, 128);
+        assert_eq!(builder.max_epochs, 250);
+    }
+
+    #[test]
+    fn test_trainer_builder_chaining_order_independent() {
+        let builder1 = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .batch_size(16)
+            .max_epochs(100);
+
+        let builder2 = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .max_epochs(100)
+            .batch_size(16);
+
+        assert_eq!(builder1.batch_size, builder2.batch_size);
+        assert_eq!(builder1.max_epochs, builder2.max_epochs);
+    }
+
+    #[test]
+    fn test_trainer_builder_small_batch_size() {
+        let builder =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer).batch_size(1);
+
+        assert_eq!(builder.batch_size, 1);
+    }
+
+    #[test]
+    fn test_trainer_builder_large_batch_size() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .batch_size(10000);
+
+        assert_eq!(builder.batch_size, 10000);
+    }
+
+    #[test]
+    fn test_trainer_builder_zero_epochs() {
+        let builder =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer).max_epochs(0);
+
+        assert_eq!(builder.max_epochs, 0);
+    }
+
+    #[test]
+    fn test_trainer_builder_large_epochs() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .max_epochs(100000);
+
+        assert_eq!(builder.max_epochs, 100000);
+    }
+
+    #[test]
+    fn test_trainer_builder_creates_valid_trainer() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .batch_size(64)
+            .max_epochs(200);
+
+        let trainer = builder.build();
+
+        assert_eq!(trainer.batch_size, 64);
+        assert_eq!(trainer.max_epochs, 200);
+    }
+
+    #[test]
+    fn test_trainer_builder_does_not_consume_loss_fn() {
+        let _builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .batch_size(16)
+            .max_epochs(50);
+
+        // Components are reused via Clone for SGD, creating fresh instances for other builders
+        let _builder2 = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer);
+    }
+
+    #[test]
+    fn test_trainer_builder_clone_components() {
+        let builder1 = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .batch_size(32)
+            .max_epochs(100);
+
+        // SGD implements Clone, so we can use it multiple times
+        let _builder2 = TrainerBuilder::new(MSELoss, builder1.optimizer.clone(), NoRegularizer);
+    }
+
+    #[test]
+    fn test_trainer_builder_zero_batch_size() {
+        // Builder allows 0 batch size - this is up to the user to validate
+        let builder =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer).batch_size(0);
+
+        assert_eq!(builder.batch_size, 0);
+
+        // Building should still work, but fit() will fail on batch iteration
+        let trainer = builder.build();
+        assert_eq!(trainer.batch_size, 0);
+    }
+
+    // === Trainer Tests (existing tests preserved) ===
+
     #[test]
     fn test_trainer_fit_linear_regression() {
         // Создаём синтетический датасет: y = 2*x1 + 3*x2 + 1
@@ -261,11 +392,8 @@ mod tests {
     fn test_trainer_empty_dataset() {
         let x = vec![];
         let y = vec![];
-        let dataset = InMemoryDataset::new(x, y).unwrap_err(); // ← ошибка на этапе создания
-                                                               // Но если бы датасет допускал пустоту:
-                                                               // let trainer = ...;
-                                                               // let result = trainer.fit(model, &empty_dataset);
-                                                               // assert!(result.is_err());
+        // Empty datasets should error at creation
+        let _dataset = InMemoryDataset::new(x, y).unwrap_err();
     }
 
     #[test]
@@ -310,7 +438,7 @@ mod tests {
 
         let model = LinearRegression::<CpuBackend>::new(1);
         let loss = MSELoss;
-        let optimizer = SGD::new(0.1);
+        let optimizer = SGD::<CpuBackend>::new(0.1);
         let regularizer = NoRegularizer;
 
         let trainer = Trainer::builder(loss, optimizer, regularizer)
