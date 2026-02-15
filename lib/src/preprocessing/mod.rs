@@ -71,6 +71,7 @@ pub mod error;
 pub mod feature_engineering;
 pub mod imputation;
 pub mod pipeline;
+pub mod pipeline_v2; // Experimental trait-object pipeline
 pub mod predictive_pipeline;
 pub mod scaling;
 pub mod traits;
