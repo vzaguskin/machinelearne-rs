@@ -354,4 +354,85 @@ pub trait Backend: Clone + Copy + 'static {
 
     //Flattens 2d tensor into 1d tensor
     fn ravel_2d(x: &Self::Tensor2D) -> Self::Tensor1D;
+
+    // --- Column-wise operations (for preprocessing) ---
+
+    /// Computes the mean of each column in a 2D tensor.
+    ///
+    /// Returns a 1D tensor of length `cols` where each element is the mean
+    /// of the corresponding column.
+    ///
+    /// For a tensor with shape (rows, cols), computes mean along axis 0.
+    fn col_mean_2d(t: &Self::Tensor2D) -> Self::Tensor1D;
+
+    /// Computes the standard deviation of each column in a 2D tensor.
+    ///
+    /// # Arguments
+    /// * `t` - Input 2D tensor
+    /// * `ddof` - Delta degrees of freedom (1 for sample std, 0 for population std)
+    ///
+    /// Returns a 1D tensor of length `cols`.
+    fn col_std_2d(t: &Self::Tensor2D, ddof: usize) -> Self::Tensor1D;
+
+    /// Computes the minimum value of each column in a 2D tensor.
+    ///
+    /// Returns a 1D tensor of length `cols`.
+    fn col_min_2d(t: &Self::Tensor2D) -> Self::Tensor1D;
+
+    /// Computes the maximum value of each column in a 2D tensor.
+    ///
+    /// Returns a 1D tensor of length `cols`.
+    fn col_max_2d(t: &Self::Tensor2D) -> Self::Tensor1D;
+
+    /// Computes the sum of each column in a 2D tensor.
+    ///
+    /// Returns a 1D tensor of length `cols`.
+    fn col_sum_2d(t: &Self::Tensor2D) -> Self::Tensor1D;
+
+    // --- Row-wise operations ---
+
+    /// Computes the sum of each row in a 2D tensor.
+    ///
+    /// Returns a 1D tensor of length `rows`.
+    fn row_sum_2d(t: &Self::Tensor2D) -> Self::Tensor1D;
+
+    // --- Broadcasting operations ---
+
+    /// Broadcasts a 1D tensor and subtracts from each row of a 2D tensor.
+    ///
+    /// For a 2D tensor with shape (rows, cols) and a 1D tensor with shape (cols,),
+    /// subtracts the 1D tensor from each row of the 2D tensor.
+    ///
+    /// Result[i, j] = t[i, j] - v[j]
+    fn broadcast_sub_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D;
+
+    /// Broadcasts a 1D tensor and divides each row of a 2D tensor.
+    ///
+    /// For a 2D tensor with shape (rows, cols) and a 1D tensor with shape (cols,),
+    /// divides each row of the 2D tensor by the 1D tensor element-wise.
+    ///
+    /// Result[i, j] = t[i, j] / v[j]
+    fn broadcast_div_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D;
+
+    /// Broadcasts a 1D tensor and multiplies each row of a 2D tensor.
+    ///
+    /// For a 2D tensor with shape (rows, cols) and a 1D tensor with shape (cols,),
+    /// multiplies each row of the 2D tensor by the 1D tensor element-wise.
+    ///
+    /// Result[i, j] = t[i, j] * v[j]
+    fn broadcast_mul_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D;
+
+    /// Broadcasts a 1D tensor and adds to each row of a 2D tensor.
+    ///
+    /// For a 2D tensor with shape (rows, cols) and a 1D tensor with shape (cols,),
+    /// adds the 1D tensor to each row of the 2D tensor.
+    ///
+    /// Result[i, j] = t[i, j] + v[j]
+    fn broadcast_add_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D;
+
+    /// Sqrt of all elements in a 1D tensor.
+    fn sqrt_1d(t: &Self::Tensor1D) -> Self::Tensor1D;
+
+    /// Sqrt of all elements in a 2D tensor.
+    fn sqrt_2d(t: &Self::Tensor2D) -> Self::Tensor2D;
 }

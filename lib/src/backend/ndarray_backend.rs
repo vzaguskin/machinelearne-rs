@@ -585,6 +585,107 @@ impl super::Backend for NdarrayBackend {
             .into_dimensionality::<Ix1>()
             .expect("Failed to ravel 2D tensor: shape conversion error")
     }
+
+    // --- Column-wise operations ---
+
+    fn col_mean_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        t.0.mean_axis(ndarray::Axis(0))
+            .unwrap_or_else(|| Array1::zeros(0))
+    }
+
+    fn col_std_2d(t: &Self::Tensor2D, ddof: usize) -> Self::Tensor1D {
+        let ncols = t.0.ncols();
+        if ncols == 0 {
+            return Array1::zeros(0);
+        }
+
+        let means = Self::col_mean_2d(t);
+        let nrows = t.0.nrows();
+
+        let mut stds = Array1::zeros(ncols);
+        for col in 0..ncols {
+            let mut var_sum = 0.0;
+            for row in 0..nrows {
+                let diff = t.0[[row, col]] - means[col];
+                var_sum += diff * diff;
+            }
+            let divisor = (nrows - ddof) as f64;
+            stds[col] = (var_sum / divisor).sqrt();
+        }
+        stds
+    }
+
+    fn col_min_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        let ncols = t.0.ncols();
+        if ncols == 0 {
+            return Array1::zeros(0);
+        }
+
+        let mut mins = Array1::from_elem(ncols, f64::INFINITY);
+        for col in 0..ncols {
+            for row in 0..t.0.nrows() {
+                let val = t.0[[row, col]];
+                if val < mins[col] {
+                    mins[col] = val;
+                }
+            }
+        }
+        mins
+    }
+
+    fn col_max_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        let ncols = t.0.ncols();
+        if ncols == 0 {
+            return Array1::zeros(0);
+        }
+
+        let mut maxs = Array1::from_elem(ncols, f64::NEG_INFINITY);
+        for col in 0..ncols {
+            for row in 0..t.0.nrows() {
+                let val = t.0[[row, col]];
+                if val > maxs[col] {
+                    maxs[col] = val;
+                }
+            }
+        }
+        maxs
+    }
+
+    fn col_sum_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        t.0.sum_axis(ndarray::Axis(0))
+    }
+
+    // --- Row-wise operations ---
+
+    fn row_sum_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        t.0.sum_axis(ndarray::Axis(1))
+    }
+
+    // --- Broadcasting operations ---
+
+    fn broadcast_sub_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
+        NdarrayTensor2D(&t.0 - &v.view().insert_axis(ndarray::Axis(0)))
+    }
+
+    fn broadcast_div_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
+        NdarrayTensor2D(&t.0 / &v.view().insert_axis(ndarray::Axis(0)))
+    }
+
+    fn broadcast_mul_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
+        NdarrayTensor2D(&t.0 * &v.view().insert_axis(ndarray::Axis(0)))
+    }
+
+    fn broadcast_add_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
+        NdarrayTensor2D(&t.0 + &v.view().insert_axis(ndarray::Axis(0)))
+    }
+
+    fn sqrt_1d(t: &Self::Tensor1D) -> Self::Tensor1D {
+        t.mapv(f64::sqrt)
+    }
+
+    fn sqrt_2d(t: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(t.0.mapv(f64::sqrt))
+    }
 }
 
 #[cfg(test)]

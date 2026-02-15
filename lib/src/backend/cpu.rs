@@ -660,6 +660,181 @@ impl Backend for CpuBackend {
     fn ravel_2d(x: &Self::Tensor2D) -> Self::Tensor1D {
         x.0.clone()
     }
+
+    // --- Column-wise operations ---
+
+    fn col_mean_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        let (_, cols) = Self::shape(t);
+        if cols == 0 || t.0.is_empty() {
+            return Vec::new();
+        }
+        let rows = t.1;
+
+        let mut means = vec![0.0; cols];
+        for (col, mean) in means.iter_mut().enumerate() {
+            let mut sum = 0.0;
+            for row in 0..rows {
+                sum += t.0[row * cols + col];
+            }
+            *mean = sum / rows as f64;
+        }
+        means
+    }
+
+    fn col_std_2d(t: &Self::Tensor2D, ddof: usize) -> Self::Tensor1D {
+        let (_, cols) = Self::shape(t);
+        if cols == 0 || t.0.is_empty() {
+            return Vec::new();
+        }
+        let rows = t.1;
+
+        let means = Self::col_mean_2d(t);
+        let mut stds = vec![0.0; cols];
+
+        for col in 0..cols {
+            let mut var_sum = 0.0;
+            for row in 0..rows {
+                let diff = t.0[row * cols + col] - means[col];
+                var_sum += diff * diff;
+            }
+            let divisor = (rows - ddof) as f64;
+            stds[col] = (var_sum / divisor).sqrt();
+        }
+        stds
+    }
+
+    fn col_min_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        let (_, cols) = Self::shape(t);
+        if cols == 0 || t.0.is_empty() {
+            return Vec::new();
+        }
+        let rows = t.1;
+
+        let mut mins = vec![f64::INFINITY; cols];
+        for (col, min) in mins.iter_mut().enumerate() {
+            for row in 0..rows {
+                let val = t.0[row * cols + col];
+                if val < *min {
+                    *min = val;
+                }
+            }
+        }
+        mins
+    }
+
+    fn col_max_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        let (_, cols) = Self::shape(t);
+        if cols == 0 || t.0.is_empty() {
+            return Vec::new();
+        }
+        let rows = t.1;
+
+        let mut maxs = vec![f64::NEG_INFINITY; cols];
+        for (col, max) in maxs.iter_mut().enumerate() {
+            for row in 0..rows {
+                let val = t.0[row * cols + col];
+                if val > *max {
+                    *max = val;
+                }
+            }
+        }
+        maxs
+    }
+
+    fn col_sum_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        let (_, cols) = Self::shape(t);
+        if cols == 0 || t.0.is_empty() {
+            return Vec::new();
+        }
+        let rows = t.1;
+
+        let mut sums = vec![0.0; cols];
+        for (col, sum) in sums.iter_mut().enumerate() {
+            for row in 0..rows {
+                *sum += t.0[row * cols + col];
+            }
+        }
+        sums
+    }
+
+    // --- Row-wise operations ---
+
+    fn row_sum_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        let (rows, cols) = Self::shape(t);
+        if rows == 0 || cols == 0 {
+            return Vec::new();
+        }
+
+        let mut sums = vec![0.0; rows];
+        for (row, sum) in sums.iter_mut().enumerate() {
+            for col in 0..cols {
+                *sum += t.0[row * cols + col];
+            }
+        }
+        sums
+    }
+
+    // --- Broadcasting operations ---
+
+    fn broadcast_sub_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
+        let (rows, cols) = Self::shape(t);
+        assert_eq!(v.len(), cols, "Vector length must match number of columns");
+
+        let mut result = Vec::with_capacity(rows * cols);
+        for row in 0..rows {
+            for (col, &val) in v.iter().enumerate() {
+                result.push(t.0[row * cols + col] - val);
+            }
+        }
+        CpuTensor2D::new(result, rows, cols)
+    }
+
+    fn broadcast_div_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
+        let (rows, cols) = Self::shape(t);
+        assert_eq!(v.len(), cols, "Vector length must match number of columns");
+
+        let mut result = Vec::with_capacity(rows * cols);
+        for row in 0..rows {
+            for (col, &val) in v.iter().enumerate() {
+                result.push(t.0[row * cols + col] / val);
+            }
+        }
+        CpuTensor2D::new(result, rows, cols)
+    }
+
+    fn broadcast_mul_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
+        let (rows, cols) = Self::shape(t);
+        assert_eq!(v.len(), cols, "Vector length must match number of columns");
+
+        let mut result = Vec::with_capacity(rows * cols);
+        for row in 0..rows {
+            for (col, &val) in v.iter().enumerate() {
+                result.push(t.0[row * cols + col] * val);
+            }
+        }
+        CpuTensor2D::new(result, rows, cols)
+    }
+
+    fn broadcast_add_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
+        let (rows, cols) = Self::shape(t);
+        assert_eq!(v.len(), cols, "Vector length must match number of columns");
+
+        let mut result = Vec::with_capacity(rows * cols);
+        for row in 0..rows {
+            for (col, &val) in v.iter().enumerate() {
+                result.push(t.0[row * cols + col] + val);
+            }
+        }
+        CpuTensor2D::new(result, rows, cols)
+    }
+
+    fn sqrt_1d(t: &Self::Tensor1D) -> Self::Tensor1D {
+        t.iter().map(|x| x.sqrt()).collect()
+    }
+
+    fn sqrt_2d(t: &Self::Tensor2D) -> Self::Tensor2D {
+        CpuTensor2D::new(t.0.iter().map(|x| x.sqrt()).collect(), t.1, t.2)
+    }
 }
 
 #[cfg(test)]
