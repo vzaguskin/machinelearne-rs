@@ -27,6 +27,7 @@ where
 {
     pub(crate) batch_size: usize,
     pub(crate) max_epochs: usize,
+    pub(crate) verbose: bool,
     pub(crate) loss_fn: L,
     pub(crate) optimizer: O,
     pub(crate) regularizer: R,
@@ -39,6 +40,7 @@ where
 /// Defaults:
 /// - `batch_size`: 32
 /// - `max_epochs`: 1000
+/// - `verbose`: true
 pub struct TrainerBuilder<B, L, O, M, P, R>
 where
     B: Backend,
@@ -49,6 +51,7 @@ where
 {
     batch_size: usize,
     max_epochs: usize,
+    verbose: bool,
     loss_fn: L,
     optimizer: O,
     regularizer: R,
@@ -74,6 +77,7 @@ where
         Self {
             batch_size: 32,
             max_epochs: 1000,
+            verbose: true,
             loss_fn,
             optimizer,
             regularizer,
@@ -92,10 +96,20 @@ where
         self
     }
 
+    /// Sets verbosity for training output.
+    ///
+    /// When `false`, suppresses epoch-by-epoch loss output.
+    /// Useful for benchmarking or production training.
+    pub fn verbose(mut self, verbose: bool) -> Self {
+        self.verbose = verbose;
+        self
+    }
+
     pub fn build(self) -> Trainer<B, L, O, M, P, R> {
         Trainer {
             batch_size: self.batch_size,
             max_epochs: self.max_epochs,
+            verbose: self.verbose,
             loss_fn: self.loss_fn,
             optimizer: self.optimizer,
             regularizer: self.regularizer,
@@ -162,7 +176,9 @@ where
             }
 
             let avg_loss = total_loss / Scalar::<B>::new(n_total as f64);
-            println!("Epoch {}: loss = {}", epoch, avg_loss.data.to_f64()); // ← Display вместо Debug
+            if self.verbose {
+                println!("Epoch {}: loss = {}", epoch, avg_loss.data.to_f64());
+            }
         }
 
         Ok(model.into_fitted())
@@ -207,6 +223,7 @@ mod tests {
 
         assert_eq!(builder.batch_size, 32);
         assert_eq!(builder.max_epochs, 1000);
+        assert_eq!(builder.verbose, true);
     }
 
     #[test]
@@ -228,13 +245,28 @@ mod tests {
     }
 
     #[test]
+    fn test_trainer_builder_verbose() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .verbose(false);
+
+        assert_eq!(builder.verbose, false);
+
+        let builder_verbose =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer).verbose(true);
+
+        assert_eq!(builder_verbose.verbose, true);
+    }
+
+    #[test]
     fn test_trainer_builder_chaining() {
         let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
             .batch_size(128)
-            .max_epochs(250);
+            .max_epochs(250)
+            .verbose(false);
 
         assert_eq!(builder.batch_size, 128);
         assert_eq!(builder.max_epochs, 250);
+        assert_eq!(builder.verbose, false);
     }
 
     #[test]
@@ -287,12 +319,14 @@ mod tests {
     fn test_trainer_builder_creates_valid_trainer() {
         let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
             .batch_size(64)
-            .max_epochs(200);
+            .max_epochs(200)
+            .verbose(false);
 
         let trainer = builder.build();
 
         assert_eq!(trainer.batch_size, 64);
         assert_eq!(trainer.max_epochs, 200);
+        assert_eq!(trainer.verbose, false);
     }
 
     #[test]
@@ -350,6 +384,7 @@ mod tests {
         let trainer = Trainer::builder(loss, optimizer, regularizer)
             .batch_size(4)
             .max_epochs(100)
+            .verbose(false) // Suppress output in tests
             .build();
 
         let fitted_model = trainer.fit(model, &dataset).unwrap();
@@ -378,6 +413,7 @@ mod tests {
         let trainer = Trainer::builder(loss, optimizer, regularizer)
             .batch_size(3)
             .max_epochs(500)
+            .verbose(false) // Suppress output in tests
             .build();
 
         let fitted_model = trainer.fit(model, &dataset).unwrap();
