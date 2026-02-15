@@ -9,18 +9,28 @@ This project was developed with the assistance of Large Language Models (LLMs), 
 - **Debugging aid**: LLMs helped interpret compiler errors (especially around lifetimes and associated types) and suggested plausible fixes—always verified manually.
 - **Documentation drafting**: Some comments and docstrings were drafted with LLM help and then edited for accuracy.
 
+## Benchmark Development (February 2026)
+
+The fair comparison benchmark suite (`benchmarks/src/bin/fair_comparison.rs`, `benchmarks/scripts/fair_comparison_sklearn.py`) was developed with significant LLM assistance:
+
+- **LLM drafted**: Initial benchmark code structure, Python scripts, report generation
+- **Human directed**: Benchmark methodology, configuration choices, learning rate adjustments (LR=0.5 for full-batch), analysis interpretation
+- **Iterative refinement**: Human identified issues (e.g., sklearn diverging at high LR, need for verbose trainer option) and LLM implemented fixes
+
+Key insight that came from human direction: adjusting learning rate from 0.01 to 0.5 for full-batch training to achieve fair convergence comparison.
+
 ## What Was *Not* Done
 
-- No file or module was auto-generated end-to-end by an LLM.
+- No file or module was auto-generated end-to-end by an LLM without human review.
 - No architectural decision (e.g., separating `Trainer`, `Loss`, and `Model`) was delegated to an LLM.
 - All performance-critical and safety-critical code (e.g., tensor operations, gradient computation) was written and validated by hand.
 
 ## Philosophy
 
-This project follows a **human-in-the-loop** approach:  
+This project follows a **human-in-the-loop** approach:
 > *"The LLM is a knowledgeable but fallible junior collaborator—useful for brainstorming and boilerplate, never for final judgment."*
 
 The goal is **correctness, clarity, and maintainability**, not automation for its own sake.
 
 ---
-*Last updated: January 2026*
+*Last updated: February 2026*

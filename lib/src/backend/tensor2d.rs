@@ -755,7 +755,7 @@ mod tests {
     #[test]
     fn test_clone_semantics() {
         let original = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
-        let mut clone = original.clone();
+        let clone = original.clone();
 
         // Modify clone via backend operations (simulated by creating new tensor)
         let modified = clone.sub(&Tensor2D::<CpuBackend>::zeros(2, 2));

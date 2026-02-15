@@ -1,0 +1,52 @@
+[package]
+name = "benchmarks"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+name = "benchmarks"
+path = "src/lib.rs"
+
+[dependencies]
+machinelearne-rs = { path = "../lib", features = ["cpu"] }
+csv = "1.3"
+rand = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[features]
+ndarray = ["machinelearne-rs/ndarray"]
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "train_1_feature"
+harness = false
+path = "benches/linear_regression/train_1_feature.rs"
+
+[[bench]]
+name = "train_2_features"
+harness = false
+path = "benches/linear_regression/train_2_features.rs"
+
+[[bench]]
+name = "train_4_features"
+harness = false
+path = "benches/linear_regression/train_4_features.rs"
+
+[[bench]]
+name = "train_8_features"
+harness = false
+path = "benches/linear_regression/train_8_features.rs"
+
+[[bench]]
+name = "predict"
+harness = false
+path = "benches/linear_regression/predict.rs"
+
+[[bench]]
+name = "metrics"
+harness = false
+path = "benches/metrics.rs"
