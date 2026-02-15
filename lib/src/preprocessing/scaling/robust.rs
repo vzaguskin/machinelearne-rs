@@ -464,4 +464,83 @@ mod tests {
             })
         ));
     }
+
+    #[test]
+    fn test_robust_scaler_empty_data() {
+        let data = Tensor2D::<CpuBackend>::zeros(0, 2);
+        let scaler = RobustScaler::<CpuBackend>::new();
+        let result = scaler.fit(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_robust_scaler_n_features_in() {
+        let data = create_test_data();
+        let scaler = RobustScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+        assert_eq!(fitted.n_features_in(), 2);
+    }
+
+    #[test]
+    fn test_robust_scaler_save_load_file() {
+        let data = create_test_data();
+        let scaler = RobustScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+
+        let temp_file = std::env::temp_dir().join("test_robust.bin");
+        fitted.save_to_file(&temp_file).unwrap();
+
+        let loaded = FittedRobustScaler::<CpuBackend>::load_from_file(&temp_file).unwrap();
+
+        assert_eq!(loaded.n_features_in(), fitted.n_features_in());
+
+        let t1 = fitted.transform(&data).unwrap();
+        let t2 = loaded.transform(&data).unwrap();
+
+        let v1 = t1.ravel().to_vec();
+        let v2 = t2.ravel().to_vec();
+        for (a, b) in v1.iter().zip(v2.iter()) {
+            assert!((a - b).abs() < 1e-6);
+        }
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_robust_scaler_fit_transform() {
+        let data = create_test_data();
+        let scaler = RobustScaler::<CpuBackend>::new();
+        let transformed = scaler.fit_transform(&data).unwrap();
+
+        // Should produce valid output
+        assert_eq!(transformed.shape(), (5, 2));
+    }
+
+    #[test]
+    fn test_robust_scaler_with_quantile_range() {
+        let data = create_test_data();
+        let scaler = RobustScaler::<CpuBackend>::new().with_quantile_range(10.0, 90.0);
+        let fitted = scaler.fit(&data).unwrap();
+
+        let transformed = fitted.transform(&data).unwrap();
+        assert_eq!(transformed.shape(), (5, 2));
+    }
+
+    #[test]
+    fn test_robust_scaler_no_centering_no_scaling() {
+        let data = create_test_data();
+        let scaler = RobustScaler::<CpuBackend>::new()
+            .with_centering(false)
+            .with_scaling(false);
+        let fitted = scaler.fit(&data).unwrap();
+
+        let transformed = fitted.transform(&data).unwrap();
+        let original = data.ravel().to_vec();
+        let result = transformed.ravel().to_vec();
+
+        // Without centering or scaling, data should be unchanged
+        for (o, r) in original.iter().zip(result.iter()) {
+            assert!((o - r).abs() < 1e-6);
+        }
+    }
 }

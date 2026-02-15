@@ -341,4 +341,105 @@ mod tests {
 
         assert_eq!(fitted.classes().len(), 3);
     }
+
+    #[test]
+    fn test_label_encoder_fit_transform() {
+        let labels = Tensor1D::<CpuBackend>::new(vec![2.0f32, 0.0, 1.0]);
+
+        let encoder = LabelEncoder::<CpuBackend>::new();
+        let encoded = encoder.fit_transform(&labels).unwrap();
+        let vals = encoded.to_vec();
+
+        assert!((vals[0] - 2.0).abs() < 1e-6);
+        assert!((vals[1] - 0.0).abs() < 1e-6);
+        assert!((vals[2] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_label_encoder_nan_error() {
+        let labels = Tensor1D::<CpuBackend>::new(vec![0.0f32, f32::NAN, 1.0]);
+
+        let encoder = LabelEncoder::<CpuBackend>::new();
+        let result = encoder.fit(&labels);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_label_encoder_infinity_error() {
+        let labels = Tensor1D::<CpuBackend>::new(vec![0.0f32, f32::INFINITY, 1.0]);
+
+        let encoder = LabelEncoder::<CpuBackend>::new();
+        let result = encoder.fit(&labels);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_label_encoder_inverse_out_of_bounds() {
+        let labels = Tensor1D::<CpuBackend>::new(vec![0.0f32, 1.0]);
+        let encoder = LabelEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&labels).unwrap();
+
+        // Index 5 is out of bounds (only 2 classes)
+        let bad_indices = Tensor1D::<CpuBackend>::new(vec![5.0f32]);
+        let result = fitted.inverse_transform(&bad_indices);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_label_encoder_empty_transform() {
+        let labels = Tensor1D::<CpuBackend>::new(vec![0.0f32, 1.0]);
+        let encoder = LabelEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&labels).unwrap();
+
+        let empty = Tensor1D::<CpuBackend>::new(vec![]);
+        let result = fitted.transform(&empty).unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_label_encoder_empty_inverse() {
+        let labels = Tensor1D::<CpuBackend>::new(vec![0.0f32, 1.0]);
+        let encoder = LabelEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&labels).unwrap();
+
+        let empty = Tensor1D::<CpuBackend>::new(vec![]);
+        let result = fitted.inverse_transform(&empty).unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_label_encoder_from_params() {
+        let params = LabelEncoderParams {
+            classes_: vec![0.0f32, 1.0, 2.0],
+            n_classes: 3,
+        };
+
+        let fitted = FittedLabelEncoder::<CpuBackend>::from_params(params).unwrap();
+        assert_eq!(fitted.n_classes(), 3);
+        assert_eq!(fitted.classes(), &[0.0f32, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_label_encoder_extract_params() {
+        let labels = Tensor1D::<CpuBackend>::new(vec![0.0f32, 2.0, 1.0]);
+        let encoder = LabelEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&labels).unwrap();
+
+        let params = fitted.extract_params();
+        assert_eq!(params.n_classes, 3);
+        assert_eq!(params.classes_, vec![0.0f32, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_label_encoder_default() {
+        let encoder = LabelEncoder::<CpuBackend>::default();
+        let labels = Tensor1D::<CpuBackend>::new(vec![0.0f32, 1.0]);
+        let result = encoder.fit(&labels);
+        assert!(result.is_ok());
+    }
 }

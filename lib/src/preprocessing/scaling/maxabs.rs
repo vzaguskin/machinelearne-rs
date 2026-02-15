@@ -318,4 +318,105 @@ mod tests {
             })
         ));
     }
+
+    #[test]
+    fn test_maxabs_scaler_empty_data() {
+        let data = Tensor2D::<CpuBackend>::zeros(0, 2);
+
+        let scaler = MaxAbsScaler::<CpuBackend>::new();
+        let result = scaler.fit(&data);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_maxabs_scaler_n_features_in() {
+        let data = create_test_data();
+        let scaler = MaxAbsScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+
+        assert_eq!(fitted.n_features_in(), 2);
+    }
+
+    #[test]
+    fn test_maxabs_scaler_save_load_file() {
+        let data = create_test_data();
+        let scaler = MaxAbsScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+
+        let temp_file = std::env::temp_dir().join("test_maxabs.bin");
+        fitted.save_to_file(&temp_file).unwrap();
+
+        let loaded = FittedMaxAbsScaler::<CpuBackend>::load_from_file(&temp_file).unwrap();
+
+        assert_eq!(loaded.n_features_in(), fitted.n_features_in());
+
+        let t1 = fitted.transform(&data).unwrap();
+        let t2 = loaded.transform(&data).unwrap();
+
+        let v1 = t1.ravel().to_vec();
+        let v2 = t2.ravel().to_vec();
+        for (a, b) in v1.iter().zip(v2.iter()) {
+            assert!((a - b).abs() < 1e-6);
+        }
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_maxabs_scaler_fit_transform() {
+        let data = create_test_data();
+        let scaler = MaxAbsScaler::<CpuBackend>::new();
+        let transformed = scaler.fit_transform(&data).unwrap();
+        let values = transformed.ravel().to_vec();
+
+        // First column: [-1, 0, 1] * 1.0 = [-1, 0, 1]
+        assert!((values[0] - (-1.0)).abs() < 1e-6);
+        assert!((values[5] - (-1.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_maxabs_scaler_zero_max() {
+        // All zeros - max abs is 0, should handle gracefully
+        let data = Tensor2D::<CpuBackend>::zeros(3, 2);
+        let scaler = MaxAbsScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+
+        let max_abs = fitted.max_abs().to_vec();
+        assert_eq!(max_abs[0], 0.0);
+        assert_eq!(max_abs[1], 0.0);
+
+        // Scale should be 1.0 for zero max
+        let scale = fitted.scale().to_vec();
+        assert_eq!(scale[0], 1.0);
+        assert_eq!(scale[1], 1.0);
+
+        // Transform should not fail
+        let transformed = fitted.transform(&data).unwrap();
+        let values = transformed.ravel().to_vec();
+        assert!(values.iter().all(|&v| v == 0.0));
+    }
+
+    #[test]
+    fn test_maxabs_scaler_inverse_feature_mismatch() {
+        let data = create_test_data();
+        let scaler = MaxAbsScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+
+        let wrong_data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0], 1, 3);
+        let result = fitted.inverse_transform(&wrong_data);
+
+        assert!(matches!(
+            result,
+            Err(PreprocessingError::FeatureMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn test_maxabs_scaler_new() {
+        let scaler = MaxAbsScaler::<CpuBackend>::new();
+        let data = create_test_data();
+        let result = scaler.fit(&data);
+        assert!(result.is_ok());
+    }
 }

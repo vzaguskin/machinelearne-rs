@@ -1,0 +1,34 @@
+Make fit and predict different classes
+NDarray backend
+SGD
+Adam?
+Gradients for regression and classification losses
+Examples folder with real tests
+Gridsearch and other model selection stuff
+Preprocessing and transforms
+Inference server
+Agent
+
+issue_1 is just refactoring:
+issue_2 - MAE/BCE loss
+issue 3 - metrics
+issue 4 - tensorboard
+issue5 - backend interface refactoring
+issue 6 - ndarray backend
+issue 7 cpu backend implementation fix
+issue 8 - code coverage
+issue_9 -  Regularizers
+
+Резюме: checklist перед "v0.1" или "next model"
+README + cargo doc
+Бенчмарки vs sklearn
+Edge-case тесты
+Сериализация проверена
+Лицензия + crates.io имя
+CI проверяет стиль и документацию
+После этого — смело переходите к:
+
+Логистической регрессии,
+Регуляризации (L1/L2),
+Или даже простому MLP (если захотите нейросети).
+

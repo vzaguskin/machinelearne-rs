@@ -412,4 +412,99 @@ mod tests {
             })
         ));
     }
+
+    #[test]
+    fn test_minmax_scaler_empty_data() {
+        let data = Tensor2D::<CpuBackend>::zeros(0, 2);
+        let scaler = MinMaxScaler::<CpuBackend>::new();
+        let result = scaler.fit(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_minmax_scaler_n_features_in() {
+        let data = create_test_data();
+        let scaler = MinMaxScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+        assert_eq!(fitted.n_features_in(), 2);
+    }
+
+    #[test]
+    fn test_minmax_scaler_save_load_file() {
+        let data = create_test_data();
+        let scaler = MinMaxScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+
+        let temp_file = std::env::temp_dir().join("test_minmax.bin");
+        fitted.save_to_file(&temp_file).unwrap();
+
+        let loaded = FittedMinMaxScaler::<CpuBackend>::load_from_file(&temp_file).unwrap();
+
+        assert_eq!(loaded.n_features_in(), fitted.n_features_in());
+
+        let t1 = fitted.transform(&data).unwrap();
+        let t2 = loaded.transform(&data).unwrap();
+
+        let v1 = t1.ravel().to_vec();
+        let v2 = t2.ravel().to_vec();
+        for (a, b) in v1.iter().zip(v2.iter()) {
+            assert!((a - b).abs() < 1e-6);
+        }
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_minmax_scaler_fit_transform() {
+        let data = create_test_data();
+        let scaler = MinMaxScaler::<CpuBackend>::new();
+        let transformed = scaler.fit_transform(&data).unwrap();
+        let values = transformed.ravel().to_vec();
+
+        // First column: [0, 0, 1] -> [0, 0, 1]
+        assert!((values[0] - 0.0).abs() < 1e-6);
+        assert!((values[2] - 0.0).abs() < 1e-6);
+        assert!((values[4] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_minmax_scaler_data_range() {
+        let data = create_test_data();
+        let scaler = MinMaxScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+
+        let range = fitted.data_range().to_vec();
+        assert!((range[0] - 1.0).abs() < 1e-6); // 1 - 0 = 1
+        assert!((range[1] - 2.0).abs() < 1e-6); // 3 - 1 = 2
+    }
+
+    #[test]
+    fn test_minmax_scaler_zero_range() {
+        // All values the same - range is 0
+        let data = Tensor2D::<CpuBackend>::new(vec![5.0f32, 5.0, 5.0, 5.0], 2, 2);
+        let scaler = MinMaxScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+
+        // Should not fail - scale should be 1.0 for zero range
+        let transformed = fitted.transform(&data).unwrap();
+        let values = transformed.ravel().to_vec();
+
+        // All values should map to target_min (0)
+        assert!(values.iter().all(|&v| (v - 0.0).abs() < 1e-6));
+    }
+
+    #[test]
+    fn test_minmax_scaler_inverse_feature_mismatch() {
+        let data = create_test_data();
+        let scaler = MinMaxScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+
+        let wrong_data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0], 1, 3);
+        let result = fitted.inverse_transform(&wrong_data);
+
+        assert!(matches!(
+            result,
+            Err(PreprocessingError::FeatureMismatch { .. })
+        ));
+    }
 }

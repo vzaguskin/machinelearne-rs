@@ -447,4 +447,112 @@ mod tests {
 
         assert_eq!(fitted.n_features_in(), 2);
     }
+
+    #[test]
+    fn test_ordinal_encoder_fit_transform() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 2.0, 1.0], 3, 1);
+        let encoder = OrdinalEncoder::<CpuBackend>::new();
+        let transformed = encoder.fit_transform(&data).unwrap();
+        let vals = transformed.ravel().to_vec();
+
+        assert!((vals[0] - 0.0).abs() < 1e-6);
+        assert!((vals[1] - 2.0).abs() < 1e-6);
+        assert!((vals[2] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_ordinal_encoder_empty_transform() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0], 2, 1);
+        let encoder = OrdinalEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&data).unwrap();
+
+        // Transform empty data
+        let empty = Tensor2D::<CpuBackend>::zeros(0, 1);
+        let result = fitted.transform(&empty).unwrap();
+        assert_eq!(result.shape(), (0, 1));
+    }
+
+    #[test]
+    fn test_ordinal_encoder_mapping() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 5.0, 10.0], 3, 1);
+        let encoder = OrdinalEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&data).unwrap();
+
+        let mapping = fitted.mapping(0).unwrap();
+        assert_eq!(mapping.get(&0), Some(&0));
+        assert_eq!(mapping.get(&5), Some(&1));
+        assert_eq!(mapping.get(&10), Some(&2));
+    }
+
+    #[test]
+    fn test_ordinal_encoder_invalid_value() {
+        // NaN should fail
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, f32::NAN, 1.0], 3, 1);
+        let encoder = OrdinalEncoder::<CpuBackend>::new();
+        let result = encoder.fit(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ordinal_encoder_extract_params() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 5.0, 10.0], 3, 1);
+        let encoder = OrdinalEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&data).unwrap();
+
+        let params = fitted.extract_params();
+        assert_eq!(params.n_features_in, 1);
+        assert_eq!(params.categories_[0], vec![0.0f32, 5.0, 10.0]);
+    }
+
+    #[test]
+    fn test_ordinal_encoder_from_params() {
+        let params = OrdinalEncoderParams {
+            categories_: vec![vec![0.0f32, 1.0, 2.0]],
+            mappings_: vec![vec![(0.0, 0), (1.0, 1), (2.0, 2)]],
+            n_features_in: 1,
+            handle_unknown: HandleUnknown::Error,
+        };
+
+        let fitted = FittedOrdinalEncoder::<CpuBackend>::from_params(params).unwrap();
+        assert_eq!(fitted.n_features_in(), 1);
+        assert_eq!(fitted.categories()[0], vec![0.0f32, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_ordinal_encoder_inverse_out_of_bounds() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0], 2, 1);
+        let encoder = OrdinalEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&data).unwrap();
+
+        // Index 5 is out of bounds (only 2 categories)
+        let bad_indices = Tensor2D::<CpuBackend>::new(vec![5.0f32], 1, 1);
+        let result = fitted.inverse_transform(&bad_indices).unwrap();
+        let vals = result.ravel().to_vec();
+
+        // Should be NaN for out of bounds index
+        assert!(vals[0].is_nan());
+    }
+
+    #[test]
+    fn test_ordinal_encoder_inverse_feature_mismatch() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0], 2, 1);
+        let encoder = OrdinalEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&data).unwrap();
+
+        let wrong = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0, 2.0], 1, 3);
+        let result = fitted.inverse_transform(&wrong);
+
+        assert!(matches!(
+            result,
+            Err(PreprocessingError::FeatureMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn test_ordinal_encoder_default() {
+        let encoder = OrdinalEncoder::<CpuBackend>::default();
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0], 2, 1);
+        let result = encoder.fit(&data);
+        assert!(result.is_ok());
+    }
 }

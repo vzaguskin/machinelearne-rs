@@ -439,4 +439,67 @@ mod tests {
 
         assert_eq!(fitted.n_features_in(), 2);
     }
+
+    #[test]
+    fn test_simple_imputer_fit_transform() {
+        let data = create_test_data_with_missing();
+        let imputer = SimpleImputer::<CpuBackend>::new(ImputeStrategy::Mean);
+        let result = imputer.fit_transform(&data).unwrap();
+
+        // Should have filled NaN values
+        let values = result.ravel().to_vec();
+        assert!(values.iter().all(|&v| v.is_finite()));
+    }
+
+    #[test]
+    fn test_simple_imputer_all_nan_column() {
+        // Column 1 is all NaN
+        let data =
+            Tensor2D::<CpuBackend>::new(vec![1.0f32, f32::NAN, 2.0, f32::NAN, 3.0, f32::NAN], 3, 2);
+
+        let imputer = SimpleImputer::<CpuBackend>::new(ImputeStrategy::Mean);
+        let fitted = imputer.fit(&data).unwrap();
+
+        // All NaN column should default to 0
+        let stats = fitted.statistics().to_vec();
+        assert!((stats[1] - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_simple_imputer_extract_params() {
+        let data = create_test_data_with_missing();
+        let imputer = SimpleImputer::<CpuBackend>::new(ImputeStrategy::Mean);
+        let fitted = imputer.fit(&data).unwrap();
+
+        let params = fitted.extract_params();
+        assert_eq!(params.n_features, 2);
+        assert!(matches!(params.strategy, ImputeStrategy::Mean));
+    }
+
+    #[test]
+    fn test_simple_imputer_from_params() {
+        let params = SimpleImputerParams {
+            strategy: ImputeStrategy::Constant(42.0),
+            statistics_: vec![42.0, 42.0],
+            n_features: 2,
+        };
+
+        let fitted = FittedSimpleImputer::<CpuBackend>::from_params(params).unwrap();
+        assert_eq!(fitted.n_features_in(), 2);
+    }
+
+    #[test]
+    fn test_simple_imputer_feature_mismatch_inverse() {
+        let data = create_test_data_with_missing();
+        let imputer = SimpleImputer::<CpuBackend>::new(ImputeStrategy::Mean);
+        let fitted = imputer.fit(&data).unwrap();
+
+        let wrong_data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0], 1, 3);
+        let result = fitted.transform(&wrong_data);
+
+        assert!(matches!(
+            result,
+            Err(PreprocessingError::FeatureMismatch { .. })
+        ));
+    }
 }

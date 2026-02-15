@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
 /// Type of normalization to apply.
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum NormType {
     /// L1 norm: sum of absolute values = 1
     L1,
@@ -361,5 +361,62 @@ mod tests {
                 got_features: 3
             })
         ));
+    }
+
+    #[test]
+    fn test_normalizer_empty_data_fit() {
+        let data = Tensor2D::<CpuBackend>::zeros(0, 2);
+        let normalizer = Normalizer::<CpuBackend>::new(NormType::L2);
+        let result = normalizer.fit(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_normalizer_empty_data_fit_transform() {
+        let data = Tensor2D::<CpuBackend>::zeros(0, 2);
+        let normalizer = Normalizer::<CpuBackend>::new(NormType::L2);
+        let result = normalizer.fit_transform(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_normalizer_n_features_in() {
+        let data = create_test_data();
+        let normalizer = Normalizer::<CpuBackend>::new(NormType::L2);
+        let fitted = normalizer.fit(&data).unwrap();
+        assert_eq!(fitted.n_features_in(), 2);
+    }
+
+    #[test]
+    fn test_normalizer_save_load_file() {
+        let data = create_test_data();
+        let normalizer = Normalizer::<CpuBackend>::new(NormType::L2);
+        let fitted = normalizer.fit(&data).unwrap();
+
+        let temp_file = std::env::temp_dir().join("test_normalizer.bin");
+        fitted.save_to_file(&temp_file).unwrap();
+
+        let loaded = FittedNormalizer::<CpuBackend>::load_from_file(&temp_file).unwrap();
+
+        assert_eq!(loaded.n_features_in(), fitted.n_features_in());
+
+        let t1 = fitted.transform(&data).unwrap();
+        let t2 = loaded.transform(&data).unwrap();
+
+        let v1 = t1.ravel().to_vec();
+        let v2 = t2.ravel().to_vec();
+        for (a, b) in v1.iter().zip(v2.iter()) {
+            assert!((a - b).abs() < 1e-6);
+        }
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_normalizer_norm_method() {
+        let data = create_test_data();
+        let normalizer = Normalizer::<CpuBackend>::new(NormType::Max);
+        let fitted = normalizer.fit(&data).unwrap();
+        assert_eq!(fitted.norm(), NormType::Max);
     }
 }

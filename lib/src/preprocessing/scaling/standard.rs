@@ -440,4 +440,94 @@ mod tests {
         assert!(mean_vals[0].abs() < 1e-10);
         assert!(mean_vals[1].abs() < 1e-10);
     }
+
+    #[test]
+    fn test_standard_scaler_empty_data() {
+        let data = Tensor2D::<CpuBackend>::zeros(0, 2);
+        let scaler = StandardScaler::<CpuBackend>::new();
+        let result = scaler.fit(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_standard_scaler_n_features_in() {
+        let data = create_test_data();
+        let scaler = StandardScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+        assert_eq!(fitted.n_features_in(), 2);
+    }
+
+    #[test]
+    fn test_standard_scaler_save_load_file() {
+        let data = create_test_data();
+        let scaler = StandardScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+
+        let temp_file = std::env::temp_dir().join("test_standard.bin");
+        fitted.save_to_file(&temp_file).unwrap();
+
+        let loaded = FittedStandardScaler::<CpuBackend>::load_from_file(&temp_file).unwrap();
+
+        assert_eq!(loaded.n_features_in(), fitted.n_features_in());
+
+        let t1 = fitted.transform(&data).unwrap();
+        let t2 = loaded.transform(&data).unwrap();
+
+        let v1 = t1.ravel().to_vec();
+        let v2 = t2.ravel().to_vec();
+        for (a, b) in v1.iter().zip(v2.iter()) {
+            assert!((a - b).abs() < 1e-6);
+        }
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_standard_scaler_constant_feature() {
+        // All values in column 0 are the same (constant feature)
+        let data = Tensor2D::<CpuBackend>::new(vec![5.0f32, 1.0, 5.0, 2.0, 5.0, 3.0], 3, 2);
+        let scaler = StandardScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+
+        // Std for constant feature should be 1 (handled internally)
+        let std = fitted.std().to_vec();
+        assert!((std[0] - 1.0).abs() < 1e-6);
+
+        // Mean should still be 5
+        let mean = fitted.mean().to_vec();
+        assert!((mean[0] - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_standard_scaler_inverse_feature_mismatch() {
+        let data = create_test_data();
+        let scaler = StandardScaler::<CpuBackend>::new();
+        let fitted = scaler.fit(&data).unwrap();
+
+        let wrong_data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0], 1, 3);
+        let result = fitted.inverse_transform(&wrong_data);
+
+        assert!(matches!(
+            result,
+            Err(PreprocessingError::FeatureMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn test_standard_scaler_no_mean_no_std() {
+        let data = create_test_data();
+        let scaler = StandardScaler::<CpuBackend>::new()
+            .with_mean(false)
+            .with_std(false);
+        let fitted = scaler.fit(&data).unwrap();
+
+        let transformed = fitted.transform(&data).unwrap();
+        let original = data.ravel().to_vec();
+        let result = transformed.ravel().to_vec();
+
+        // Without mean centering or std scaling, data should be unchanged
+        for (o, r) in original.iter().zip(result.iter()) {
+            assert!((o - r).abs() < 1e-6);
+        }
+    }
 }

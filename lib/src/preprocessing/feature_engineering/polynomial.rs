@@ -482,4 +482,100 @@ mod tests {
 
         std::fs::remove_file(temp_file).ok();
     }
+
+    #[test]
+    fn test_polynomial_features_empty_data() {
+        let data = Tensor2D::<CpuBackend>::zeros(0, 2);
+        let poly = PolynomialFeatures::<CpuBackend>::new().with_degree(2);
+        let result = poly.fit(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_polynomial_features_no_features() {
+        let data = Tensor2D::<CpuBackend>::zeros(3, 0);
+        let poly = PolynomialFeatures::<CpuBackend>::new().with_degree(2);
+        let result = poly.fit(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_polynomial_features_feature_mismatch() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0], 1, 2);
+        let poly = PolynomialFeatures::<CpuBackend>::new().with_degree(2);
+        let fitted = poly.fit(&data).unwrap();
+
+        let wrong_data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0], 1, 3);
+        let result = fitted.transform(&wrong_data);
+        assert!(matches!(
+            result,
+            Err(PreprocessingError::FeatureMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn test_polynomial_features_inverse_not_supported() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0], 1, 2);
+        let poly = PolynomialFeatures::<CpuBackend>::new().with_degree(2);
+        let fitted = poly.fit(&data).unwrap();
+        let transformed = fitted.transform(&data).unwrap();
+
+        let result = fitted.inverse_transform(&transformed);
+        assert!(matches!(
+            result,
+            Err(PreprocessingError::InvalidParameter(_))
+        ));
+    }
+
+    #[test]
+    fn test_polynomial_features_fit_transform() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0], 1, 2);
+        let poly = PolynomialFeatures::<CpuBackend>::new().with_degree(2);
+        let transformed = poly.fit_transform(&data).unwrap();
+
+        assert_eq!(transformed.shape(), (1, 6));
+        let vals = transformed.ravel().to_vec();
+        assert!((vals[0] - 1.0).abs() < 1e-6); // bias
+        assert!((vals[1] - 1.0).abs() < 1e-6); // a
+        assert!((vals[2] - 2.0).abs() < 1e-6); // b
+    }
+
+    #[test]
+    fn test_polynomial_features_empty_transform() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0], 1, 2);
+        let poly = PolynomialFeatures::<CpuBackend>::new().with_degree(2);
+        let fitted = poly.fit(&data).unwrap();
+
+        let empty = Tensor2D::<CpuBackend>::zeros(0, 2);
+        let result = fitted.transform(&empty).unwrap();
+        assert_eq!(result.shape(), (0, 6));
+    }
+
+    #[test]
+    fn test_polynomial_features_output_combinations() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0], 1, 2);
+        let poly = PolynomialFeatures::<CpuBackend>::new().with_degree(2);
+        let fitted = poly.fit(&data).unwrap();
+
+        let combos = fitted.output_combinations();
+        assert_eq!(combos.len(), 6);
+    }
+
+    #[test]
+    fn test_polynomial_features_degree_1() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0], 1, 2);
+        let poly = PolynomialFeatures::<CpuBackend>::new()
+            .with_degree(1)
+            .with_include_bias(true);
+        let fitted = poly.fit(&data).unwrap();
+
+        // bias + 2 linear = 3
+        assert_eq!(fitted.n_features_out(), 3);
+
+        let transformed = fitted.transform(&data).unwrap();
+        let vals = transformed.ravel().to_vec();
+        assert!((vals[0] - 1.0).abs() < 1e-6); // bias
+        assert!((vals[1] - 1.0).abs() < 1e-6); // a
+        assert!((vals[2] - 2.0).abs() < 1e-6); // b
+    }
 }

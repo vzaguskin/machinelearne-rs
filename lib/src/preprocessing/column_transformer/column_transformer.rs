@@ -1083,4 +1083,71 @@ mod tests {
 
         std::fs::remove_file(temp_file).ok();
     }
+
+    #[test]
+    fn test_column_transformer_fit_transform() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 10.0, 2.0, 20.0], 2, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_standard_scaler(StandardScaler::new(), ColumnSpec::All);
+
+        let transformed = ct.fit_transform(&data).unwrap();
+        assert_eq!(transformed.shape(), (2, 2));
+    }
+
+    #[test]
+    fn test_column_transformer_empty_transformers() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 10.0], 1, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new();
+        let result = ct.fit(&data);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_column_transformer_duplicate_columns() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 10.0], 1, 2);
+
+        // Add same columns twice
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_standard_scaler(StandardScaler::new(), ColumnSpec::Indices(vec![0]))
+            .add_minmax_scaler(MinMaxScaler::new(), ColumnSpec::Indices(vec![0]));
+
+        // Should work but duplicate column 0
+        let fitted = ct.fit(&data).unwrap();
+        let transformed = fitted.transform(&data).unwrap();
+
+        // Should have 2 output columns (one for each transformer)
+        assert_eq!(transformed.shape(), (1, 2));
+    }
+
+    #[test]
+    fn test_column_transformer_extract_params() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 10.0], 1, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_standard_scaler(StandardScaler::new(), ColumnSpec::All);
+
+        let fitted = ct.fit(&data).unwrap();
+        let params = fitted.extract_params();
+
+        assert_eq!(params.n_features_in, 2);
+        assert!(!params.steps.is_empty());
+    }
+
+    #[test]
+    fn test_column_transformer_from_params_roundtrip() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 10.0], 1, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_standard_scaler(StandardScaler::new(), ColumnSpec::All);
+
+        let fitted = ct.fit(&data).unwrap();
+        let params = fitted.extract_params();
+        let restored = FittedColumnTransformer::<CpuBackend>::from_params(params).unwrap();
+
+        assert_eq!(restored.n_features_in(), fitted.n_features_in());
+        assert_eq!(restored.n_features_out(), fitted.n_features_out());
+    }
 }

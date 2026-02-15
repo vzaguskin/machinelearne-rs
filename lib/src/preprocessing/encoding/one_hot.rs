@@ -481,4 +481,117 @@ mod tests {
         let encoder = OneHotEncoder::<CpuBackend>::new().with_handle_unknown(HandleUnknown::Ignore);
         assert_eq!(encoder.handle_unknown, HandleUnknown::Ignore);
     }
+
+    #[test]
+    fn test_one_hot_encoder_invalid_value() {
+        // Negative value should fail
+        let data = Tensor2D::<CpuBackend>::new(vec![-1.0f32, 0.0, 1.0], 3, 1);
+        let encoder = OneHotEncoder::<CpuBackend>::new();
+        let result = encoder.fit(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_one_hot_encoder_non_integer_value() {
+        // Non-integer value should fail
+        let data = Tensor2D::<CpuBackend>::new(vec![0.5f32, 1.0, 2.0], 3, 1);
+        let encoder = OneHotEncoder::<CpuBackend>::new();
+        let result = encoder.fit(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_one_hot_encoder_empty_transform() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0], 2, 1);
+        let encoder = OneHotEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&data).unwrap();
+
+        // Transform empty data
+        let empty = Tensor2D::<CpuBackend>::zeros(0, 1);
+        let result = fitted.transform(&empty).unwrap();
+        assert_eq!(result.shape(), (0, 2));
+    }
+
+    #[test]
+    fn test_one_hot_encoder_inverse_empty() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0], 2, 1);
+        let encoder = OneHotEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&data).unwrap();
+
+        // Inverse transform empty data
+        let empty = Tensor2D::<CpuBackend>::zeros(0, 2);
+        let result = fitted.inverse_transform(&empty).unwrap();
+        assert_eq!(result.shape(), (0, 1));
+    }
+
+    #[test]
+    fn test_one_hot_encoder_fit_transform() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0, 2.0], 3, 1);
+        let encoder = OneHotEncoder::<CpuBackend>::new();
+        let transformed = encoder.fit_transform(&data).unwrap();
+        let vals = transformed.ravel().to_vec();
+
+        assert_eq!(transformed.shape(), (3, 3));
+        assert!((vals[0] - 1.0).abs() < 1e-6);
+        assert!((vals[4] - 1.0).abs() < 1e-6);
+        assert!((vals[8] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_one_hot_encoder_inverse_nan_for_invalid() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0], 2, 1);
+        let encoder = OneHotEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&data).unwrap();
+
+        // Create a one-hot like vector with no active category
+        let invalid = Tensor2D::<CpuBackend>::new(vec![0.0f32, 0.0], 1, 2);
+        let result = fitted.inverse_transform(&invalid).unwrap();
+        let vals = result.ravel().to_vec();
+
+        // Should have NaN since no category was found
+        assert!(vals[0].is_nan());
+    }
+
+    #[test]
+    fn test_one_hot_encoder_inverse_feature_mismatch() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0], 2, 1);
+        let encoder = OneHotEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&data).unwrap();
+
+        // Wrong number of output features
+        let wrong = Tensor2D::<CpuBackend>::new(vec![1.0f32, 0.0, 0.0], 1, 3);
+        let result = fitted.inverse_transform(&wrong);
+
+        assert!(matches!(
+            result,
+            Err(PreprocessingError::FeatureMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn test_one_hot_encoder_extract_params() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0, 2.0], 3, 1);
+        let encoder = OneHotEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&data).unwrap();
+
+        let params = fitted.extract_params();
+        assert_eq!(params.n_features_in, 1);
+        assert_eq!(params.n_features_out, 3);
+        assert_eq!(params.categories_[0], vec![0.0f32, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_one_hot_encoder_from_params() {
+        let params = OneHotEncoderParams {
+            categories_: vec![vec![0.0f32, 1.0]],
+            n_values_: vec![2],
+            n_features_out: 2,
+            n_features_in: 1,
+            handle_unknown: HandleUnknown::Error,
+        };
+
+        let fitted = FittedOneHotEncoder::<CpuBackend>::from_params(params).unwrap();
+        assert_eq!(fitted.n_features_in(), 1);
+        assert_eq!(fitted.n_features_out(), 2);
+    }
 }

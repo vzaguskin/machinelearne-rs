@@ -148,4 +148,15 @@ mod tests {
         let err = PreprocessingError::InvalidParameter("test".to_string());
         let _: &dyn std::error::Error = &err;
     }
+
+    #[test]
+    fn test_error_from_bincode_error() {
+        // Create a bincode error by trying to deserialize invalid data
+        let bad_bytes: &[u8] = &[0xff, 0xff, 0xff, 0xff];
+        let bincode_result: Result<String, bincode::Error> = bincode::deserialize(bad_bytes);
+        if let Err(e) = bincode_result {
+            let err: PreprocessingError = e.into();
+            assert!(matches!(err, PreprocessingError::SerializationError(_)));
+        }
+    }
 }
