@@ -222,11 +222,8 @@ fn run_single_benchmark(
         let trainer = Trainer::builder(MSELoss, optimizer, NoRegularizer)
             .batch_size(config.batch_size)
             .max_epochs(config.n_epochs)
-            .verbose(false) // Suppress training output for clean benchmark output
+            .verbose(false) // Quiet mode for clean benchmark output
             .build();
-
-        // Suppress training output by capturing stdout
-        // Note: In production, we'd add a quiet flag to trainer
 
         // Train
         let start = Instant::now();
@@ -330,44 +327,46 @@ fn run_all_benchmarks() -> Vec<serde_json::Value> {
     let n_train = train_scaled_all.len();
     let mut results = Vec::new();
 
-    // Define benchmark configurations to match sklearn exactly
+    // Define benchmark configurations
+    // Test different combinations of batch size and learning rate
     let configs = vec![
-        // 2 features tests - Full batch with different learning rates
+        // 2 features: Full batch with optimal LR=0.5
         BenchmarkConfig {
-            name: "sgd_epochs_5_batch_full_lr_0.5".to_string(),
+            name: "2feat_full_lr0.5_e5".to_string(),
             n_features: 2,
             n_epochs: 5,
-            batch_size: n_train, // Full batch
-            learning_rate: 0.5,  // Optimal for Rust full-batch
+            batch_size: n_train,
+            learning_rate: 0.5,
             n_runs: 10,
         },
         BenchmarkConfig {
-            name: "sgd_epochs_50_batch_full_lr_0.5".to_string(),
+            name: "2feat_full_lr0.5_e50".to_string(),
             n_features: 2,
             n_epochs: 50,
             batch_size: n_train,
             learning_rate: 0.5,
             n_runs: 5,
         },
+        // 2 features: Full batch with sklearn-compatible LR=0.1
         BenchmarkConfig {
-            name: "sgd_epochs_5_batch_full_lr_0.1".to_string(),
+            name: "2feat_full_lr0.1_e5".to_string(),
             n_features: 2,
             n_epochs: 5,
             batch_size: n_train,
-            learning_rate: 0.1, // sklearn-stable
+            learning_rate: 0.1,
             n_runs: 10,
         },
         BenchmarkConfig {
-            name: "sgd_epochs_50_batch_full_lr_0.1".to_string(),
+            name: "2feat_full_lr0.1_e50".to_string(),
             n_features: 2,
             n_epochs: 50,
             batch_size: n_train,
             learning_rate: 0.1,
             n_runs: 5,
         },
-        // Mini-batch tests
+        // 2 features: Mini-batch with default LR=0.01
         BenchmarkConfig {
-            name: "sgd_epochs_5_batch_32".to_string(),
+            name: "2feat_minibatch_lr0.01_e5".to_string(),
             n_features: 2,
             n_epochs: 5,
             batch_size: 32,
@@ -375,16 +374,16 @@ fn run_all_benchmarks() -> Vec<serde_json::Value> {
             n_runs: 10,
         },
         BenchmarkConfig {
-            name: "sgd_epochs_50_batch_32".to_string(),
+            name: "2feat_minibatch_lr0.01_e50".to_string(),
             n_features: 2,
             n_epochs: 50,
             batch_size: 32,
             learning_rate: 0.01,
             n_runs: 5,
         },
-        // 8 features tests - use LR=0.1 for stability
+        // 8 features: Full batch
         BenchmarkConfig {
-            name: "sgd_epochs_5_batch_full_8feat_lr_0.1".to_string(),
+            name: "8feat_full_lr0.1_e5".to_string(),
             n_features: 8,
             n_epochs: 5,
             batch_size: n_train,
@@ -392,7 +391,7 @@ fn run_all_benchmarks() -> Vec<serde_json::Value> {
             n_runs: 10,
         },
         BenchmarkConfig {
-            name: "sgd_epochs_50_batch_full_8feat_lr_0.1".to_string(),
+            name: "8feat_full_lr0.1_e50".to_string(),
             n_features: 8,
             n_epochs: 50,
             batch_size: n_train,
@@ -403,10 +402,13 @@ fn run_all_benchmarks() -> Vec<serde_json::Value> {
 
     for config in configs {
         println!("\n{}", "-".repeat(50));
-        println!("Test: {} ({} features)", config.name, config.n_features);
         println!(
-            "Epochs: {}, Batch size: {}",
-            config.n_epochs, config.batch_size
+            "Test: {} ({} features, {} epochs, batch={}, lr={})",
+            config.name,
+            config.n_features,
+            config.n_epochs,
+            config.batch_size,
+            config.learning_rate
         );
 
         // Select features
@@ -484,12 +486,18 @@ fn main() {
     println!("BENCHMARK COMPLETE");
     println!("{}", "=".repeat(70));
 
-    println!("\nSummary:");
+    println!("\nLegend:");
+    println!("  full = full batch (all training samples)");
+    println!("  minibatch = batch size 32");
+    println!("  lr = learning rate");
+    println!("  e = epochs");
+
+    println!("\nResults:");
     println!(
-        "{:<35} {:<12} {:<12} {:<10} {:<10}",
-        "Test", "Time (ms)", "Time/epoch", "MSE", "R2"
+        "{:<30} {:>10} {:>10} {:>10} {:>8}",
+        "Test", "Time (ms)", "ms/epoch", "MSE", "R2"
     );
-    println!("{}", "-".repeat(80));
+    println!("{}", "-".repeat(70));
 
     for r in &results {
         let test = r["test"].as_str().unwrap();
@@ -499,7 +507,7 @@ fn main() {
         let r2 = r["r2"].as_f64().unwrap();
 
         println!(
-            "{:<35} {:<12.3} {:<12.3} {:<10.6} {:<10.4}",
+            "{:<30} {:>10.2} {:>10.3} {:>10.4} {:>8.4}",
             test, time_ms, time_per_epoch, mse, r2
         );
     }
