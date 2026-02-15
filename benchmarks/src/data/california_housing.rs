@@ -244,6 +244,7 @@ impl CaliforniaHousingDataset {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use machinelearne_rs::dataset::Dataset;
 
     #[test]
     fn test_load_dataset() {

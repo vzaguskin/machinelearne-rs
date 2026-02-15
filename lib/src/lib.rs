@@ -62,6 +62,9 @@ pub mod backend;
 /// Data loading utilities and dataset abstractions.
 pub mod dataset;
 
+/// Data preprocessing transformers for ML pipelines.
+pub mod preprocessing;
+
 /// Differentiable loss functions for model training.
 pub mod loss;
 

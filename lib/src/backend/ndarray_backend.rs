@@ -1,5 +1,5 @@
 use super::Backend;
-use ndarray::{Array1, Array2, Ix1, Ix2};
+use ndarray::{Array1, Array2, Ix1};
 
 /// CPU-based tensor backend implementation using the `ndarray` crate.
 ///
@@ -585,6 +585,203 @@ impl super::Backend for NdarrayBackend {
             .into_dimensionality::<Ix1>()
             .expect("Failed to ravel 2D tensor: shape conversion error")
     }
+
+    // --- Column-wise operations ---
+
+    fn col_mean_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        t.0.mean_axis(ndarray::Axis(0))
+            .unwrap_or_else(|| Array1::zeros(0))
+    }
+
+    fn col_std_2d(t: &Self::Tensor2D, ddof: usize) -> Self::Tensor1D {
+        let ncols = t.0.ncols();
+        if ncols == 0 {
+            return Array1::zeros(0);
+        }
+
+        let means = Self::col_mean_2d(t);
+        let nrows = t.0.nrows();
+
+        let mut stds = Array1::zeros(ncols);
+        for col in 0..ncols {
+            let mut var_sum = 0.0;
+            for row in 0..nrows {
+                let diff = t.0[[row, col]] - means[col];
+                var_sum += diff * diff;
+            }
+            let divisor = (nrows - ddof) as f64;
+            stds[col] = (var_sum / divisor).sqrt();
+        }
+        stds
+    }
+
+    fn col_min_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        let ncols = t.0.ncols();
+        if ncols == 0 {
+            return Array1::zeros(0);
+        }
+
+        let mut mins = Array1::from_elem(ncols, f64::INFINITY);
+        for col in 0..ncols {
+            for row in 0..t.0.nrows() {
+                let val = t.0[[row, col]];
+                if val < mins[col] {
+                    mins[col] = val;
+                }
+            }
+        }
+        mins
+    }
+
+    fn col_max_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        let ncols = t.0.ncols();
+        if ncols == 0 {
+            return Array1::zeros(0);
+        }
+
+        let mut maxs = Array1::from_elem(ncols, f64::NEG_INFINITY);
+        for col in 0..ncols {
+            for row in 0..t.0.nrows() {
+                let val = t.0[[row, col]];
+                if val > maxs[col] {
+                    maxs[col] = val;
+                }
+            }
+        }
+        maxs
+    }
+
+    fn col_sum_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        t.0.sum_axis(ndarray::Axis(0))
+    }
+
+    // --- Row-wise operations ---
+
+    fn row_sum_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
+        t.0.sum_axis(ndarray::Axis(1))
+    }
+
+    // --- Broadcasting operations ---
+
+    fn broadcast_sub_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
+        NdarrayTensor2D(&t.0 - &v.view().insert_axis(ndarray::Axis(0)))
+    }
+
+    fn broadcast_div_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
+        NdarrayTensor2D(&t.0 / &v.view().insert_axis(ndarray::Axis(0)))
+    }
+
+    fn broadcast_mul_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
+        NdarrayTensor2D(&t.0 * &v.view().insert_axis(ndarray::Axis(0)))
+    }
+
+    fn broadcast_add_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
+        NdarrayTensor2D(&t.0 + &v.view().insert_axis(ndarray::Axis(0)))
+    }
+
+    fn sqrt_1d(t: &Self::Tensor1D) -> Self::Tensor1D {
+        t.mapv(f64::sqrt)
+    }
+
+    fn sqrt_2d(t: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(t.0.mapv(f64::sqrt))
+    }
+
+    // --- Column manipulation operations ---
+
+    fn hcat_2d(
+        tensors: &[Self::Tensor2D],
+    ) -> Result<Self::Tensor2D, crate::preprocessing::PreprocessingError> {
+        if tensors.is_empty() {
+            return Err(crate::preprocessing::PreprocessingError::InvalidParameter(
+                "Cannot horizontally concatenate empty slice of tensors".to_string(),
+            ));
+        }
+
+        let rows = tensors[0].0.nrows();
+        if rows == 0 {
+            return Ok(NdarrayTensor2D(
+                Array2::from_shape_vec((0, 0), vec![]).unwrap(),
+            ));
+        }
+
+        // Verify all tensors have the same number of rows
+        for t in tensors.iter() {
+            if t.0.nrows() != rows {
+                return Err(crate::preprocessing::PreprocessingError::InvalidShape {
+                    expected: format!("({}, ?)", rows),
+                    got: format!("({}, ?)", t.0.nrows()),
+                });
+            }
+        }
+
+        // Calculate total columns
+        let total_cols: usize = tensors.iter().map(|t| t.0.ncols()).sum();
+
+        // Manually concatenate by copying data
+        let mut result = Array2::zeros((rows, total_cols));
+        let mut col_offset = 0;
+        for t in tensors {
+            let ncols = t.0.ncols();
+            for r in 0..rows {
+                for c in 0..ncols {
+                    result[[r, col_offset + c]] = t.0[[r, c]];
+                }
+            }
+            col_offset += ncols;
+        }
+
+        Ok(NdarrayTensor2D(result))
+    }
+
+    fn select_columns_2d(t: &Self::Tensor2D, columns: &[usize]) -> Self::Tensor2D {
+        let (rows, ncols) = t.0.dim();
+        if columns.is_empty() {
+            return NdarrayTensor2D(Array2::from_shape_vec((rows, 0), vec![]).unwrap());
+        }
+
+        // Validate column indices
+        for &col in columns {
+            assert!(
+                col < ncols,
+                "Column index {} out of bounds (max {})",
+                col,
+                ncols - 1
+            );
+        }
+
+        // Use ndarray's select method
+        let selected = t.0.select(ndarray::Axis(1), columns);
+        NdarrayTensor2D(selected)
+    }
+
+    fn one_hot_from_indices(indices: &Self::Tensor1D, num_classes: usize) -> Self::Tensor2D {
+        let n_samples = indices.len();
+        if n_samples == 0 || num_classes == 0 {
+            return NdarrayTensor2D(
+                Array2::from_shape_vec((n_samples, num_classes), vec![]).unwrap(),
+            );
+        }
+
+        // Validate indices
+        for (i, &idx) in indices.iter().enumerate() {
+            assert!(
+                idx >= 0.0 && idx < num_classes as f64 && idx.fract() == 0.0,
+                "Index {} at position {} is not a valid integer in range [0, {})",
+                idx,
+                i,
+                num_classes
+            );
+        }
+
+        let mut result = Array2::zeros((n_samples, num_classes));
+        for (i, &idx) in indices.iter().enumerate() {
+            let col = idx as usize;
+            result[[i, col]] = 1.0;
+        }
+
+        NdarrayTensor2D(result)
+    }
 }
 
 #[cfg(test)]
@@ -949,5 +1146,267 @@ mod tests {
         let a = tensor2d_from(&[vec![1.0]]);
         let b = tensor2d_from(&[vec![1.0, 2.0]]);
         NdarrayBackend::maximum_2d(&a, &b);
+    }
+
+    #[test]
+    fn test_hcat_2d_basic() {
+        let a = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        let b = tensor2d_from(&[vec![5.0], vec![6.0]]);
+
+        let result = NdarrayBackend::hcat_2d(&[a, b]).unwrap();
+        assert_eq!(NdarrayBackend::shape(&result), (2, 3));
+        assert_eq!(
+            result.0,
+            Array2::from_shape_vec((2, 3), vec![1.0, 2.0, 5.0, 3.0, 4.0, 6.0]).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_hcat_2d_multiple() {
+        let a = tensor2d_from(&[vec![1.0]]);
+        let b = tensor2d_from(&[vec![2.0]]);
+        let c = tensor2d_from(&[vec![3.0]]);
+
+        let result = NdarrayBackend::hcat_2d(&[a, b, c]).unwrap();
+        assert_eq!(NdarrayBackend::shape(&result), (1, 3));
+        assert_eq!(
+            result.0,
+            Array2::from_shape_vec((1, 3), vec![1.0, 2.0, 3.0]).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_hcat_2d_empty() {
+        let result = NdarrayBackend::hcat_2d(&[]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_hcat_2d_row_mismatch() {
+        let a = tensor2d_from(&[vec![1.0, 2.0]]);
+        let b = tensor2d_from(&[vec![1.0], vec![2.0]]); // 2 rows vs 1 row
+
+        let result = NdarrayBackend::hcat_2d(&[a, b]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_hcat_2d_zero_rows() {
+        let a = NdarrayTensor2D(Array2::from_shape_vec((0, 0), vec![]).unwrap());
+        let result = NdarrayBackend::hcat_2d(&[a]).unwrap();
+        assert_eq!(NdarrayBackend::shape(&result), (0, 0));
+    }
+
+    #[test]
+    fn test_select_columns_2d_basic() {
+        let t = tensor2d_from(&[vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]);
+
+        let result = NdarrayBackend::select_columns_2d(&t, &[0, 2]);
+        assert_eq!(NdarrayBackend::shape(&result), (2, 2));
+        assert_eq!(
+            result.0,
+            Array2::from_shape_vec((2, 2), vec![1.0, 3.0, 4.0, 6.0]).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_select_columns_2d_single() {
+        let t = tensor2d_from(&[vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]);
+
+        let result = NdarrayBackend::select_columns_2d(&t, &[1]);
+        assert_eq!(NdarrayBackend::shape(&result), (2, 1));
+        assert_eq!(
+            result.0,
+            Array2::from_shape_vec((2, 1), vec![2.0, 5.0]).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_select_columns_2d_empty() {
+        let t = tensor2d_from(&[vec![1.0, 2.0]]);
+
+        let result = NdarrayBackend::select_columns_2d(&t, &[]);
+        assert_eq!(NdarrayBackend::shape(&result), (1, 0));
+    }
+
+    #[test]
+    fn test_select_columns_2d_reorder() {
+        let t = tensor2d_from(&[vec![1.0, 2.0, 3.0]]);
+
+        let result = NdarrayBackend::select_columns_2d(&t, &[2, 0, 1]);
+        assert_eq!(NdarrayBackend::shape(&result), (1, 3));
+        assert_eq!(
+            result.0,
+            Array2::from_shape_vec((1, 3), vec![3.0, 1.0, 2.0]).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_one_hot_from_indices_basic() {
+        let indices = Array1::from_vec(vec![0.0, 1.0, 2.0, 0.0]);
+
+        let result = NdarrayBackend::one_hot_from_indices(&indices, 3);
+        assert_eq!(NdarrayBackend::shape(&result), (4, 3));
+        // Row 0: [1, 0, 0]
+        // Row 1: [0, 1, 0]
+        // Row 2: [0, 0, 1]
+        // Row 3: [1, 0, 0]
+        assert_eq!(result.0[[0, 0]], 1.0);
+        assert_eq!(result.0[[0, 1]], 0.0);
+        assert_eq!(result.0[[1, 1]], 1.0);
+        assert_eq!(result.0[[2, 2]], 1.0);
+        assert_eq!(result.0[[3, 0]], 1.0);
+    }
+
+    #[test]
+    fn test_one_hot_from_indices_empty() {
+        let indices = Array1::from_vec(vec![]);
+
+        let result = NdarrayBackend::one_hot_from_indices(&indices, 3);
+        assert_eq!(NdarrayBackend::shape(&result), (0, 3));
+    }
+
+    #[test]
+    fn test_one_hot_from_indices_single() {
+        let indices = Array1::from_vec(vec![2.0]);
+
+        let result = NdarrayBackend::one_hot_from_indices(&indices, 5);
+        assert_eq!(NdarrayBackend::shape(&result), (1, 5));
+        assert_eq!(result.0[[0, 2]], 1.0);
+        assert_eq!(result.0[[0, 0]], 0.0);
+    }
+
+    #[test]
+    fn test_one_hot_zero_classes() {
+        let indices = Array1::from_vec(vec![]);
+
+        let result = NdarrayBackend::one_hot_from_indices(&indices, 0);
+        assert_eq!(NdarrayBackend::shape(&result), (0, 0));
+    }
+
+    #[test]
+    fn test_default_device() {
+        let device = NdarrayBackend::default_device();
+        assert_eq!(device, ());
+    }
+
+    #[test]
+    fn test_col_mean_2d() {
+        let t = tensor2d_from(&[vec![1.0, 4.0], vec![2.0, 5.0], vec![3.0, 6.0]]);
+        let mean = NdarrayBackend::col_mean_2d(&t);
+        assert_eq!(mean.to_vec(), vec![2.0, 5.0]);
+    }
+
+    #[test]
+    fn test_col_std_2d() {
+        let t = tensor2d_from(&[vec![1.0], vec![2.0], vec![3.0], vec![4.0]]);
+        let std = NdarrayBackend::col_std_2d(&t, 0); // population std
+                                                     // std of [1, 2, 3, 4] with ddof=0 is sqrt(1.25) ≈ 1.118
+        assert!((std[0] - 1.118).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_col_min_2d() {
+        let t = tensor2d_from(&[vec![3.0, 1.0], vec![1.0, 5.0], vec![2.0, 3.0]]);
+        let min = NdarrayBackend::col_min_2d(&t);
+        assert_eq!(min.to_vec(), vec![1.0, 1.0]);
+    }
+
+    #[test]
+    fn test_col_max_2d() {
+        let t = tensor2d_from(&[vec![3.0, 1.0], vec![1.0, 5.0], vec![2.0, 3.0]]);
+        let max = NdarrayBackend::col_max_2d(&t);
+        assert_eq!(max.to_vec(), vec![3.0, 5.0]);
+    }
+
+    #[test]
+    fn test_col_sum_2d() {
+        let t = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        let sum = NdarrayBackend::col_sum_2d(&t);
+        assert_eq!(sum.to_vec(), vec![4.0, 6.0]);
+    }
+
+    #[test]
+    fn test_row_sum_2d() {
+        let t = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        let sum = NdarrayBackend::row_sum_2d(&t);
+        assert_eq!(sum.to_vec(), vec![3.0, 7.0]);
+    }
+
+    #[test]
+    fn test_broadcast_sub_1d_to_2d_rows() {
+        let t = tensor2d_from(&[vec![10.0, 20.0], vec![30.0, 40.0]]);
+        let v = Array1::from_vec(vec![1.0, 2.0]);
+        let result = NdarrayBackend::broadcast_sub_1d_to_2d_rows(&t, &v);
+        assert_eq!(
+            result.0,
+            Array2::from_shape_vec((2, 2), vec![9.0, 18.0, 29.0, 38.0]).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_broadcast_div_1d_to_2d_rows() {
+        let t = tensor2d_from(&[vec![10.0, 20.0], vec![30.0, 40.0]]);
+        let v = Array1::from_vec(vec![2.0, 4.0]);
+        let result = NdarrayBackend::broadcast_div_1d_to_2d_rows(&t, &v);
+        assert_eq!(
+            result.0,
+            Array2::from_shape_vec((2, 2), vec![5.0, 5.0, 15.0, 10.0]).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_broadcast_mul_1d_to_2d_rows() {
+        let t = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        let v = Array1::from_vec(vec![10.0, 20.0]);
+        let result = NdarrayBackend::broadcast_mul_1d_to_2d_rows(&t, &v);
+        assert_eq!(
+            result.0,
+            Array2::from_shape_vec((2, 2), vec![10.0, 40.0, 30.0, 80.0]).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_broadcast_add_1d_to_2d_rows() {
+        let t = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        let v = Array1::from_vec(vec![10.0, 20.0]);
+        let result = NdarrayBackend::broadcast_add_1d_to_2d_rows(&t, &v);
+        assert_eq!(
+            result.0,
+            Array2::from_shape_vec((2, 2), vec![11.0, 22.0, 13.0, 24.0]).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_sqrt_1d() {
+        let t = Array1::from_vec(vec![4.0, 9.0, 16.0]);
+        let result = NdarrayBackend::sqrt_1d(&t);
+        assert_eq!(result.to_vec(), vec![2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_sqrt_2d() {
+        let t = tensor2d_from(&[vec![4.0, 9.0], vec![16.0, 25.0]]);
+        let result = NdarrayBackend::sqrt_2d(&t);
+        assert_eq!(
+            result.0,
+            Array2::from_shape_vec((2, 2), vec![2.0, 3.0, 4.0, 5.0]).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_matvec_unchecked() {
+        let a = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        let x = Array1::from_vec(vec![1.0, 2.0]);
+        let y = NdarrayBackend::_matvec_unchecked(&a, &x);
+        assert_eq!(y.to_vec(), vec![5.0, 11.0]);
+    }
+
+    #[test]
+    fn test_matvec_transposed_unchecked() {
+        let a = tensor2d_from(&[vec![1.0, 2.0], vec![3.0, 4.0]]);
+        let x = Array1::from_vec(vec![1.0, 0.0]);
+        let y = NdarrayBackend::_matvec_transposed_unchecked(&a, &x);
+        assert_eq!(y.to_vec(), vec![1.0, 2.0]);
     }
 }
