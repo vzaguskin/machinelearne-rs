@@ -522,6 +522,8 @@ impl<B: Backend> FittedTransformer<B> for FittedPipeline<B> {
 mod tests {
     use super::*;
     use crate::backend::CpuBackend;
+    use crate::preprocessing::encoding::{OneHotEncoder, OrdinalEncoder};
+    use crate::preprocessing::imputation::{ImputeStrategy, SimpleImputer};
     use crate::preprocessing::scaling::NormType;
 
     fn create_test_data() -> Tensor2D<CpuBackend> {
@@ -670,5 +672,129 @@ mod tests {
 
         let names = fitted.step_names();
         assert_eq!(names, vec!["StandardScaler", "MinMaxScaler"]);
+    }
+
+    #[test]
+    fn test_pipeline_serialization_all_scalers() {
+        let data = create_test_data();
+
+        let pipeline = Pipeline::<CpuBackend>::new()
+            .add_standard_scaler(StandardScaler::new())
+            .add_minmax_scaler(MinMaxScaler::new())
+            .add_robust_scaler(RobustScaler::new())
+            .add_maxabs_scaler(MaxAbsScaler::new());
+
+        let fitted = pipeline.fit(&data).unwrap();
+
+        let temp_file = std::env::temp_dir().join("test_pipeline_all_scalers.bin");
+        fitted.save_to_file(&temp_file).unwrap();
+
+        let loaded = FittedPipeline::<CpuBackend>::load_from_file(&temp_file).unwrap();
+
+        assert_eq!(loaded.step_names().len(), 4);
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_pipeline_serialization_normalizer() {
+        let data = create_test_data();
+
+        let pipeline = Pipeline::<CpuBackend>::new().add_normalizer(Normalizer::new(NormType::L2));
+
+        let fitted = pipeline.fit(&data).unwrap();
+
+        let temp_file = std::env::temp_dir().join("test_pipeline_normalizer.bin");
+        fitted.save_to_file(&temp_file).unwrap();
+
+        let loaded = FittedPipeline::<CpuBackend>::load_from_file(&temp_file).unwrap();
+
+        let t1 = fitted.transform(&data).unwrap();
+        let t2 = loaded.transform(&data).unwrap();
+
+        let v1 = t1.ravel().to_vec();
+        let v2 = t2.ravel().to_vec();
+        for (a, b) in v1.iter().zip(v2.iter()) {
+            assert!((a - b).abs() < 1e-6);
+        }
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_pipeline_serialization_imputer() {
+        let data_with_nan =
+            Tensor2D::<CpuBackend>::new(vec![1.0f32, f32::NAN, 2.0, 10.0, 3.0, 20.0], 3, 2);
+
+        let pipeline = Pipeline::<CpuBackend>::new()
+            .add_simple_imputer(SimpleImputer::new(
+                crate::preprocessing::imputation::ImputeStrategy::Mean,
+            ))
+            .add_standard_scaler(StandardScaler::new());
+
+        let fitted = pipeline.fit(&data_with_nan).unwrap();
+
+        let temp_file = std::env::temp_dir().join("test_pipeline_imputer.bin");
+        fitted.save_to_file(&temp_file).unwrap();
+
+        let loaded = FittedPipeline::<CpuBackend>::load_from_file(&temp_file).unwrap();
+        assert_eq!(loaded.step_names().len(), 2);
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_pipeline_serialization_encoders() {
+        // Categorical data: 0, 1, 2
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0, 0.0, 2.0, 1.0, 0.0], 3, 2);
+
+        let pipeline = Pipeline::<CpuBackend>::new()
+            .add_one_hot_encoder(OneHotEncoder::new())
+            .add_ordinal_encoder(OrdinalEncoder::new());
+
+        let fitted = pipeline.fit(&data).unwrap();
+
+        let temp_file = std::env::temp_dir().join("test_pipeline_encoders.bin");
+        fitted.save_to_file(&temp_file).unwrap();
+
+        let loaded = FittedPipeline::<CpuBackend>::load_from_file(&temp_file).unwrap();
+        assert_eq!(loaded.step_names(), vec!["OneHotEncoder", "OrdinalEncoder"]);
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_pipeline_from_params_error() {
+        let params = PipelineParams {
+            n_steps: 0,
+            n_features: 0,
+        };
+        let result = FittedPipeline::<CpuBackend>::from_params(params);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pipeline_inverse_transform_feature_mismatch() {
+        let data = create_test_data();
+        let pipeline = Pipeline::<CpuBackend>::new().add_standard_scaler(StandardScaler::new());
+
+        let fitted = pipeline.fit(&data).unwrap();
+
+        let wrong_data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0], 1, 3);
+        let result = fitted.inverse_transform(&wrong_data);
+
+        assert!(matches!(
+            result,
+            Err(PreprocessingError::FeatureMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn test_pipeline_n_features_in() {
+        let data = create_test_data();
+        let pipeline = Pipeline::<CpuBackend>::new().add_standard_scaler(StandardScaler::new());
+
+        let fitted = pipeline.fit(&data).unwrap();
+        assert_eq!(fitted.n_features_in(), 2);
     }
 }

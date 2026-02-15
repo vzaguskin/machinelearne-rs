@@ -378,4 +378,65 @@ mod tests {
             })
         ));
     }
+
+    #[test]
+    fn test_simple_imputer_most_frequent() {
+        // Create data where most frequent is clear
+        let data = Tensor2D::<CpuBackend>::new(
+            vec![1.0f32, f32::NAN, 1.0, 2.0, 1.0, 2.0], // col 0: [1, 1, 1], col 1: [NaN, 2, 2]
+            3,
+            2,
+        );
+
+        let imputer = SimpleImputer::<CpuBackend>::new(ImputeStrategy::MostFrequent);
+        let fitted = imputer.fit(&data).unwrap();
+
+        let stats = fitted.statistics().to_vec();
+        assert!((stats[0] - 1.0).abs() < 1e-6); // 1 is most frequent in col 0
+        assert!((stats[1] - 2.0).abs() < 1e-6); // 2 is most frequent in col 1
+    }
+
+    #[test]
+    fn test_simple_imputer_empty_data() {
+        let data = Tensor2D::<CpuBackend>::zeros(0, 2);
+
+        let imputer = SimpleImputer::<CpuBackend>::new(ImputeStrategy::Mean);
+        let result = imputer.fit(&data);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_simple_imputer_save_load_file() {
+        let data = create_test_data_with_missing();
+        let imputer = SimpleImputer::<CpuBackend>::new(ImputeStrategy::Mean);
+        let fitted = imputer.fit(&data).unwrap();
+
+        let temp_file = std::env::temp_dir().join("test_imputer.bin");
+        fitted.save_to_file(&temp_file).unwrap();
+
+        let loaded = FittedSimpleImputer::<CpuBackend>::load_from_file(&temp_file).unwrap();
+
+        assert_eq!(loaded.n_features_in(), fitted.n_features_in());
+
+        let i1 = fitted.transform(&data).unwrap();
+        let i2 = loaded.transform(&data).unwrap();
+
+        let v1 = i1.ravel().to_vec();
+        let v2 = i2.ravel().to_vec();
+        for (a, b) in v1.iter().zip(v2.iter()) {
+            assert!((a - b).abs() < 1e-6);
+        }
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_simple_imputer_n_features_in() {
+        let data = create_test_data_with_missing();
+        let imputer = SimpleImputer::<CpuBackend>::new(ImputeStrategy::Mean);
+        let fitted = imputer.fit(&data).unwrap();
+
+        assert_eq!(fitted.n_features_in(), 2);
+    }
 }

@@ -405,4 +405,46 @@ mod tests {
 
         std::fs::remove_file(temp_file).ok();
     }
+
+    #[test]
+    fn test_ordinal_encoder_empty_data() {
+        let data = Tensor2D::<CpuBackend>::zeros(0, 2);
+
+        let encoder = OrdinalEncoder::<CpuBackend>::new();
+        let result = encoder.fit(&data);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ordinal_encoder_feature_mismatch() {
+        let train = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0, 2.0, 3.0], 2, 2);
+        let test = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0, 2.0], 1, 3);
+
+        let encoder = OrdinalEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&train).unwrap();
+
+        let result = fitted.transform(&test);
+        assert!(matches!(
+            result,
+            Err(PreprocessingError::FeatureMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn test_ordinal_encoder_with_handle_unknown() {
+        let encoder =
+            OrdinalEncoder::<CpuBackend>::new().with_handle_unknown(HandleUnknown::Ignore);
+        assert_eq!(encoder.handle_unknown, HandleUnknown::Ignore);
+    }
+
+    #[test]
+    fn test_ordinal_encoder_n_features_in() {
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0, 2.0, 3.0], 2, 2);
+
+        let encoder = OrdinalEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&data).unwrap();
+
+        assert_eq!(fitted.n_features_in(), 2);
+    }
 }

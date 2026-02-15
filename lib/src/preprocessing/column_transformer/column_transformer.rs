@@ -719,6 +719,8 @@ fn hcat_tensors<B: Backend>(tensors: &[Tensor2D<B>]) -> Result<Tensor2D<B>, Prep
 mod tests {
     use super::*;
     use crate::backend::CpuBackend;
+    use crate::preprocessing::imputation::ImputeStrategy;
+    use crate::preprocessing::scaling::NormType;
 
     #[test]
     fn test_column_transformer_basic() {
@@ -857,5 +859,228 @@ mod tests {
             result,
             Err(PreprocessingError::InvalidParameter(_))
         ));
+    }
+
+    #[test]
+    fn test_column_transformer_minmax_scaler() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 10.0, 2.0, 20.0, 3.0, 30.0], 3, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_minmax_scaler(MinMaxScaler::new(), ColumnSpec::All);
+
+        let fitted = ct.fit(&data).unwrap();
+        let transformed = fitted.transform(&data).unwrap();
+
+        // Check values are in [0, 1] range
+        let vals = transformed.ravel().to_vec();
+        for &v in &vals {
+            assert!(v >= -1e-6 && v <= 1.0 + 1e-6);
+        }
+    }
+
+    #[test]
+    fn test_column_transformer_robust_scaler() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 10.0, 2.0, 20.0, 3.0, 30.0], 3, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_robust_scaler(RobustScaler::new(), ColumnSpec::All);
+
+        let fitted = ct.fit(&data).unwrap();
+        let transformed = fitted.transform(&data).unwrap();
+        assert_eq!(transformed.shape(), (3, 2));
+    }
+
+    #[test]
+    fn test_column_transformer_maxabs_scaler() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 10.0, 2.0, 20.0, 3.0, 30.0], 3, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_maxabs_scaler(MaxAbsScaler::new(), ColumnSpec::All);
+
+        let fitted = ct.fit(&data).unwrap();
+        let transformed = fitted.transform(&data).unwrap();
+
+        // Check values are in [-1, 1] range
+        let vals = transformed.ravel().to_vec();
+        for &v in &vals {
+            assert!(v >= -1.0 - 1e-6 && v <= 1.0 + 1e-6);
+        }
+    }
+
+    #[test]
+    fn test_column_transformer_normalizer() {
+        let data = Tensor2D::<CpuBackend>::new(vec![3.0f32, 4.0, 6.0, 8.0], 2, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_normalizer(Normalizer::new(NormType::L2), ColumnSpec::All);
+
+        let fitted = ct.fit(&data).unwrap();
+        let transformed = fitted.transform(&data).unwrap();
+
+        // Each row should have unit norm
+        let vals = transformed.ravel().to_vec();
+        // Row 0: [3, 4] -> [0.6, 0.8], norm = 1
+        assert!((vals[0] - 0.6).abs() < 1e-6);
+        assert!((vals[1] - 0.8).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_column_transformer_simple_imputer() {
+        let data =
+            Tensor2D::<CpuBackend>::new(vec![1.0f32, f32::NAN, 2.0, 10.0, f32::NAN, 20.0], 3, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_simple_imputer(SimpleImputer::new(ImputeStrategy::Mean), ColumnSpec::All);
+
+        let fitted = ct.fit(&data).unwrap();
+        let transformed = fitted.transform(&data).unwrap();
+
+        // Check no NaN values in output
+        let vals = transformed.ravel().to_vec();
+        for &v in &vals {
+            assert!(!v.is_nan());
+        }
+    }
+
+    #[test]
+    fn test_column_transformer_ordinal_encoder() {
+        // Categories: 0, 1, 2
+        let data = Tensor2D::<CpuBackend>::new(vec![0.0f32, 1.0, 2.0, 0.0, 1.0, 2.0], 3, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_ordinal_encoder(OrdinalEncoder::new(), ColumnSpec::All);
+
+        let fitted = ct.fit(&data).unwrap();
+        let transformed = fitted.transform(&data).unwrap();
+        assert_eq!(transformed.shape(), (3, 2));
+    }
+
+    #[test]
+    fn test_column_transformer_inverse_transform_not_supported() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 10.0, 2.0, 20.0], 2, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_standard_scaler(StandardScaler::new(), ColumnSpec::All);
+
+        let fitted = ct.fit(&data).unwrap();
+        let transformed = fitted.transform(&data).unwrap();
+
+        let result = fitted.inverse_transform(&transformed);
+        assert!(matches!(
+            result,
+            Err(PreprocessingError::InvalidParameter(_))
+        ));
+    }
+
+    #[test]
+    fn test_column_transformer_empty_data() {
+        let data = Tensor2D::<CpuBackend>::zeros(0, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_standard_scaler(StandardScaler::new(), ColumnSpec::All);
+
+        let result = ct.fit(&data);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_column_transformer_serialization_all_types() {
+        // Test serialization with multiple transformer types
+        let data = Tensor2D::<CpuBackend>::new(
+            vec![1.0f32, 0.0, 10.0, 2.0, 1.0, 20.0, 3.0, 0.0, 30.0],
+            3,
+            3,
+        );
+
+        let pipeline = Pipeline::<CpuBackend>::new()
+            .add_standard_scaler(StandardScaler::new())
+            .add_minmax_scaler(MinMaxScaler::new());
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_minmax_scaler(MinMaxScaler::new(), ColumnSpec::Indices(vec![0]))
+            .add_one_hot_encoder(OneHotEncoder::new(), ColumnSpec::Indices(vec![1]))
+            .add_ordinal_encoder(OrdinalEncoder::new(), ColumnSpec::Indices(vec![2]))
+            .add_pipeline(pipeline, ColumnSpec::Indices(vec![0]));
+
+        let fitted = ct.fit(&data).unwrap();
+
+        let temp_file = std::env::temp_dir().join("test_column_transformer_all_types.bin");
+        fitted.save_to_file(&temp_file).unwrap();
+
+        let loaded = FittedColumnTransformer::<CpuBackend>::load_from_file(&temp_file).unwrap();
+
+        assert_eq!(loaded.n_features_in(), fitted.n_features_in());
+        assert_eq!(loaded.n_features_out(), fitted.n_features_out());
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_column_transformer_step_names() {
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 10.0, 2.0, 20.0], 2, 2);
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_standard_scaler(StandardScaler::new(), ColumnSpec::Indices(vec![0]))
+            .add_minmax_scaler(MinMaxScaler::new(), ColumnSpec::Indices(vec![1]));
+
+        let fitted = ct.fit(&data).unwrap();
+        let names = fitted.step_names();
+
+        assert_eq!(names.len(), 2);
+        assert_eq!(names[0].0, "StandardScaler");
+        assert_eq!(names[1].0, "MinMaxScaler");
+    }
+
+    #[test]
+    fn test_column_transformer_serialization_comprehensive() {
+        // Test serialization with all types that need coverage
+        let data = Tensor2D::<CpuBackend>::new(
+            vec![1.0f32, f32::NAN, 0.0, 2.0, 20.0, 1.0, 3.0, 30.0, 0.0],
+            3,
+            3,
+        );
+
+        // Pipeline with multiple step types for serialization coverage
+        let pipeline = Pipeline::<CpuBackend>::new()
+            .add_simple_imputer(SimpleImputer::new(ImputeStrategy::Mean))
+            .add_standard_scaler(StandardScaler::new())
+            .add_minmax_scaler(MinMaxScaler::new())
+            .add_robust_scaler(RobustScaler::new())
+            .add_maxabs_scaler(MaxAbsScaler::new())
+            .add_normalizer(Normalizer::new(NormType::L2));
+
+        let ct = ColumnTransformer::<CpuBackend>::new()
+            .add_robust_scaler(RobustScaler::new(), ColumnSpec::Indices(vec![0]))
+            .add_maxabs_scaler(MaxAbsScaler::new(), ColumnSpec::Indices(vec![1]))
+            .add_normalizer(Normalizer::new(NormType::L2), ColumnSpec::Indices(vec![2]))
+            .add_simple_imputer(
+                SimpleImputer::new(ImputeStrategy::Mean),
+                ColumnSpec::Indices(vec![0]),
+            )
+            .add_pipeline(pipeline, ColumnSpec::Indices(vec![0, 1]));
+
+        let fitted = ct.fit(&data).unwrap();
+
+        let temp_file = std::env::temp_dir().join("test_column_transformer_comprehensive.bin");
+        fitted.save_to_file(&temp_file).unwrap();
+
+        let loaded = FittedColumnTransformer::<CpuBackend>::load_from_file(&temp_file).unwrap();
+
+        assert_eq!(loaded.n_features_in(), fitted.n_features_in());
+        assert_eq!(loaded.n_features_out(), fitted.n_features_out());
+
+        // Verify transform gives same results
+        let t1 = fitted.transform(&data).unwrap();
+        let t2 = loaded.transform(&data).unwrap();
+
+        let v1 = t1.ravel().to_vec();
+        let v2 = t2.ravel().to_vec();
+        for (a, b) in v1.iter().zip(v2.iter()) {
+            if !a.is_nan() && !b.is_nan() {
+                assert!((a - b).abs() < 1e-5);
+            }
+        }
+
+        std::fs::remove_file(temp_file).ok();
     }
 }

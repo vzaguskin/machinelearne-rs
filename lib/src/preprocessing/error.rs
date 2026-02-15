@@ -77,3 +77,75 @@ impl From<bincode::Error> for PreprocessingError {
         PreprocessingError::SerializationError(err.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_display_invalid_shape() {
+        let err = PreprocessingError::InvalidShape {
+            expected: "(2, 3)".to_string(),
+            got: "(3, 2)".to_string(),
+        };
+        assert!(err.to_string().contains("Invalid shape"));
+    }
+
+    #[test]
+    fn test_error_display_numerical_error() {
+        let err = PreprocessingError::NumericalError("overflow".to_string());
+        assert!(err.to_string().contains("Numerical error"));
+    }
+
+    #[test]
+    fn test_error_display_missing_values() {
+        let err = PreprocessingError::MissingValues("column 0".to_string());
+        assert!(err.to_string().contains("Missing values"));
+    }
+
+    #[test]
+    fn test_error_display_invalid_parameter() {
+        let err = PreprocessingError::InvalidParameter("bad param".to_string());
+        assert!(err.to_string().contains("Invalid parameter"));
+    }
+
+    #[test]
+    fn test_error_display_serialization_error() {
+        let err = PreprocessingError::SerializationError("failed".to_string());
+        assert!(err.to_string().contains("Serialization error"));
+    }
+
+    #[test]
+    fn test_error_display_io_error() {
+        let err = PreprocessingError::IoError("file not found".to_string());
+        assert!(err.to_string().contains("I/O error"));
+    }
+
+    #[test]
+    fn test_error_display_empty_data() {
+        let err = PreprocessingError::EmptyData("no rows".to_string());
+        assert!(err.to_string().contains("Empty data"));
+    }
+
+    #[test]
+    fn test_error_display_feature_mismatch() {
+        let err = PreprocessingError::FeatureMismatch {
+            expected_features: 5,
+            got_features: 3,
+        };
+        assert!(err.to_string().contains("Feature mismatch"));
+    }
+
+    #[test]
+    fn test_error_from_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "test");
+        let err: PreprocessingError = io_err.into();
+        assert!(matches!(err, PreprocessingError::IoError(_)));
+    }
+
+    #[test]
+    fn test_error_is_std_error() {
+        let err = PreprocessingError::InvalidParameter("test".to_string());
+        let _: &dyn std::error::Error = &err;
+    }
+}

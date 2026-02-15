@@ -321,4 +321,24 @@ mod tests {
 
         std::fs::remove_file(temp_file).ok();
     }
+
+    #[test]
+    fn test_label_encoder_empty_data() {
+        let labels = Tensor1D::<CpuBackend>::new(vec![]);
+
+        let encoder = LabelEncoder::<CpuBackend>::new();
+        let result = encoder.fit(&labels);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_label_encoder_len() {
+        let labels = Tensor1D::<CpuBackend>::new(vec![0.0f32, 1.0, 2.0]);
+
+        let encoder = LabelEncoder::<CpuBackend>::new();
+        let fitted = encoder.fit(&labels).unwrap();
+
+        assert_eq!(fitted.classes().len(), 3);
+    }
 }
