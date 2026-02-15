@@ -19,6 +19,10 @@
 //! ```
 
 use crate::backend::{Backend, Tensor2D};
+use crate::preprocessing::encoding::{
+    FittedOneHotEncoder, FittedOrdinalEncoder, OneHotEncoder, OneHotEncoderParams, OrdinalEncoder,
+    OrdinalEncoderParams,
+};
 use crate::preprocessing::error::PreprocessingError;
 use crate::preprocessing::imputation::{FittedSimpleImputer, SimpleImputer, SimpleImputerParams};
 use crate::preprocessing::scaling::{
@@ -69,6 +73,10 @@ pub enum PipelineStepEnum<B: Backend> {
     Normalizer(FittedNormalizer<B>),
     /// SimpleImputer step.
     SimpleImputer(FittedSimpleImputer<B>),
+    /// OneHotEncoder step.
+    OneHotEncoder(FittedOneHotEncoder<B>),
+    /// OrdinalEncoder step.
+    OrdinalEncoder(FittedOrdinalEncoder<B>),
 }
 
 impl<B: Backend> PipelineStep<B> for PipelineStepEnum<B> {
@@ -80,6 +88,8 @@ impl<B: Backend> PipelineStep<B> for PipelineStepEnum<B> {
             PipelineStepEnum::MaxAbsScaler(t) => t.transform(data),
             PipelineStepEnum::Normalizer(t) => t.transform(data),
             PipelineStepEnum::SimpleImputer(t) => t.transform(data),
+            PipelineStepEnum::OneHotEncoder(t) => t.transform(data),
+            PipelineStepEnum::OrdinalEncoder(t) => t.transform(data),
         }
     }
 
@@ -94,6 +104,8 @@ impl<B: Backend> PipelineStep<B> for PipelineStepEnum<B> {
             PipelineStepEnum::MaxAbsScaler(t) => t.inverse_transform(data),
             PipelineStepEnum::Normalizer(t) => t.inverse_transform(data),
             PipelineStepEnum::SimpleImputer(t) => t.inverse_transform(data),
+            PipelineStepEnum::OneHotEncoder(t) => t.inverse_transform(data),
+            PipelineStepEnum::OrdinalEncoder(t) => t.inverse_transform(data),
         }
     }
 
@@ -105,6 +117,25 @@ impl<B: Backend> PipelineStep<B> for PipelineStepEnum<B> {
             PipelineStepEnum::MaxAbsScaler(_) => "MaxAbsScaler",
             PipelineStepEnum::Normalizer(_) => "Normalizer",
             PipelineStepEnum::SimpleImputer(_) => "SimpleImputer",
+            PipelineStepEnum::OneHotEncoder(_) => "OneHotEncoder",
+            PipelineStepEnum::OrdinalEncoder(_) => "OrdinalEncoder",
+        }
+    }
+}
+
+impl<B: Backend> PipelineStepEnum<B> {
+    /// Get the number of input features for this step.
+    pub fn n_features_in(&self) -> usize {
+        use crate::preprocessing::traits::FittedTransformer;
+        match self {
+            PipelineStepEnum::StandardScaler(t) => t.n_features_in(),
+            PipelineStepEnum::MinMaxScaler(t) => t.n_features_in(),
+            PipelineStepEnum::RobustScaler(t) => t.n_features_in(),
+            PipelineStepEnum::MaxAbsScaler(t) => t.n_features_in(),
+            PipelineStepEnum::Normalizer(t) => t.n_features_in(),
+            PipelineStepEnum::SimpleImputer(t) => t.n_features_in(),
+            PipelineStepEnum::OneHotEncoder(t) => t.n_features_in(),
+            PipelineStepEnum::OrdinalEncoder(t) => t.n_features_in(),
         }
     }
 }
@@ -124,6 +155,8 @@ pub enum UnfittedStepEnum<B: Backend> {
     MaxAbsScaler(MaxAbsScaler<B>),
     Normalizer(Normalizer<B>),
     SimpleImputer(SimpleImputer<B>),
+    OneHotEncoder(OneHotEncoder<B>),
+    OrdinalEncoder(OrdinalEncoder<B>),
 }
 
 impl<B: Backend> FittedStepBuilder<B> for UnfittedStepEnum<B> {
@@ -139,6 +172,10 @@ impl<B: Backend> FittedStepBuilder<B> for UnfittedStepEnum<B> {
             UnfittedStepEnum::MaxAbsScaler(t) => t.fit(data).map(PipelineStepEnum::MaxAbsScaler),
             UnfittedStepEnum::Normalizer(t) => t.fit(data).map(PipelineStepEnum::Normalizer),
             UnfittedStepEnum::SimpleImputer(t) => t.fit(data).map(PipelineStepEnum::SimpleImputer),
+            UnfittedStepEnum::OneHotEncoder(t) => t.fit(data).map(PipelineStepEnum::OneHotEncoder),
+            UnfittedStepEnum::OrdinalEncoder(t) => {
+                t.fit(data).map(PipelineStepEnum::OrdinalEncoder)
+            }
         }
     }
 }
@@ -200,6 +237,18 @@ impl<B: Backend> Pipeline<B> {
     /// Add a SimpleImputer to the pipeline.
     pub fn add_simple_imputer(mut self, imputer: SimpleImputer<B>) -> Self {
         self.steps.push(UnfittedStepEnum::SimpleImputer(imputer));
+        self
+    }
+
+    /// Add a OneHotEncoder to the pipeline.
+    pub fn add_one_hot_encoder(mut self, encoder: OneHotEncoder<B>) -> Self {
+        self.steps.push(UnfittedStepEnum::OneHotEncoder(encoder));
+        self
+    }
+
+    /// Add an OrdinalEncoder to the pipeline.
+    pub fn add_ordinal_encoder(mut self, encoder: OrdinalEncoder<B>) -> Self {
+        self.steps.push(UnfittedStepEnum::OrdinalEncoder(encoder));
         self
     }
 
@@ -278,6 +327,20 @@ impl<B: Backend> FittedPipeline<B> {
     /// Get the names of all steps in the pipeline.
     pub fn step_names(&self) -> Vec<&'static str> {
         self.steps.iter().map(|s| s.step_name()).collect()
+    }
+
+    /// Get a reference to the pipeline steps.
+    pub fn steps(&self) -> &[PipelineStepEnum<B>] {
+        &self.steps
+    }
+
+    /// Create a FittedPipeline from steps (for deserialization).
+    pub fn from_steps(steps: Vec<PipelineStepEnum<B>>, n_features: usize) -> Self {
+        Self {
+            steps,
+            n_features,
+            _backend: PhantomData,
+        }
     }
 }
 
@@ -368,6 +431,14 @@ impl<B: Backend> FittedTransformer<B> for FittedPipeline<B> {
                     "SimpleImputer",
                     bincode::serialize(&t.extract_params()).map_err(std::io::Error::other)?,
                 ),
+                PipelineStepEnum::OneHotEncoder(t) => (
+                    "OneHotEncoder",
+                    bincode::serialize(&t.extract_params()).map_err(std::io::Error::other)?,
+                ),
+                PipelineStepEnum::OrdinalEncoder(t) => (
+                    "OrdinalEncoder",
+                    bincode::serialize(&t.extract_params()).map_err(std::io::Error::other)?,
+                ),
             };
             step_params.push((name.to_string(), bytes));
         }
@@ -418,6 +489,16 @@ impl<B: Backend> FittedTransformer<B> for FittedPipeline<B> {
                     let params: SimpleImputerParams = bincode::deserialize(&step_bytes)
                         .map_err(|e| PreprocessingError::SerializationError(e.to_string()))?;
                     PipelineStepEnum::SimpleImputer(FittedSimpleImputer::from_params(params)?)
+                }
+                "OneHotEncoder" => {
+                    let params: OneHotEncoderParams = bincode::deserialize(&step_bytes)
+                        .map_err(|e| PreprocessingError::SerializationError(e.to_string()))?;
+                    PipelineStepEnum::OneHotEncoder(FittedOneHotEncoder::from_params(params)?)
+                }
+                "OrdinalEncoder" => {
+                    let params: OrdinalEncoderParams = bincode::deserialize(&step_bytes)
+                        .map_err(|e| PreprocessingError::SerializationError(e.to_string()))?;
+                    PipelineStepEnum::OrdinalEncoder(FittedOrdinalEncoder::from_params(params)?)
                 }
                 _ => {
                     return Err(PreprocessingError::SerializationError(format!(

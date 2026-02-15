@@ -835,6 +835,100 @@ impl Backend for CpuBackend {
     fn sqrt_2d(t: &Self::Tensor2D) -> Self::Tensor2D {
         CpuTensor2D::new(t.0.iter().map(|x| x.sqrt()).collect(), t.1, t.2)
     }
+
+    // --- Column manipulation operations ---
+
+    fn hcat_2d(
+        tensors: &[Self::Tensor2D],
+    ) -> Result<Self::Tensor2D, crate::preprocessing::PreprocessingError> {
+        if tensors.is_empty() {
+            return Err(crate::preprocessing::PreprocessingError::InvalidParameter(
+                "Cannot horizontally concatenate empty slice of tensors".to_string(),
+            ));
+        }
+
+        let rows = tensors[0].1;
+        if rows == 0 {
+            return Ok(CpuTensor2D::new(vec![], 0, 0));
+        }
+
+        // Verify all tensors have the same number of rows
+        for t in tensors.iter() {
+            if t.1 != rows {
+                return Err(crate::preprocessing::PreprocessingError::InvalidShape {
+                    expected: format!("({}, ?)", rows),
+                    got: format!("({}, ?)", t.1),
+                });
+            }
+        }
+
+        // Calculate total columns
+        let total_cols: usize = tensors.iter().map(|t| t.2).sum();
+
+        // Concatenate row by row
+        let mut result = Vec::with_capacity(rows * total_cols);
+        for row in 0..rows {
+            for t in tensors {
+                let start = row * t.2;
+                let end = start + t.2;
+                result.extend_from_slice(&t.0[start..end]);
+            }
+        }
+
+        Ok(CpuTensor2D::new(result, rows, total_cols))
+    }
+
+    fn select_columns_2d(t: &Self::Tensor2D, columns: &[usize]) -> Self::Tensor2D {
+        let (rows, cols) = Self::shape(t);
+        if columns.is_empty() {
+            return CpuTensor2D::new(vec![], rows, 0);
+        }
+
+        // Validate column indices
+        for &col in columns {
+            assert!(
+                col < cols,
+                "Column index {} out of bounds (max {})",
+                col,
+                cols - 1
+            );
+        }
+
+        let mut result = Vec::with_capacity(rows * columns.len());
+        for row in 0..rows {
+            for &col in columns {
+                result.push(t.0[row * cols + col]);
+            }
+        }
+
+        CpuTensor2D::new(result, rows, columns.len())
+    }
+
+    fn one_hot_from_indices(indices: &Self::Tensor1D, num_classes: usize) -> Self::Tensor2D {
+        let n_samples = indices.len();
+        if n_samples == 0 || num_classes == 0 {
+            return CpuTensor2D::new(vec![], n_samples, num_classes);
+        }
+
+        // Validate indices
+        for (i, &idx) in indices.iter().enumerate() {
+            assert!(
+                idx >= 0.0 && idx < num_classes as f64 && idx.fract() == 0.0,
+                "Index {} at position {} is not a valid integer in range [0, {})",
+                idx,
+                i,
+                num_classes
+            );
+        }
+
+        let mut result = vec![0.0; n_samples * num_classes];
+        for (i, &idx) in indices.iter().enumerate() {
+            let col = idx as usize;
+            result[i * num_classes + col] = 1.0;
+        }
+
+        CpuTensor2D::new(result, n_samples, num_classes)
+    }
 }
 
 #[cfg(test)]
@@ -1065,5 +1159,123 @@ mod tests {
         let flattened = CpuBackend::ravel_2d(&matrix);
 
         assert_eq!(flattened.to_vec(), data);
+    }
+
+    // === Column manipulation tests ===
+
+    #[test]
+    fn test_hcat_2d_basic() {
+        // [[1, 2]] + [[3, 4]] -> [[1, 2, 3, 4]]
+        let a = CpuTensor2D::new(vec![1.0, 2.0], 1, 2);
+        let b = CpuTensor2D::new(vec![3.0, 4.0], 1, 2);
+        let result = CpuBackend::hcat_2d(&[a, b]).unwrap();
+
+        assert_eq!(result.0, vec![1.0, 2.0, 3.0, 4.0]);
+        assert_eq!((result.1, result.2), (1, 4));
+    }
+
+    #[test]
+    fn test_hcat_2d_multiple_rows() {
+        // [[1, 2],    [[5],    [[1, 2, 5],
+        //  [3, 4]]  +  [6]] ->  [3, 4, 6]]
+        let a = CpuTensor2D::new(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
+        let b = CpuTensor2D::new(vec![5.0, 6.0], 2, 1);
+        let result = CpuBackend::hcat_2d(&[a, b]).unwrap();
+
+        assert_eq!(result.0, vec![1.0, 2.0, 5.0, 3.0, 4.0, 6.0]);
+        assert_eq!((result.1, result.2), (2, 3));
+    }
+
+    #[test]
+    fn test_hcat_2d_three_tensors() {
+        let a = CpuTensor2D::new(vec![1.0, 4.0], 2, 1);
+        let b = CpuTensor2D::new(vec![2.0, 5.0], 2, 1);
+        let c = CpuTensor2D::new(vec![3.0, 6.0], 2, 1);
+        let result = CpuBackend::hcat_2d(&[a, b, c]).unwrap();
+
+        assert_eq!(result.0, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!((result.1, result.2), (2, 3));
+    }
+
+    #[test]
+    fn test_hcat_2d_empty_error() {
+        let result = CpuBackend::hcat_2d(&[]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_select_columns_2d_basic() {
+        // [[1, 2, 3],    select [0, 2]   [[1, 3],
+        //  [4, 5, 6]]                  -> [4, 6]]
+        let t = CpuTensor2D::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3);
+        let result = CpuBackend::select_columns_2d(&t, &[0, 2]);
+
+        assert_eq!(result.0, vec![1.0, 3.0, 4.0, 6.0]);
+        assert_eq!((result.1, result.2), (2, 2));
+    }
+
+    #[test]
+    fn test_select_columns_2d_single() {
+        let t = CpuTensor2D::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3);
+        let result = CpuBackend::select_columns_2d(&t, &[1]);
+
+        assert_eq!(result.0, vec![2.0, 5.0]);
+        assert_eq!((result.1, result.2), (2, 1));
+    }
+
+    #[test]
+    fn test_select_columns_2d_reorder() {
+        // Reordering columns: [2, 0, 1]
+        let t = CpuTensor2D::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3);
+        let result = CpuBackend::select_columns_2d(&t, &[2, 0, 1]);
+
+        assert_eq!(result.0, vec![3.0, 1.0, 2.0, 6.0, 4.0, 5.0]);
+    }
+
+    #[test]
+    fn test_select_columns_2d_empty() {
+        let t = CpuTensor2D::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3);
+        let result = CpuBackend::select_columns_2d(&t, &[]);
+
+        assert_eq!(result.0, vec![]);
+        assert_eq!((result.1, result.2), (2, 0));
+    }
+
+    #[test]
+    fn test_one_hot_from_indices_basic() {
+        // [0, 1, 2] with 3 classes -> [[1,0,0], [0,1,0], [0,0,1]]
+        let indices = vec![0.0, 1.0, 2.0];
+        let result = CpuBackend::one_hot_from_indices(&indices, 3);
+
+        assert_eq!(result.0, vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]);
+        assert_eq!((result.1, result.2), (3, 3));
+    }
+
+    #[test]
+    fn test_one_hot_from_indices_repeated() {
+        // [0, 1, 0] with 2 classes -> [[1,0], [0,1], [1,0]]
+        let indices = vec![0.0, 1.0, 0.0];
+        let result = CpuBackend::one_hot_from_indices(&indices, 2);
+
+        assert_eq!(result.0, vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0]);
+        assert_eq!((result.1, result.2), (3, 2));
+    }
+
+    #[test]
+    fn test_one_hot_from_indices_empty() {
+        let indices: Vec<f64> = vec![];
+        let result = CpuBackend::one_hot_from_indices(&indices, 3);
+
+        assert_eq!(result.0, vec![]);
+        assert_eq!((result.1, result.2), (0, 3));
+    }
+
+    #[test]
+    fn test_one_hot_zero_classes() {
+        let indices = vec![0.0, 1.0];
+        let result = CpuBackend::one_hot_from_indices(&indices, 0);
+
+        assert_eq!(result.0, vec![]);
+        assert_eq!((result.1, result.2), (2, 0));
     }
 }

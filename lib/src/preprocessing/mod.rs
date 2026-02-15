@@ -27,8 +27,19 @@
 //! ## Imputation
 //! - [`SimpleImputer`]: Fill missing values with mean, median, most_frequent, or constant
 //!
+//! ## Encoding
+//! - [`OneHotEncoder`]: One-hot (dummy) encoding for categorical features
+//! - [`OrdinalEncoder`]: Ordinal (integer) encoding for categorical features
+//! - [`LabelEncoder`]: Label encoding for 1D classification targets
+//!
+//! ## Feature Engineering
+//! - [`PolynomialFeatures`]: Generate polynomial and interaction features
+//!
 //! ## Pipeline
 //! - [`Pipeline`]: Chain multiple transformers together
+//!
+//! ## Column Transformer
+//! - [`ColumnTransformer`]: Apply different transformers to different columns
 //!
 //! # Example
 //!
@@ -54,16 +65,32 @@
 //! let scaled_test = loaded.transform(&test_data)?;
 //! ```
 
+pub mod column_transformer;
+pub mod encoding;
 pub mod error;
+pub mod feature_engineering;
 pub mod imputation;
 pub mod pipeline;
+pub mod predictive_pipeline;
 pub mod scaling;
 pub mod traits;
 
 // Re-export main types
+pub use column_transformer::{
+    ColumnSpec, ColumnTransformer, ColumnTransformerParams, FittedColumnTransformer,
+};
+pub use encoding::{
+    FittedLabelEncoder, FittedOneHotEncoder, FittedOrdinalEncoder, HandleUnknown, LabelEncoder,
+    LabelEncoderParams, OneHotEncoder, OneHotEncoderParams, OneHotOutput, OrdinalEncoder,
+    OrdinalEncoderParams,
+};
 pub use error::PreprocessingError;
+pub use feature_engineering::{
+    FittedPolynomialFeatures, PolynomialFeatures, PolynomialFeaturesParams,
+};
 pub use imputation::{FittedSimpleImputer, ImputeStrategy, SimpleImputer, SimpleImputerParams};
 pub use pipeline::{FittedPipeline, Pipeline, PipelineParams, PipelineStep, PipelineStepEnum};
+pub use predictive_pipeline::{PredictivePipeline, PredictivePipelineParams};
 pub use scaling::{
     FittedMaxAbsScaler, FittedMinMaxScaler, FittedNormalizer, FittedRobustScaler,
     FittedStandardScaler, MaxAbsScaler, MaxAbsScalerParams, MinMaxScaler, MinMaxScalerConfig,

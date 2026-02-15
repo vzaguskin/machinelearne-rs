@@ -1,5 +1,5 @@
 use super::Backend;
-use ndarray::{Array1, Array2, Ix1, Ix2};
+use ndarray::{Array1, Array2, Ix1};
 
 /// CPU-based tensor backend implementation using the `ndarray` crate.
 ///
@@ -685,6 +685,102 @@ impl super::Backend for NdarrayBackend {
 
     fn sqrt_2d(t: &Self::Tensor2D) -> Self::Tensor2D {
         NdarrayTensor2D(t.0.mapv(f64::sqrt))
+    }
+
+    // --- Column manipulation operations ---
+
+    fn hcat_2d(
+        tensors: &[Self::Tensor2D],
+    ) -> Result<Self::Tensor2D, crate::preprocessing::PreprocessingError> {
+        if tensors.is_empty() {
+            return Err(crate::preprocessing::PreprocessingError::InvalidParameter(
+                "Cannot horizontally concatenate empty slice of tensors".to_string(),
+            ));
+        }
+
+        let rows = tensors[0].0.nrows();
+        if rows == 0 {
+            return Ok(NdarrayTensor2D(
+                Array2::from_shape_vec((0, 0), vec![]).unwrap(),
+            ));
+        }
+
+        // Verify all tensors have the same number of rows
+        for t in tensors.iter() {
+            if t.0.nrows() != rows {
+                return Err(crate::preprocessing::PreprocessingError::InvalidShape {
+                    expected: format!("({}, ?)", rows),
+                    got: format!("({}, ?)", t.0.nrows()),
+                });
+            }
+        }
+
+        // Calculate total columns
+        let total_cols: usize = tensors.iter().map(|t| t.0.ncols()).sum();
+
+        // Manually concatenate by copying data
+        let mut result = Array2::zeros((rows, total_cols));
+        let mut col_offset = 0;
+        for t in tensors {
+            let ncols = t.0.ncols();
+            for r in 0..rows {
+                for c in 0..ncols {
+                    result[[r, col_offset + c]] = t.0[[r, c]];
+                }
+            }
+            col_offset += ncols;
+        }
+
+        Ok(NdarrayTensor2D(result))
+    }
+
+    fn select_columns_2d(t: &Self::Tensor2D, columns: &[usize]) -> Self::Tensor2D {
+        let (rows, ncols) = t.0.dim();
+        if columns.is_empty() {
+            return NdarrayTensor2D(Array2::from_shape_vec((rows, 0), vec![]).unwrap());
+        }
+
+        // Validate column indices
+        for &col in columns {
+            assert!(
+                col < ncols,
+                "Column index {} out of bounds (max {})",
+                col,
+                ncols - 1
+            );
+        }
+
+        // Use ndarray's select method
+        let selected = t.0.select(ndarray::Axis(1), columns);
+        NdarrayTensor2D(selected)
+    }
+
+    fn one_hot_from_indices(indices: &Self::Tensor1D, num_classes: usize) -> Self::Tensor2D {
+        let n_samples = indices.len();
+        if n_samples == 0 || num_classes == 0 {
+            return NdarrayTensor2D(
+                Array2::from_shape_vec((n_samples, num_classes), vec![]).unwrap(),
+            );
+        }
+
+        // Validate indices
+        for (i, &idx) in indices.iter().enumerate() {
+            assert!(
+                idx >= 0.0 && idx < num_classes as f64 && idx.fract() == 0.0,
+                "Index {} at position {} is not a valid integer in range [0, {})",
+                idx,
+                i,
+                num_classes
+            );
+        }
+
+        let mut result = Array2::zeros((n_samples, num_classes));
+        for (i, &idx) in indices.iter().enumerate() {
+            let col = idx as usize;
+            result[[i, col]] = 1.0;
+        }
+
+        NdarrayTensor2D(result)
     }
 }
 

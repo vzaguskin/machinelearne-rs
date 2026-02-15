@@ -45,6 +45,8 @@
 //!
 //! See `cpu.rs` for a reference implementation.
 
+use crate::preprocessing::PreprocessingError;
+
 #[cfg(feature = "cpu")]
 pub mod cpu;
 #[cfg(feature = "cpu")]
@@ -435,4 +437,53 @@ pub trait Backend: Clone + Copy + 'static {
 
     /// Sqrt of all elements in a 2D tensor.
     fn sqrt_2d(t: &Self::Tensor2D) -> Self::Tensor2D;
+
+    // --- Column manipulation operations ---
+
+    /// Horizontally concatenate 2D tensors (stack columns side by side).
+    ///
+    /// All input tensors must have the same number of rows.
+    /// Returns a new tensor with shape (rows, sum of all cols).
+    ///
+    /// # Arguments
+    /// * `tensors` - Slice of 2D tensors to concatenate
+    ///
+    /// # Panics
+    /// Panics if tensors have different row counts or if the slice is empty.
+    ///
+    /// # Example
+    /// ```ignore
+    /// // [[1, 2]] + [[3]] -> [[1, 2, 3]]
+    /// let a = Tensor2D::new(vec![1.0, 2.0], 1, 2);
+    /// let b = Tensor2D::new(vec![3.0], 1, 1);
+    /// let c = B::hcat_2d(&[a, b]); // shape (1, 3)
+    /// ```
+    fn hcat_2d(tensors: &[Self::Tensor2D]) -> Result<Self::Tensor2D, PreprocessingError>;
+
+    /// Extract specific columns from a 2D tensor.
+    ///
+    /// Returns a new tensor with only the specified columns, preserving row order.
+    ///
+    /// # Arguments
+    /// * `t` - Input 2D tensor
+    /// * `columns` - Indices of columns to extract (in order)
+    ///
+    /// # Panics
+    /// Panics if any column index is out of bounds.
+    fn select_columns_2d(t: &Self::Tensor2D, columns: &[usize]) -> Self::Tensor2D;
+
+    /// Create a one-hot encoded matrix from integer indices.
+    ///
+    /// Each index becomes a row with a 1 at the index position and 0 elsewhere.
+    ///
+    /// # Arguments
+    /// * `indices` - 1D tensor of integer class indices (0 to num_classes-1)
+    /// * `num_classes` - Total number of classes (determines output column count)
+    ///
+    /// # Returns
+    /// A 2D tensor of shape (indices.len(), num_classes)
+    ///
+    /// # Panics
+    /// Panics if any index >= num_classes.
+    fn one_hot_from_indices(indices: &Self::Tensor1D, num_classes: usize) -> Self::Tensor2D;
 }
