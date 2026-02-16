@@ -3,6 +3,217 @@
 //! This module provides builder-pattern types for defining parameter grids
 //! to search over during hyperparameter tuning.
 
+// ============================================================================
+// Preprocessing Types
+// ============================================================================
+
+/// Types of scalers for preprocessing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ScalerType {
+    /// StandardScaler (zero mean, unit variance).
+    Standard,
+    /// MinMaxScaler (scale to [0, 1] or custom range).
+    MinMax,
+    /// RobustScaler (uses median and IQR, robust to outliers).
+    Robust,
+    /// MaxAbsScaler (scale by max absolute value).
+    MaxAbs,
+    /// No scaling.
+    #[default]
+    None,
+}
+
+/// Strategies for imputing missing values.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum ImputeStrategy {
+    /// Replace with mean of the feature.
+    #[default]
+    Mean,
+    /// Replace with median of the feature.
+    Median,
+    /// Replace with most frequent value.
+    MostFrequent,
+    /// Replace with a constant value.
+    Constant(f32),
+}
+
+/// Parameter grid for scaler selection.
+#[derive(Clone, Debug, Default)]
+pub struct ScalerGrid {
+    /// Scaler types to search.
+    pub types: Vec<ScalerType>,
+}
+
+impl ScalerGrid {
+    /// Create a new scaler grid.
+    pub fn new(types: Vec<ScalerType>) -> Self {
+        Self { types }
+    }
+
+    /// Returns the number of scaler types.
+    pub fn len(&self) -> usize {
+        self.types.len()
+    }
+
+    /// Returns true if there are no scaler types.
+    pub fn is_empty(&self) -> bool {
+        self.types.is_empty()
+    }
+}
+
+/// Parameter grid for imputer selection.
+#[derive(Clone, Debug, Default)]
+pub struct ImputerGrid {
+    /// Impute strategies to search.
+    pub strategies: Vec<ImputeStrategy>,
+}
+
+impl ImputerGrid {
+    /// Create a new imputer grid.
+    pub fn new(strategies: Vec<ImputeStrategy>) -> Self {
+        Self { strategies }
+    }
+
+    /// Returns the number of impute strategies.
+    pub fn len(&self) -> usize {
+        self.strategies.len()
+    }
+
+    /// Returns true if there are no strategies.
+    pub fn is_empty(&self) -> bool {
+        self.strategies.is_empty()
+    }
+}
+
+/// Concrete preprocessing parameters for a single configuration.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PreprocessingParams {
+    /// Selected scaler type.
+    pub scaler: ScalerType,
+    /// Selected impute strategy (None means no imputation).
+    pub imputer: Option<ImputeStrategy>,
+    /// Polynomial degree (1 = no expansion).
+    pub poly_degree: usize,
+}
+
+/// Parameter grid for preprocessing options.
+#[derive(Clone, Debug, Default)]
+pub struct PreprocessingGrid {
+    /// Scaler options.
+    pub scaler: Option<ScalerGrid>,
+    /// Imputer options.
+    pub imputer: Option<ImputerGrid>,
+    /// Polynomial feature options.
+    pub polynomial: Option<PolynomialGrid>,
+}
+
+impl PreprocessingGrid {
+    /// Create a new empty preprocessing grid.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add scaler options.
+    pub fn with_scaler(mut self, scaler: ScalerGrid) -> Self {
+        self.scaler = Some(scaler);
+        self
+    }
+
+    /// Add imputer options.
+    pub fn with_imputer(mut self, imputer: ImputerGrid) -> Self {
+        self.imputer = Some(imputer);
+        self
+    }
+
+    /// Add polynomial options.
+    pub fn with_polynomial(mut self, polynomial: PolynomialGrid) -> Self {
+        self.polynomial = Some(polynomial);
+        self
+    }
+
+    /// Count total preprocessing combinations.
+    pub fn n_combinations(&self) -> usize {
+        let n_scaler = self.scaler.as_ref().map(|s| s.len()).unwrap_or(1);
+        let n_imputer = self.imputer.as_ref().map(|i| i.len()).unwrap_or(1);
+        let n_poly = self.polynomial.as_ref().map(|p| p.len()).unwrap_or(1);
+
+        n_scaler * n_imputer * n_poly
+    }
+
+    /// Iterate over all preprocessing combinations.
+    pub fn iter(&self) -> PreprocessingGridIterator {
+        PreprocessingGridIterator {
+            grid: self.clone(),
+            current_scaler: 0,
+            current_imputer: 0,
+            current_poly: 0,
+        }
+    }
+}
+
+/// Iterator over preprocessing parameter combinations.
+pub struct PreprocessingGridIterator {
+    grid: PreprocessingGrid,
+    current_scaler: usize,
+    current_imputer: usize,
+    current_poly: usize,
+}
+
+impl Iterator for PreprocessingGridIterator {
+    type Item = PreprocessingParams;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let scalers: Vec<ScalerType> = self
+            .grid
+            .scaler
+            .as_ref()
+            .map(|s| s.types.clone())
+            .unwrap_or_else(|| vec![ScalerType::None]);
+
+        let imputers: Vec<Option<ImputeStrategy>> = self
+            .grid
+            .imputer
+            .as_ref()
+            .map(|i| i.strategies.iter().copied().map(Some).collect())
+            .unwrap_or_else(|| vec![None]);
+
+        let poly_degrees: Vec<usize> = self
+            .grid
+            .polynomial
+            .as_ref()
+            .map(|p| p.degrees.clone())
+            .unwrap_or_else(|| vec![1]);
+
+        // Check if we've exhausted all combinations
+        if self.current_scaler >= scalers.len() {
+            return None;
+        }
+
+        let params = PreprocessingParams {
+            scaler: scalers[self.current_scaler],
+            imputer: imputers[self.current_imputer],
+            poly_degree: poly_degrees[self.current_poly],
+        };
+
+        // Advance: poly -> imputer -> scaler
+        self.current_poly += 1;
+        if self.current_poly >= poly_degrees.len() {
+            self.current_poly = 0;
+            self.current_imputer += 1;
+            if self.current_imputer >= imputers.len() {
+                self.current_imputer = 0;
+                self.current_scaler += 1;
+            }
+        }
+
+        Some(params)
+    }
+}
+
+// ============================================================================
+// Model Types (existing)
+// ============================================================================
+
 /// A single parameter combination for linear regression training.
 #[derive(Clone, Debug)]
 pub struct ParamCombination {
@@ -299,6 +510,168 @@ impl Iterator for ParamGridIterator {
     }
 }
 
+// ============================================================================
+// Combined Pipeline Types
+// ============================================================================
+
+/// Concrete model parameters for a single configuration.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ModelParams {
+    /// Learning rate for SGD optimizer.
+    pub learning_rate: f64,
+    /// L2 regularization lambda (0.0 for no regularization).
+    pub lambda: f64,
+    /// Batch size for training.
+    pub batch_size: usize,
+    /// Maximum training epochs.
+    pub max_epochs: usize,
+}
+
+impl From<&ParamCombination> for ModelParams {
+    fn from(combo: &ParamCombination) -> Self {
+        Self {
+            learning_rate: combo.learning_rate,
+            lambda: combo.lambda,
+            batch_size: combo.batch_size,
+            max_epochs: combo.max_epochs,
+        }
+    }
+}
+
+/// Concrete pipeline parameters combining preprocessing and model.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PipelineParams {
+    /// Preprocessing parameters.
+    pub preprocessing: PreprocessingParams,
+    /// Model parameters.
+    pub model: ModelParams,
+    /// Cross-validation mean score (populated after evaluation).
+    pub mean_score: f64,
+    /// Cross-validation std score (populated after evaluation).
+    pub std_score: f64,
+}
+
+/// Combined parameter grid for full pipeline search.
+///
+/// # Example
+///
+/// ```rust
+/// use machinelearne_rs::model_selection::{
+///     PipelineGrid, PreprocessingGrid, ScalerGrid, ScalerType,
+///     LinearRegressionGrid, TrainerGrid
+/// };
+///
+/// let preprocessing = PreprocessingGrid::new()
+///     .with_scaler(ScalerGrid::new(vec![ScalerType::Standard, ScalerType::MinMax]));
+///
+/// let model = LinearRegressionGrid::new()
+///     .with_learning_rates(vec![0.01, 0.1]);
+///
+/// let pipeline_grid = PipelineGrid::new(preprocessing, model);
+///
+/// // Total: 2 * 2 = 4 combinations
+/// assert_eq!(pipeline_grid.n_combinations(), 4);
+/// ```
+#[derive(Clone, Debug, Default)]
+pub struct PipelineGrid {
+    /// Preprocessing parameter grid.
+    pub preprocessing: PreprocessingGrid,
+    /// Model parameter grid.
+    pub model: LinearRegressionGrid,
+}
+
+impl PipelineGrid {
+    /// Create a new pipeline grid.
+    pub fn new(preprocessing: PreprocessingGrid, model: LinearRegressionGrid) -> Self {
+        Self {
+            preprocessing,
+            model,
+        }
+    }
+
+    /// Create with just model grid (no preprocessing search).
+    pub fn model_only(model: LinearRegressionGrid) -> Self {
+        Self {
+            preprocessing: PreprocessingGrid::default(),
+            model,
+        }
+    }
+
+    /// Count total pipeline combinations.
+    pub fn n_combinations(&self) -> usize {
+        self.preprocessing.n_combinations() * self.model.n_combinations()
+    }
+
+    /// Iterate over all pipeline parameter combinations.
+    pub fn iter(&self) -> PipelineGridIterator {
+        let mut model_iter = self.model.iter();
+        let current_model_params = model_iter.next();
+        let done = current_model_params.is_none();
+
+        PipelineGridIterator {
+            preprocessing_grid: self.preprocessing.clone(),
+            preprocessing_iter: self.preprocessing.iter(),
+            model_iter,
+            current_model_params,
+            done,
+        }
+    }
+}
+
+/// Iterator over pipeline parameter combinations.
+pub struct PipelineGridIterator {
+    preprocessing_grid: PreprocessingGrid,
+    preprocessing_iter: PreprocessingGridIterator,
+    model_iter: ParamGridIterator,
+    current_model_params: Option<ParamCombination>,
+    done: bool,
+}
+
+impl Iterator for PipelineGridIterator {
+    type Item = PipelineParams;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+
+        // Get next preprocessing params
+        if let Some(preproc) = self.preprocessing_iter.next() {
+            let model = self.current_model_params.as_ref().unwrap();
+            return Some(PipelineParams {
+                preprocessing: preproc,
+                model: ModelParams::from(model),
+                mean_score: 0.0,
+                std_score: 0.0,
+            });
+        }
+
+        // Preprocessing exhausted, advance to next model params
+        self.current_model_params = self.model_iter.next();
+        if self.current_model_params.is_none() {
+            self.done = true;
+            return None;
+        }
+
+        // Reset preprocessing iterator for new model params
+        self.preprocessing_iter = self.preprocessing_grid.iter();
+
+        // Get first preprocessing combination with new model params
+        if let Some(preproc) = self.preprocessing_iter.next() {
+            let model = self.current_model_params.as_ref().unwrap();
+            return Some(PipelineParams {
+                preprocessing: preproc,
+                model: ModelParams::from(model),
+                mean_score: 0.0,
+                std_score: 0.0,
+            });
+        }
+
+        self.done = true;
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,5 +804,279 @@ mod tests {
         assert_eq!(combination.batch_size, 32);
         assert_eq!(combination.max_epochs, 1000);
         assert_eq!(combination.poly_degree, 1);
+    }
+
+    // ========================================================================
+    // Preprocessing Grid Tests
+    // ========================================================================
+
+    #[test]
+    fn test_scaler_grid() {
+        let grid = ScalerGrid::new(vec![ScalerType::Standard, ScalerType::MinMax]);
+        assert_eq!(grid.len(), 2);
+        assert!(!grid.is_empty());
+    }
+
+    #[test]
+    fn test_imputer_grid() {
+        let grid = ImputerGrid::new(vec![ImputeStrategy::Mean, ImputeStrategy::Median]);
+        assert_eq!(grid.len(), 2);
+        assert!(!grid.is_empty());
+    }
+
+    #[test]
+    fn test_preprocessing_grid_n_combinations() {
+        let grid = PreprocessingGrid::new()
+            .with_scaler(ScalerGrid::new(vec![
+                ScalerType::Standard,
+                ScalerType::MinMax,
+                ScalerType::Robust,
+            ]))
+            .with_polynomial(PolynomialGrid::new(vec![1, 2]));
+
+        // 3 * 1 * 2 = 6
+        assert_eq!(grid.n_combinations(), 6);
+    }
+
+    #[test]
+    fn test_preprocessing_grid_iterator() {
+        let grid = PreprocessingGrid::new().with_scaler(ScalerGrid::new(vec![
+            ScalerType::Standard,
+            ScalerType::MinMax,
+        ]));
+
+        let combinations: Vec<_> = grid.iter().collect();
+        assert_eq!(combinations.len(), 2);
+
+        // Check all scalers are present
+        let scalers: std::collections::HashSet<_> = combinations.iter().map(|c| c.scaler).collect();
+        assert_eq!(scalers.len(), 2);
+    }
+
+    #[test]
+    fn test_preprocessing_grid_with_imputer() {
+        let grid = PreprocessingGrid::new()
+            .with_scaler(ScalerGrid::new(vec![ScalerType::Standard]))
+            .with_imputer(ImputerGrid::new(vec![
+                ImputeStrategy::Mean,
+                ImputeStrategy::Median,
+            ]));
+
+        // 1 * 2 * 1 = 2
+        assert_eq!(grid.n_combinations(), 2);
+
+        let combinations: Vec<_> = grid.iter().collect();
+        assert_eq!(combinations.len(), 2);
+    }
+
+    #[test]
+    fn test_preprocessing_grid_default() {
+        let grid = PreprocessingGrid::new();
+        assert_eq!(grid.n_combinations(), 1); // Just the defaults
+
+        let params = grid.iter().next().unwrap();
+        assert_eq!(params.scaler, ScalerType::None);
+        assert_eq!(params.imputer, None);
+        assert_eq!(params.poly_degree, 1);
+    }
+
+    // ========================================================================
+    // Pipeline Grid Tests
+    // ========================================================================
+
+    #[test]
+    fn test_pipeline_grid_n_combinations() {
+        let preprocessing = PreprocessingGrid::new().with_scaler(ScalerGrid::new(vec![
+            ScalerType::Standard,
+            ScalerType::MinMax,
+        ]));
+
+        let model = LinearRegressionGrid::new().with_learning_rates(vec![0.01, 0.1]);
+
+        let pipeline_grid = PipelineGrid::new(preprocessing, model);
+
+        // 2 * 2 = 4
+        assert_eq!(pipeline_grid.n_combinations(), 4);
+    }
+
+    #[test]
+    fn test_pipeline_grid_iterator() {
+        let preprocessing = PreprocessingGrid::new().with_scaler(ScalerGrid::new(vec![
+            ScalerType::Standard,
+            ScalerType::MinMax,
+        ]));
+
+        let model = LinearRegressionGrid::new().with_learning_rates(vec![0.01]);
+
+        let pipeline_grid = PipelineGrid::new(preprocessing, model);
+
+        let combinations: Vec<_> = pipeline_grid.iter().collect();
+        assert_eq!(combinations.len(), 2);
+
+        // Verify scalers are present
+        let scalers: std::collections::HashSet<_> = combinations
+            .iter()
+            .map(|c| c.preprocessing.scaler)
+            .collect();
+        assert_eq!(scalers.len(), 2);
+    }
+
+    #[test]
+    fn test_pipeline_grid_model_only() {
+        let model = LinearRegressionGrid::new()
+            .with_learning_rates(vec![0.01, 0.1])
+            .with_lambdas(vec![0.0, 0.1]);
+
+        let pipeline_grid = PipelineGrid::model_only(model);
+
+        // 2 * 2 = 4 (no preprocessing search, so 1 preprocessing combination)
+        assert_eq!(pipeline_grid.n_combinations(), 4);
+    }
+
+    #[test]
+    fn test_pipeline_grid_iterator_multiple_model_params() {
+        let preprocessing =
+            PreprocessingGrid::new().with_scaler(ScalerGrid::new(vec![ScalerType::Standard]));
+
+        let model = LinearRegressionGrid::new()
+            .with_learning_rates(vec![0.01, 0.1])
+            .with_lambdas(vec![0.0, 1.0]);
+
+        let pipeline_grid = PipelineGrid::new(preprocessing, model);
+
+        // 1 * 4 = 4
+        assert_eq!(pipeline_grid.n_combinations(), 4);
+
+        let combinations: Vec<_> = pipeline_grid.iter().collect();
+        assert_eq!(combinations.len(), 4);
+
+        // Verify all learning rates are present
+        let lrs: std::collections::HashSet<_> = combinations
+            .iter()
+            .map(|c| c.model.learning_rate.to_bits())
+            .collect();
+        assert_eq!(lrs.len(), 2);
+
+        // Verify all lambdas are present
+        let lambdas: std::collections::HashSet<_> = combinations
+            .iter()
+            .map(|c| c.model.lambda.to_bits())
+            .collect();
+        assert_eq!(lambdas.len(), 2);
+    }
+
+    #[test]
+    fn test_model_params_from_param_combination() {
+        let combo = ParamCombination {
+            learning_rate: 0.01,
+            lambda: 0.1,
+            batch_size: 32,
+            max_epochs: 100,
+            poly_degree: 2,
+        };
+
+        let params = ModelParams::from(&combo);
+        assert_eq!(params.learning_rate, 0.01);
+        assert_eq!(params.lambda, 0.1);
+        assert_eq!(params.batch_size, 32);
+        assert_eq!(params.max_epochs, 100);
+    }
+
+    #[test]
+    fn test_scaler_grid_empty() {
+        let grid = ScalerGrid::default();
+        assert!(grid.is_empty());
+        assert_eq!(grid.len(), 0);
+    }
+
+    #[test]
+    fn test_imputer_grid_empty() {
+        let grid = ImputerGrid::default();
+        assert!(grid.is_empty());
+        assert_eq!(grid.len(), 0);
+    }
+
+    #[test]
+    fn test_pipeline_params_default() {
+        let params = PipelineParams::default();
+        assert_eq!(params.preprocessing.scaler, ScalerType::None);
+        assert_eq!(params.preprocessing.poly_degree, 0); // usize default is 0
+        assert_eq!(params.model.learning_rate, 0.0);
+        assert_eq!(params.mean_score, 0.0);
+        assert_eq!(params.std_score, 0.0);
+    }
+
+    #[test]
+    fn test_model_params_default() {
+        let params = ModelParams::default();
+        assert_eq!(params.learning_rate, 0.0);
+        assert_eq!(params.lambda, 0.0);
+        assert_eq!(params.batch_size, 0);
+        assert_eq!(params.max_epochs, 0);
+    }
+
+    #[test]
+    fn test_preprocessing_params_default() {
+        let params = PreprocessingParams::default();
+        assert_eq!(params.scaler, ScalerType::None);
+        assert_eq!(params.imputer, None);
+        assert_eq!(params.poly_degree, 0); // usize default is 0
+    }
+
+    #[test]
+    fn test_preprocessing_grid_empty_iterator() {
+        let grid = PreprocessingGrid::default();
+        assert_eq!(grid.n_combinations(), 1); // Returns default params
+
+        let params = grid.iter().next().unwrap();
+        assert_eq!(params.scaler, ScalerType::None);
+    }
+
+    #[test]
+    fn test_scaler_type_variants() {
+        // Test all variants for coverage
+        let scalers = vec![
+            ScalerType::Standard,
+            ScalerType::MinMax,
+            ScalerType::Robust,
+            ScalerType::MaxAbs,
+            ScalerType::None,
+        ];
+
+        for scaler in scalers {
+            let grid = ScalerGrid::new(vec![scaler]);
+            assert_eq!(grid.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_impute_strategy_variants() {
+        // Test all variants for coverage
+        let strategies = vec![
+            ImputeStrategy::Mean,
+            ImputeStrategy::Median,
+            ImputeStrategy::MostFrequent,
+            ImputeStrategy::Constant(0.0),
+        ];
+
+        for strategy in strategies {
+            let grid = ImputerGrid::new(vec![strategy]);
+            assert_eq!(grid.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_sgd_grid_default() {
+        let grid = SGDGrid::default();
+        assert_eq!(grid.learning_rates, vec![0.01]);
+        assert_eq!(grid.len(), 1);
+        assert!(!grid.is_empty());
+    }
+
+    #[test]
+    fn test_sgd_grid_new_empty() {
+        let grid = SGDGrid::new(vec![]);
+        assert!(grid.is_empty());
+        assert_eq!(grid.len(), 0);
     }
 }

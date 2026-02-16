@@ -96,7 +96,12 @@ where
 /// - When `S = Fitted`: implements [`InferenceModel`] — used for prediction and serialization.
 ///
 /// This enforces, at compile time, that you cannot call `predict()` on an untrained model.
-pub struct LinearModel<B: Backend, S> {
+#[derive(Clone)]
+pub struct LinearModel<B: Backend, S>
+where
+    Tensor1D<B>: Clone,
+    Scalar<B>: Clone,
+{
     params: LinearParams<B>,
     _state: std::marker::PhantomData<S>,
 }

@@ -4,6 +4,7 @@
 //! - Train/test splitting
 //! - Cross-validation
 //! - Hyperparameter grid search
+//! - Pipeline-level grid search with preprocessing
 //!
 //! # Example
 //!
@@ -25,11 +26,15 @@
 mod cross_validation;
 mod grid_search;
 mod param_grid;
+mod pipeline_grid_search;
 mod split;
 
 pub use cross_validation::{CVSplit, KFold};
 pub use grid_search::{GridSearchCV, GridSearchCVResult, GridSearchResult};
 pub use param_grid::{
-    LinearRegressionGrid, ParamCombination, PolynomialGrid, RegularizerGrid, SGDGrid, TrainerGrid,
+    ImputeStrategy, ImputerGrid, LinearRegressionGrid, ModelParams, ParamCombination, PipelineGrid,
+    PipelineParams, PolynomialGrid, PreprocessingGrid, PreprocessingParams, RegularizerGrid,
+    SGDGrid, ScalerGrid, ScalerType, TrainerGrid,
 };
+pub use pipeline_grid_search::{PipelineGridSearchCV, PipelineSearchResult, PipelineSearchResultB};
 pub use split::train_test_split;
