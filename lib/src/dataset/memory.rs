@@ -113,6 +113,70 @@ impl InMemoryDataset {
         }
         Ok(Self { x, y })
     }
+
+    /// Creates a subset of the dataset by selecting samples at the given indices.
+    ///
+    /// This is useful for cross-validation splits where you need to extract
+    /// training or validation folds from the full dataset.
+    ///
+    /// # Parameters
+    ///
+    /// - `indices`: Slice of sample indices to include in the subset
+    ///
+    /// # Returns
+    ///
+    /// A new `InMemoryDataset` containing only the samples at the specified indices.
+    /// Returns an error if the indices are empty or any index is out of bounds.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use machinelearne_rs::dataset::memory::InMemoryDataset;
+    /// use machinelearne_rs::dataset::Dataset;
+    ///
+    /// let x = vec![vec![1.0], vec![2.0], vec![3.0], vec![4.0]];
+    /// let y = vec![0.0, 1.0, 2.0, 3.0];
+    /// let dataset = InMemoryDataset::new(x, y).unwrap();
+    ///
+    /// // Get first and third samples
+    /// let subset = dataset.subset(&[0, 2]).unwrap();
+    /// assert_eq!(subset.len(), Some(2));
+    /// ```
+    pub fn subset(&self, indices: &[usize]) -> Result<Self, String> {
+        if indices.is_empty() {
+            return Err("Cannot create empty subset".into());
+        }
+
+        let n_samples = self.x.len();
+        for &idx in indices {
+            if idx >= n_samples {
+                return Err(format!(
+                    "Index {} out of bounds (dataset has {} samples)",
+                    idx, n_samples
+                ));
+            }
+        }
+
+        let subset_x: Vec<Vec<f32>> = indices.iter().map(|&i| self.x[i].clone()).collect();
+        let subset_y: Vec<f32> = indices.iter().map(|&i| self.y[i]).collect();
+
+        Self::new(subset_x, subset_y)
+    }
+
+    /// Returns a reference to the features.
+    pub fn features(&self) -> &[Vec<f32>] {
+        &self.x
+    }
+
+    /// Returns a reference to the targets.
+    pub fn targets(&self) -> &[f32] {
+        &self.y
+    }
+
+    /// Returns the number of features per sample.
+    pub fn n_features(&self) -> usize {
+        self.x[0].len()
+    }
 }
 
 impl Dataset for InMemoryDataset {
@@ -242,5 +306,88 @@ mod tests {
         assert_eq!(batch2.1.to_vec(), vec![1.0]);
 
         assert!(batches.next().is_none());
+    }
+
+    // === Subset Tests ===
+
+    #[test]
+    fn test_subset_basic() {
+        let x = vec![vec![1.0], vec![2.0], vec![3.0], vec![4.0]];
+        let y = vec![0.0, 1.0, 2.0, 3.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let subset = dataset.subset(&[0, 2]).unwrap();
+        assert_eq!(subset.len(), Some(2));
+        assert_eq!(subset.features()[0], vec![1.0]);
+        assert_eq!(subset.features()[1], vec![3.0]);
+        assert_eq!(subset.targets(), &[0.0, 2.0]);
+    }
+
+    #[test]
+    fn test_subset_all_samples() {
+        let x = vec![vec![1.0], vec![2.0]];
+        let y = vec![0.0, 1.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let subset = dataset.subset(&[0, 1]).unwrap();
+        assert_eq!(subset.len(), Some(2));
+        assert_eq!(subset.features().len(), 2);
+    }
+
+    #[test]
+    fn test_subset_duplicated_indices() {
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![0.0, 1.0, 2.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        // Duplicated indices should work (creates copies)
+        let subset = dataset.subset(&[0, 0, 1]).unwrap();
+        assert_eq!(subset.len(), Some(3));
+        assert_eq!(subset.features()[0], vec![1.0]);
+        assert_eq!(subset.features()[1], vec![1.0]);
+        assert_eq!(subset.features()[2], vec![2.0]);
+    }
+
+    #[test]
+    fn test_subset_empty_indices() {
+        let x = vec![vec![1.0], vec![2.0]];
+        let y = vec![0.0, 1.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let result = dataset.subset(&[]);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Cannot create empty subset");
+    }
+
+    #[test]
+    fn test_subset_out_of_bounds() {
+        let x = vec![vec![1.0], vec![2.0]];
+        let y = vec![0.0, 1.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let result = dataset.subset(&[0, 5]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("out of bounds"));
+    }
+
+    #[test]
+    fn test_n_features() {
+        let x = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
+        let y = vec![0.0, 1.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        assert_eq!(dataset.n_features(), 3);
+    }
+
+    #[test]
+    fn test_features_targets_access() {
+        let x = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        let y = vec![0.5, 1.5];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        assert_eq!(dataset.features().len(), 2);
+        assert_eq!(dataset.targets().len(), 2);
+        assert_eq!(dataset.features()[0], vec![1.0, 2.0]);
+        assert_eq!(dataset.targets()[0], 0.5);
     }
 }

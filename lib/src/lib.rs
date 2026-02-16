@@ -62,6 +62,12 @@ pub mod backend;
 /// Data loading utilities and dataset abstractions.
 pub mod dataset;
 
+/// Evaluation metrics for model performance.
+pub mod metrics;
+
+/// Model selection utilities (cross-validation, hyperparameter tuning).
+pub mod model_selection;
+
 /// Data preprocessing transformers for ML pipelines.
 pub mod preprocessing;
 
