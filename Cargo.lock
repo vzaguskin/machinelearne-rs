@@ -332,6 +332,7 @@ dependencies = [
  "ndarray",
  "rand",
  "serde",
+ "serde_json",
  "tempfile",
 ]
 
