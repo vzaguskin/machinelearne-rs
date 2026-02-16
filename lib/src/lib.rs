@@ -71,6 +71,9 @@ pub mod model_selection;
 /// Data preprocessing transformers for ML pipelines.
 pub mod preprocessing;
 
+/// Pipeline utilities for end-to-end ML workflows.
+pub mod pipeline;
+
 /// Differentiable loss functions for model training.
 pub mod loss;
 

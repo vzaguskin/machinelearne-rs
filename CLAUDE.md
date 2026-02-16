@@ -46,6 +46,11 @@ cargo run --example train_linear_ndarray   # Using ndarray backend (requires --f
 cargo run --example train_logistic        # Binary classification with BCE
 ```
 
+## Git Workflow
+
+1. **Always run `cargo fmt` before committing** to ensure consistent code formatting.
+2. **Always work in a feature branch**, never commit directly to `main`. Create a branch like `feature/your-feature-name`.
+
 ## Architecture Overview
 
 ### Core Design Principles

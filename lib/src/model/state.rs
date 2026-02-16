@@ -6,6 +6,7 @@
 /// - Inference methods (`predict`) are **not available** until the model is converted to `Fitted`.
 ///
 /// This prevents accidental use of an untrained model for prediction.
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Unfitted;
 
 /// A marker type indicating that a model has been **fully trained**.
@@ -15,4 +16,5 @@ pub struct Unfitted;
 ///
 /// A `Fitted` model contains **only inference parameters** — no optimizer state,
 /// loss function, or training hyperparameters (per ADR-0001).
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Fitted;
