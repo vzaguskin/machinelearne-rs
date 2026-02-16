@@ -1,4 +1,3 @@
-use super::Backend;
 use ndarray::{Array1, Array2, Ix1};
 
 /// CPU-based tensor backend implementation using the `ndarray` crate.
@@ -72,9 +71,7 @@ impl super::Backend for NdarrayBackend {
     type Device = (); // CPU-only for now
 
     /// Returns the default device for this backend (unit type for CPU execution).
-    fn default_device() -> Self::Device {
-        ()
-    }
+    fn default_device() -> Self::Device {}
 
     /// Creates a 1D tensor filled with zeros.
     ///
@@ -788,6 +785,7 @@ impl super::Backend for NdarrayBackend {
 #[cfg(feature = "ndarray")]
 mod tests {
     use super::*;
+    use crate::backend::Backend;
     use ndarray::{Array1, Array2};
 
     // Helper to create 2D tensor from nested vec
