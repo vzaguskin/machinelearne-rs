@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### Regularization
+- `L1<B>`: L1 (Lasso) regularizer for encouraging sparsity in model weights
+
 #### Backend
 - `sub_scalar_1d`, `div_scalar_1d`: Subtract/divide scalar from 1D tensor elements
 - `sub_scalar_2d`, `div_scalar_2d`: Subtract/divide scalar from 2D tensor elements

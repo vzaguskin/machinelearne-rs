@@ -1,4 +1,5 @@
 use crate::backend::scalar::Scalar;
+use crate::backend::tensorlike::TensorLike;
 use crate::backend::Backend;
 use crate::loss::{LinearParams, Tensor1D};
 use crate::model::linear::LinearRegression;
@@ -65,6 +66,62 @@ where
         )
     }
 }
+
+/// L1 (Lasso) regularization: penalty = λ * ||w||₁ = λ * Σ|w_i|.
+///
+/// Only applies to weights; bias is not regularized (standard practice).
+///
+/// Gradient w.r.t. weights: ∂/∂w (λ * |w|) = λ * sign(w).
+///
+/// L1 encourages sparsity in model weights, making it useful for feature selection
+/// and producing more interpretable models compared to L2.
+pub struct L1<B: Backend> {
+    lambda: Scalar<B>,
+}
+
+impl<B: Backend> L1<B> {
+    /// Creates an L1 regularizer with strength `lambda`.
+    ///
+    /// # Arguments
+    /// * `lambda` — non-negative regularization coefficient (λ ≥ 0).
+    pub fn new(lambda: f64) -> Self {
+        Self {
+            lambda: Scalar::<B>::new(lambda),
+        }
+    }
+}
+
+impl<B> Regularizer<B, LinearRegression<B>> for L1<B>
+where
+    B: Backend,
+{
+    fn regularizer_penalty_grad(
+        &self,
+        model: &LinearRegression<B>,
+    ) -> (
+        Scalar<B>,
+        <LinearRegression<B> as TrainableModel<B>>::Gradients,
+    ) {
+        let params = model.params();
+
+        // Penalty: λ * ||w||₁ = λ * Σ|w_i|
+        let abs_weights = params.weights.abs();
+        let l1_norm = abs_weights.sum();
+        let loss = self.lambda * l1_norm;
+
+        // Gradient: λ * sign(w)
+        let weight_grad = params.weights.sign().scale(&self.lambda);
+
+        (
+            loss,
+            LinearParams::<B> {
+                weights: weight_grad,
+                bias: Scalar::<B>::new(0.),
+            },
+        )
+    }
+}
+
 /// A no-op regularizer that adds zero penalty and zero gradient.
 ///
 /// Useful as a default when no regularization is desired.
@@ -149,6 +206,90 @@ mod tests {
         let l2 = L2::<CpuBackend>::new(1.0);
         let (penalty, grad) = l2.regularizer_penalty_grad(&model);
 
+        assert_eq!(penalty.data, 0.0);
+        assert_eq!(grad.weights.to_vec(), vec![0.0, 0.0]);
+        assert_eq!(grad.bias.data, 0.0);
+    }
+
+    #[test]
+    fn test_l1_regularizer_positive_weights() {
+        let weights = Tensor1D::<CpuBackend>::new(vec![3.0f32, 4.0]);
+        let bias = Scalar::<CpuBackend>::new(1.0);
+        let params = LinearParams { weights, bias };
+        let model = LinearRegression::<CpuBackend>::from_params(params);
+
+        let lambda = 0.5;
+        let l1 = L1::<CpuBackend>::new(lambda);
+
+        let (penalty, grad) = l1.regularizer_penalty_grad(&model);
+
+        // ||w||₁ = |3| + |4| = 7
+        // penalty = λ * ||w||₁ = 0.5 * 7 = 3.5
+        assert!((penalty.data - 3.5).abs() < 1e-12);
+
+        // grad_w = λ * sign(w) = 0.5 * [1, 1] = [0.5, 0.5]
+        assert_eq!(grad.weights.to_vec(), vec![0.5, 0.5]);
+        // grad_b = 0
+        assert_eq!(grad.bias.data, 0.0);
+    }
+
+    #[test]
+    fn test_l1_regularizer_mixed_sign_weights() {
+        let weights = Tensor1D::<CpuBackend>::new(vec![-2.0f32, 3.0]);
+        let bias = Scalar::<CpuBackend>::new(1.0);
+        let params = LinearParams { weights, bias };
+        let model = LinearRegression::<CpuBackend>::from_params(params);
+
+        let lambda = 1.0;
+        let l1 = L1::<CpuBackend>::new(lambda);
+
+        let (penalty, grad) = l1.regularizer_penalty_grad(&model);
+
+        // ||w||₁ = |-2| + |3| = 5
+        // penalty = λ * ||w||₁ = 1.0 * 5 = 5.0
+        assert!((penalty.data - 5.0).abs() < 1e-12);
+
+        // grad_w = λ * sign(w) = 1.0 * [-1, 1] = [-1.0, 1.0]
+        assert_eq!(grad.weights.to_vec(), vec![-1.0, 1.0]);
+        // grad_b = 0
+        assert_eq!(grad.bias.data, 0.0);
+    }
+
+    #[test]
+    fn test_l1_regularizer_with_zero_weights() {
+        let weights = Tensor1D::<CpuBackend>::new(vec![0.0f32, 2.0]);
+        let bias = Scalar::<CpuBackend>::new(0.5);
+        let params = LinearParams { weights, bias };
+        let model = LinearRegression::<CpuBackend>::from_params(params);
+
+        let lambda = 1.0;
+        let l1 = L1::<CpuBackend>::new(lambda);
+
+        let (penalty, grad) = l1.regularizer_penalty_grad(&model);
+
+        // ||w||₁ = |0| + |2| = 2
+        // penalty = λ * ||w||₁ = 1.0 * 2 = 2.0
+        assert!((penalty.data - 2.0).abs() < 1e-12);
+
+        // grad_w = λ * sign(w) = 1.0 * [0, 1] = [0.0, 1.0]
+        // sign(0) = 0 (subgradient at zero)
+        assert_eq!(grad.weights.to_vec(), vec![0.0, 1.0]);
+        // grad_b = 0
+        assert_eq!(grad.bias.data, 0.0);
+    }
+
+    #[test]
+    fn test_l1_regularizer_zero_lambda() {
+        let weights = Tensor1D::<CpuBackend>::new(vec![3.0f32, 4.0]);
+        let bias = Scalar::<CpuBackend>::new(1.0);
+        let params = LinearParams { weights, bias };
+        let model = LinearRegression::<CpuBackend>::from_params(params);
+
+        let l1 = L1::<CpuBackend>::new(0.0);
+
+        let (penalty, grad) = l1.regularizer_penalty_grad(&model);
+
+        // With λ = 0, both penalty and gradient should be zero
         assert_eq!(penalty.data, 0.0);
         assert_eq!(grad.weights.to_vec(), vec![0.0, 0.0]);
         assert_eq!(grad.bias.data, 0.0);
