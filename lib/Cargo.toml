@@ -32,6 +32,10 @@ ndarray = ["dep:ndarray"]
 
 # GPU backends
 wgpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck", "dep:futures"]
+cuda = []
+# cudarc = ["dep:cudarc"]  # Optional: enable cudarc for real GPU support
+# tch = ["dep:tch"]
+# burn = ["dep:burn"]
 
 # BLAS backends (Priority 2)
 blas = ["dep:blas-src", "dep:ndarray"]

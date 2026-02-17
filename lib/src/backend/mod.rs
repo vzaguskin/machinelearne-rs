@@ -23,6 +23,7 @@
 //! | `NdarrayBackend` | `ndarray`     | Interop with `ndarray` ecosystem            |
 //! | `WgpuBackend`  | `wgpu`          | Cross-platform GPU (Vulkan/Metal/D3D12/WebGPU) |
 //! | `BlasBackend`  | `blas-*`        | BLAS-accelerated CPU (OpenBLAS, Accelerate) |
+//! | `CudaBackend`  | `cuda`          | NVIDIA GPU for high-performance tensor ops  |
 //!
 //! ## Example
 //!
@@ -72,6 +73,12 @@ mod blas;
 #[cfg(feature = "blas")]
 /// BLAS-accelerated backend using OpenBLAS, Accelerate, or Netlib BLAS.
 pub use blas::{BlasBackend, BlasTensor2D};
+
+#[cfg(feature = "cuda")]
+pub mod cuda;
+#[cfg(feature = "cuda")]
+/// NVIDIA GPU backend using CUDA for high-performance tensor operations.
+pub use cuda::{CudaBackend, CudaDevice, CudaTensor1D, CudaTensor2D};
 
 /// Scalar value representation and arithmetic operations.
 pub mod scalar;
