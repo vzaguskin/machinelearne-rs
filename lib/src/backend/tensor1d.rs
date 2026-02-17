@@ -287,6 +287,29 @@ impl<B: Backend> Tensor1D<B> {
         }
     }
 
+    /// Multiplies each element of the tensor by a scalar value.
+    ///
+    /// Equivalent to element-wise multiplication: `self * scalar`.
+    /// This is an alias for `scale()`.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor1D;
+    /// use machinelearne_rs::backend::Scalar;
+    ///
+    /// let t = Tensor1D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0]);
+    /// let s = Scalar::<CpuBackend>::new(2.0);
+    /// let result = t.mul_scalar(&s);
+    /// assert_eq!(result.to_vec(), vec![2.0, 4.0, 6.0]);
+    /// ```
+    pub fn mul_scalar(&self, a: &Scalar<B>) -> Self {
+        Self {
+            data: B::mul_scalar_1d(&self.data, &a.data),
+            backend: PhantomData,
+        }
+    }
+
     /// Adds a scalar value to each element of the tensor.
     ///
     /// Equivalent to element-wise addition: `self + scalar`.
@@ -305,6 +328,50 @@ impl<B: Backend> Tensor1D<B> {
     pub fn add_scalar(&self, a: &Scalar<B>) -> Self {
         Self {
             data: B::add_scalar_1d(&self.data, &a.data),
+            backend: PhantomData,
+        }
+    }
+
+    /// Subtracts a scalar value from each element of the tensor.
+    ///
+    /// Equivalent to element-wise subtraction: `self - scalar`.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor1D;
+    /// use machinelearne_rs::backend::Scalar;
+    ///
+    /// let t = Tensor1D::<CpuBackend>::new(vec![10.0f32, 20.0, 30.0]);
+    /// let s = Scalar::<CpuBackend>::new(5.0);
+    /// let result = t.sub_scalar(&s);
+    /// assert_eq!(result.to_vec(), vec![5.0, 15.0, 25.0]);
+    /// ```
+    pub fn sub_scalar(&self, a: &Scalar<B>) -> Self {
+        Self {
+            data: B::sub_scalar_1d(&self.data, &a.data),
+            backend: PhantomData,
+        }
+    }
+
+    /// Divides each element of the tensor by a scalar value.
+    ///
+    /// Equivalent to element-wise division: `self / scalar`.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor1D;
+    /// use machinelearne_rs::backend::Scalar;
+    ///
+    /// let t = Tensor1D::<CpuBackend>::new(vec![10.0f32, 20.0, 30.0]);
+    /// let s = Scalar::<CpuBackend>::new(2.0);
+    /// let result = t.div_scalar(&s);
+    /// assert_eq!(result.to_vec(), vec![5.0, 10.0, 15.0]);
+    /// ```
+    pub fn div_scalar(&self, a: &Scalar<B>) -> Self {
+        Self {
+            data: B::div_scalar_1d(&self.data, &a.data),
             backend: PhantomData,
         }
     }

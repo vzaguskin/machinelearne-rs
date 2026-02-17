@@ -188,6 +188,12 @@ pub trait Backend: Clone + Copy + 'static {
     /// Adds a scalar to each element of tensor.
     fn add_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D;
 
+    /// Subtracts a scalar from each element of tensor.
+    fn sub_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D;
+
+    /// Divides each element of tensor by a scalar.
+    fn div_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D;
+
     // --- Element-wise operations (2D) ---
 
     /// Multiplies each element of 2D tensor by a scalar.
@@ -195,6 +201,12 @@ pub trait Backend: Clone + Copy + 'static {
 
     /// Adds a scalar to each element of 2D tensor.
     fn add_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D;
+
+    /// Subtracts a scalar from each element of 2D tensor.
+    fn sub_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D;
+
+    /// Divides each element of 2D tensor by a scalar.
+    fn div_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D;
 
     /// Element-wise addition of two 2D tensors.
     ///
@@ -252,7 +264,9 @@ pub trait Backend: Clone + Copy + 'static {
     /// Returns the number of elements in a 1D tensor.
     fn len_1d(t: &Self::Tensor1D) -> usize;
 
-    /// Returns the total number of elements in a 2D tensor (rows × cols).
+    /// Returns the number of rows in a 2D tensor.
+    ///
+    /// For total element count, use `shape(t).0 * shape(t).1`.
     fn len_2d(t: &Self::Tensor2D) -> usize;
 
     // --- Mathematical functions (1D) ---
