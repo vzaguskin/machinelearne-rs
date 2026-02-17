@@ -332,6 +332,30 @@ impl<B: Backend> Tensor2D<B> {
         }
     }
 
+    /// Multiplies each element of the tensor by a scalar value.
+    ///
+    /// Equivalent to element-wise multiplication: `self * scalar`.
+    /// This is an alias for `scale()`.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor2D;
+    /// use machinelearne_rs::backend::Scalar;
+    ///
+    /// let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+    /// let s = Scalar::<CpuBackend>::new(2.0);
+    /// let result = t.mul_scalar(s);
+    /// // Result: [[2.0, 4.0], [6.0, 8.0]]
+    /// assert_eq!(result.mean().to_f64(), 5.0);
+    /// ```
+    pub fn mul_scalar(&self, a: Scalar<B>) -> Self {
+        Self {
+            data: B::mul_scalar_2d(&self.data, &a.data),
+            backend: PhantomData,
+        }
+    }
+
     /// Adds a scalar value to each element of the tensor.
     ///
     /// Equivalent to element-wise addition: `self + scalar`.
@@ -351,6 +375,52 @@ impl<B: Backend> Tensor2D<B> {
     pub fn add_scalar(&self, a: Scalar<B>) -> Self {
         Self {
             data: B::add_scalar_2d(&self.data, &a.data),
+            backend: PhantomData,
+        }
+    }
+
+    /// Subtracts a scalar value from each element of the tensor.
+    ///
+    /// Equivalent to element-wise subtraction: `self - scalar`.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor2D;
+    /// use machinelearne_rs::backend::Scalar;
+    ///
+    /// let t = Tensor2D::<CpuBackend>::new(vec![10.0f32, 20.0, 30.0, 40.0], 2, 2);
+    /// let s = Scalar::<CpuBackend>::new(5.0);
+    /// let result = t.sub_scalar(s);
+    /// // Result: [[5.0, 15.0], [25.0, 35.0]]
+    /// assert_eq!(result.mean().to_f64(), 20.0);
+    /// ```
+    pub fn sub_scalar(&self, a: Scalar<B>) -> Self {
+        Self {
+            data: B::sub_scalar_2d(&self.data, &a.data),
+            backend: PhantomData,
+        }
+    }
+
+    /// Divides each element of the tensor by a scalar value.
+    ///
+    /// Equivalent to element-wise division: `self / scalar`.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor2D;
+    /// use machinelearne_rs::backend::Scalar;
+    ///
+    /// let t = Tensor2D::<CpuBackend>::new(vec![10.0f32, 20.0, 30.0, 40.0], 2, 2);
+    /// let s = Scalar::<CpuBackend>::new(2.0);
+    /// let result = t.div_scalar(s);
+    /// // Result: [[5.0, 10.0], [15.0, 20.0]]
+    /// assert_eq!(result.mean().to_f64(), 12.5);
+    /// ```
+    pub fn div_scalar(&self, a: Scalar<B>) -> Self {
+        Self {
+            data: B::div_scalar_2d(&self.data, &a.data),
             backend: PhantomData,
         }
     }
@@ -619,6 +689,66 @@ mod tests {
 
         let values = shifted.ravel().to_vec();
         assert_eq!(values, vec![-5.0, -13.0, -10.0, -8.0]);
+    }
+
+    #[test]
+    fn test_sub_scalar() {
+        let t = Tensor2D::<CpuBackend>::new(vec![10.0f32, 20.0, 30.0, 40.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(5.0);
+        let result = t.sub_scalar(s);
+
+        let values = result.ravel().to_vec();
+        assert_eq!(values, vec![5.0, 15.0, 25.0, 35.0]);
+    }
+
+    #[test]
+    fn test_sub_scalar_negative() {
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(-3.0);
+        let result = t.sub_scalar(s);
+
+        let values = result.ravel().to_vec();
+        assert_eq!(values, vec![4.0, 5.0, 6.0, 7.0]);
+    }
+
+    #[test]
+    fn test_mul_scalar() {
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(2.0);
+        let result = t.mul_scalar(s);
+
+        let values = result.ravel().to_vec();
+        assert_eq!(values, vec![2.0, 4.0, 6.0, 8.0]);
+    }
+
+    #[test]
+    fn test_mul_scalar_fractional() {
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(0.5);
+        let result = t.mul_scalar(s);
+
+        let values = result.ravel().to_vec();
+        assert_eq!(values, vec![0.5, 1.0, 1.5, 2.0]);
+    }
+
+    #[test]
+    fn test_div_scalar() {
+        let t = Tensor2D::<CpuBackend>::new(vec![10.0f32, 20.0, 30.0, 40.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(2.0);
+        let result = t.div_scalar(s);
+
+        let values = result.ravel().to_vec();
+        assert_eq!(values, vec![5.0, 10.0, 15.0, 20.0]);
+    }
+
+    #[test]
+    fn test_div_scalar_fractional() {
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(0.5);
+        let result = t.div_scalar(s);
+
+        let values = result.ravel().to_vec();
+        assert_eq!(values, vec![2.0, 4.0, 6.0, 8.0]);
     }
 
     #[test]

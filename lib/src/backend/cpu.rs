@@ -253,6 +253,16 @@ impl Backend for CpuBackend {
         t.iter().map(|x| x + s).collect()
     }
 
+    /// Subtracts a scalar from each element of a 1D tensor.
+    fn sub_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
+        t.iter().map(|x| x - s).collect()
+    }
+
+    /// Divides each element of a 1D tensor by a scalar.
+    fn div_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
+        t.iter().map(|x| x / s).collect()
+    }
+
     // --- Element-wise operations (2D) ---
 
     /// Multiplies each element of a 2D tensor by a scalar.
@@ -263,6 +273,16 @@ impl Backend for CpuBackend {
     /// Adds a scalar to each element of a 2D tensor.
     fn add_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
         CpuTensor2D::new(t.0.iter().map(|x| *x + s).collect(), t.1, t.2)
+    }
+
+    /// Subtracts a scalar from each element of a 2D tensor.
+    fn sub_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
+        CpuTensor2D::new(t.0.iter().map(|x| *x - s).collect(), t.1, t.2)
+    }
+
+    /// Divides each element of a 2D tensor by a scalar.
+    fn div_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
+        CpuTensor2D::new(t.0.iter().map(|x| *x / s).collect(), t.1, t.2)
     }
 
     /// Element-wise addition of two 2D tensors.

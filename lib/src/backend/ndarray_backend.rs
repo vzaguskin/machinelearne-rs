@@ -532,11 +532,31 @@ impl super::Backend for NdarrayBackend {
         t.mapv(|x| x + *s)
     }
 
+    /// Subtracts a scalar from each element of a 1D tensor.
+    fn sub_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
+        t.mapv(|x| x - *s)
+    }
+
+    /// Divides each element of a 1D tensor by a scalar.
+    fn div_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
+        t.mapv(|x| x / *s)
+    }
+
     // --- 2D scalar and binary ops ---
 
     /// Adds a scalar to each element of a 2D tensor.
     fn add_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
         NdarrayTensor2D(t.0.mapv(|x| x + *s))
+    }
+
+    /// Subtracts a scalar from each element of a 2D tensor.
+    fn sub_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
+        NdarrayTensor2D(t.0.mapv(|x| x - *s))
+    }
+
+    /// Divides each element of a 2D tensor by a scalar.
+    fn div_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
+        NdarrayTensor2D(t.0.mapv(|x| x / *s))
     }
 
     /// Element-wise addition of 2D tensors.
