@@ -59,6 +59,12 @@ mod ndarray_backend;
 /// Backend backed by the `ndarray` crate for ecosystem interoperability.
 pub use ndarray_backend::{NdarrayBackend, NdarrayTensor2D};
 
+#[cfg(feature = "spirv")]
+pub mod spirv;
+#[cfg(feature = "spirv")]
+/// Vulkan GPU backend using SPIR-V compute shaders for cross-platform operations.
+pub use spirv::{SpirvBackend, SpirvDevice, SpirvTensor1D, SpirvTensor2D};
+
 /// Scalar value representation and arithmetic operations.
 pub mod scalar;
 /// One-dimensional tensor abstraction.
