@@ -51,6 +51,31 @@ cargo run --example train_logistic        # Binary classification with BCE
 1. **Always run `cargo fmt` before committing** to ensure consistent code formatting.
 2. **Always work in a feature branch**, never commit directly to `main`. Create a branch like `feature/your-feature-name`.
 
+## Documentation Workflow
+
+After implementing any feature, follow these steps:
+
+1. **Update CHANGELOG.md**: Add the new feature under `[Unreleased]` or the appropriate version section. Include:
+   - What was added/changed/fixed
+   - Any new public APIs or types
+   - New examples if applicable
+
+2. **Update README.md** if necessary:
+   - Add new features to the Features section
+   - Add new code examples if the feature changes the API
+   - Update the architecture diagram if the structure changes
+   - Add new examples to the Examples section
+
+3. **Run doc tests** to verify all code examples compile:
+   ```bash
+   cargo test -p machinelearne-rs --all-features --doc
+   ```
+
+4. **Run all tests** before committing:
+   ```bash
+   cargo test -p machinelearne-rs --all-features
+   ```
+
 ## Architecture Overview
 
 ### Core Design Principles
