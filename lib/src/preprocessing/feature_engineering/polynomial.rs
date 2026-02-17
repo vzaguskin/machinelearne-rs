@@ -17,18 +17,23 @@ use std::marker::PhantomData;
 /// the degree-2 polynomial features are [1, a, b, a^2, ab, b^2].
 ///
 /// # Example
-/// ```ignore
-/// use machinelearne_rs::preprocessing::{PolynomialFeatures, Transformer};
-/// use machinelearne_rs::backend::CpuBackend;
+/// ```
+/// use machinelearne_rs::preprocessing::{PolynomialFeatures, Transformer, FittedTransformer};
+/// use machinelearne_rs::backend::{CpuBackend, Tensor2D};
 ///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Input: [[1, 2], [3, 4]]
-/// let data = Tensor2D::new(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
+/// let data = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
 ///
 /// let poly = PolynomialFeatures::<CpuBackend>::new().with_degree(2);
 /// let fitted = poly.fit(&data)?;
 ///
 /// // Output: [[1, 1, 2, 1, 2, 4], [1, 3, 4, 9, 12, 16]]
 /// let transformed = fitted.transform(&data)?;
+///
+/// assert_eq!(transformed.shape(), (2, 6));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Clone, Debug)]
 pub struct PolynomialFeatures<B: Backend> {

@@ -17,18 +17,23 @@ use std::marker::PhantomData;
 /// sorted in ascending order.
 ///
 /// # Example
-/// ```ignore
-/// use machinelearne_rs::preprocessing::{OrdinalEncoder, Transformer};
-/// use machinelearne_rs::backend::CpuBackend;
+/// ```
+/// use machinelearne_rs::preprocessing::{OrdinalEncoder, Transformer, FittedTransformer};
+/// use machinelearne_rs::backend::{CpuBackend, Tensor2D};
 ///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Input: [[0], [2], [1]]  (categories: 0, 1, 2)
-/// let data = Tensor2D::new(vec![0.0, 2.0, 1.0], 3, 1);
+/// let data = Tensor2D::<CpuBackend>::new(vec![0.0, 2.0, 1.0], 3, 1);
 ///
 /// let encoder = OrdinalEncoder::<CpuBackend>::new();
 /// let fitted = encoder.fit(&data)?;
 ///
 /// // Output: [[0], [2], [1]]  (ordinal mapping)
 /// let encoded = fitted.transform(&data)?;
+///
+/// assert_eq!(encoded.shape(), (3, 1));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Clone, Debug)]
 pub struct OrdinalEncoder<B: Backend> {

@@ -9,9 +9,12 @@
 //! where `u` is the mean of the training samples, and `s` is the standard deviation.
 //!
 //! # Example
-//! ```ignore
-//! use machinelearne_rs::preprocessing::{Transformer, StandardScaler};
-//! use machinelearne_rs::backend::CpuBackend;
+//! ```
+//! use machinelearne_rs::preprocessing::{Transformer, FittedTransformer, StandardScaler};
+//! use machinelearne_rs::backend::{CpuBackend, Tensor2D};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let data = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
 //!
 //! let scaler = StandardScaler::<CpuBackend>::new()
 //!     .with_mean(true)
@@ -20,9 +23,9 @@
 //! let fitted = scaler.fit(&data)?;
 //! let scaled = fitted.transform(&data)?;
 //!
-//! // Later, for inference:
-//! let loaded = StandardScaler::load_from_file("scaler.bin")?;
-//! let new_scaled = loaded.transform(&new_data)?;
+//! assert_eq!(scaled.shape(), (3, 2));
+//! # Ok(())
+//! # }
 //! ```
 
 use crate::backend::{Backend, Tensor1D, Tensor2D};

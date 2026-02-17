@@ -1,0 +1,43 @@
+{
+  "default_baseline": {
+    "config": {
+      "epochs": 100,
+      "l2": 0.01,
+      "lr": 0.1,
+      "scaler": "StandardScaler"
+    },
+    "test_mae": 0.5161708072181961,
+    "test_mse": 0.5092255666328932,
+    "test_r2": 0.6505352348973381,
+    "test_rmse": 0.7136004250509477,
+    "train_time_ms": 207.33986900000002
+  },
+  "naive_baseline": {
+    "config": {
+      "epochs": 100,
+      "lr": 0.1,
+      "scaler": "StandardScaler"
+    },
+    "test_mae": 0.5150628362995786,
+    "test_mse": 0.49638229130743045,
+    "test_r2": 0.6593491525182444,
+    "test_rmse": 0.7045440307797877,
+    "train_time_ms": 229.851197
+  },
+  "optimized": {
+    "best_cv_score": 0.5727723002433777,
+    "best_params": {
+      "l2_lambda": 0.0,
+      "poly_degree": 2,
+      "scaler": "MinMax"
+    },
+    "cv_time_ms": 1039968.0279740001,
+    "n_combinations": 96,
+    "test_mae": 0.5260298524122321,
+    "test_mse": 0.4968341751554612,
+    "test_r2": 0.6590390394894545,
+    "test_rmse": 0.7048646502382292
+  },
+  "test_size": 4128,
+  "train_size": 16512
+}

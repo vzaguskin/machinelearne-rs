@@ -17,22 +17,24 @@ use std::marker::PhantomData;
 /// values (categories) present in each column during fitting.
 ///
 /// # Example
-/// ```ignore
-/// use machinelearne_rs::preprocessing::{OneHotEncoder, Transformer};
-/// use machinelearne_rs::backend::CpuBackend;
+/// ```
+/// use machinelearne_rs::preprocessing::{OneHotEncoder, Transformer, FittedTransformer};
+/// use machinelearne_rs::backend::{CpuBackend, Tensor2D};
 ///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Input: 3 samples with 1 categorical feature each
 /// // Categories: 0, 1, 2 (e.g., "red", "green", "blue")
-/// let data = Tensor2D::new(vec![0.0, 1.0, 2.0], 3, 1);
+/// let data = Tensor2D::<CpuBackend>::new(vec![0.0, 1.0, 2.0], 3, 1);
 ///
 /// let encoder = OneHotEncoder::<CpuBackend>::new();
 /// let fitted = encoder.fit(&data)?;
 ///
 /// // Output: 3x3 one-hot matrix
 /// let encoded = fitted.transform(&data)?;
-/// // [[1, 0, 0],
-/// //  [0, 1, 0],
-/// //  [0, 0, 1]]
+///
+/// assert_eq!(encoded.shape(), (3, 3));
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Clone, Debug)]
 pub struct OneHotEncoder<B: Backend> {

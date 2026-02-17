@@ -16,18 +16,23 @@ use std::marker::PhantomData;
 /// works on 1D arrays (a single target column).
 ///
 /// # Example
-/// ```ignore
+/// ```
 /// use machinelearne_rs::preprocessing::LabelEncoder;
-/// use machinelearne_rs::backend::CpuBackend;
+/// use machinelearne_rs::backend::{CpuBackend, Tensor1D};
 ///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// // Target labels: [2, 0, 1, 0]
-/// let labels = Tensor1D::new(vec![2.0, 0.0, 1.0, 0.0]);
+/// let labels = Tensor1D::<CpuBackend>::new(vec![2.0, 0.0, 1.0, 0.0]);
 ///
 /// let encoder = LabelEncoder::<CpuBackend>::new();
 /// let fitted = encoder.fit(&labels)?;
 ///
 /// // Encoded: [2, 0, 1, 0] (ordinal mapping)
 /// let encoded = fitted.transform(&labels)?;
+///
+/// assert_eq!(encoded.len(), 4);
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Clone, Debug)]
 pub struct LabelEncoder<B: Backend> {

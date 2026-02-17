@@ -5,21 +5,28 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust
 //! use machinelearne_rs::model_selection::{GridSearchCV, KFold, LinearRegressionGrid};
 //! use machinelearne_rs::metrics::RegressionMetric;
 //! use machinelearne_rs::backend::CpuBackend;
+//! use machinelearne_rs::dataset::memory::InMemoryDataset;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let x = vec![vec![1.0], vec![2.0], vec![3.0], vec![4.0]];
+//! let y = vec![2.0, 4.0, 6.0, 8.0];
+//! let dataset = InMemoryDataset::new(x, y)?;
 //!
 //! let param_grid = LinearRegressionGrid::new()
-//!     .with_learning_rates(vec![0.001, 0.01, 0.1])
-//!     .with_lambdas(vec![0.0, 0.01, 0.1]);
+//!     .with_learning_rates(vec![0.01, 0.1])
+//!     .with_lambdas(vec![0.0, 0.01]);
 //!
 //! let grid_search = GridSearchCV::<CpuBackend, _>::new(param_grid, RegressionMetric::R2)
-//!     .with_cv(KFold::new(5).with_random_state(42))
-//!     .verbose(1);
+//!     .with_cv(KFold::new(2).with_random_state(42));
 //!
-//! let result = grid_search.fit(&dataset, n_features)?;
+//! let result = grid_search.fit(&dataset, 1)?;
 //! println!("Best R² score: {:.4}", result.best_params.mean_score);
+//! # Ok(())
+//! # }
 //! ```
 
 use std::fmt::{Debug, Display};

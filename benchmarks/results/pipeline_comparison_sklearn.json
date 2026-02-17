@@ -1,0 +1,38 @@
+{
+  "train_size": 16512,
+  "test_size": 4128,
+  "naive_baseline": {
+    "test_r2": 0.660514059153207,
+    "test_mse": 0.4946848356387961,
+    "test_mae": 0.516852699378798,
+    "test_rmse": 0.7033383507521797,
+    "train_time_ms": 9.461523999561905
+  },
+  "default_baseline": {
+    "test_r2": 0.6605140591531995,
+    "test_mse": 0.49468483563880716,
+    "test_mae": 0.5168526993787043,
+    "test_rmse": 0.7033383507521875,
+    "train_time_ms": 6.601467999644228,
+    "config": {
+      "scaler": "StandardScaler",
+      "model": "LinearRegression"
+    }
+  },
+  "optimized": {
+    "test_r2": 0.6709060528067767,
+    "test_mse": 0.4795420534085432,
+    "test_mae": 0.5145286411320453,
+    "test_rmse": 0.6924897496775987,
+    "cv_time_ms": 2950.2573290001237,
+    "retrain_time_ms": 0.0008659999366500415,
+    "best_cv_score": 0.4972907396377038,
+    "best_params": {
+      "scaler": "MinMaxScaler",
+      "l2_alpha": 1.0,
+      "polynomial": "degree 2"
+    },
+    "n_combinations": 40,
+    "load_verify_match": true
+  }
+}

@@ -9,12 +9,19 @@
 //! - Max: Maximum absolute value = 1
 //!
 //! # Example
-//! ```ignore
+//! ```
 //! use machinelearne_rs::preprocessing::{Transformer, Normalizer, NormType};
-//! use machinelearne_rs::backend::CpuBackend;
+//! use machinelearne_rs::backend::{CpuBackend, Tensor2D};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let data = Tensor2D::<CpuBackend>::new(vec![3.0, 4.0, 6.0, 8.0], 2, 2);
 //!
 //! let normalizer = Normalizer::<CpuBackend>::new(NormType::L2);
 //! let normalized = normalizer.fit_transform(&data)?;
+//!
+//! assert_eq!(normalized.shape(), (2, 2));
+//! # Ok(())
+//! # }
 //! ```
 
 use crate::backend::{Backend, Tensor2D};

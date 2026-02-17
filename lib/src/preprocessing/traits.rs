@@ -22,13 +22,20 @@ use crate::serialization::SerializableParams;
 /// - `Fitted`: The corresponding fitted transformer type.
 ///
 /// # Example
-/// ```ignore
-/// use machinelearne_rs::preprocessing::{Transformer, StandardScaler};
-/// use machinelearne_rs::backend::CpuBackend;
+/// ```
+/// use machinelearne_rs::preprocessing::{Transformer, FittedTransformer, StandardScaler};
+/// use machinelearne_rs::backend::{CpuBackend, Tensor2D};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let data = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
 ///
 /// let scaler = StandardScaler::<CpuBackend>::new();
 /// let fitted = scaler.fit(&data)?;
-/// let transformed = fitted.transform(&new_data)?;
+/// let transformed = fitted.transform(&data)?;
+///
+/// assert_eq!(transformed.shape(), (2, 2));
+/// # Ok(())
+/// # }
 /// ```
 pub trait Transformer<B: Backend>: Clone {
     /// Input data type for transformation.
