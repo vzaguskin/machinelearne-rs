@@ -25,6 +25,7 @@
 //! | `BlasBackend`  | `blas-*`        | BLAS-accelerated CPU (OpenBLAS, Accelerate) |
 //! | `CudaBackend`  | `cuda`          | NVIDIA GPU for high-performance tensor ops  |
 //! | `MetalBackend` | `metal`         | Apple Metal GPU for macOS/iOS               |
+//! | `SpirvBackend` | `spirv`         | Vulkan SPIR-V compute shaders               |
 //!
 //! ## Example
 //!
@@ -86,6 +87,12 @@ pub mod metal;
 #[cfg(feature = "metal")]
 /// Apple Metal GPU backend for high-performance tensor operations on macOS/iOS.
 pub use metal::{MetalBackend, MetalDevice, MetalTensor1D, MetalTensor2D};
+
+#[cfg(feature = "spirv")]
+pub mod spirv;
+#[cfg(feature = "spirv")]
+/// Vulkan GPU backend using SPIR-V compute shaders for cross-platform operations.
+pub use spirv::{SpirvBackend, SpirvDevice, SpirvTensor1D, SpirvTensor2D};
 
 /// Scalar value representation and arithmetic operations.
 pub mod scalar;

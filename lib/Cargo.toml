@@ -34,6 +34,7 @@ ndarray = ["dep:ndarray"]
 wgpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck", "dep:futures"]
 cuda = []
 metal = []
+spirv = []
 # cudarc = ["dep:cudarc"]  # Optional: enable cudarc for real GPU support
 # tch = ["dep:tch"]
 # burn = ["dep:burn"]
