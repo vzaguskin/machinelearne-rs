@@ -13,14 +13,15 @@
 //! - **Type-safe tensor handling**: Each backend defines its own tensor types (`Tensor1D`,
 //!   `Tensor2D`) that encapsulate storage details while exposing a uniform API.
 //! - **Feature-gated implementations**: Backends are enabled via Cargo features (`cpu`,
-//!   `ndarray`, future `cuda`, etc.), allowing users to minimize dependencies.
+//!   `ndarray`, `blas`, etc.), allowing users to minimize dependencies.
 //!
 //! ## Available Backends
 //!
-//! | Backend      | Feature    | Use Case                          |
-//! |--------------|------------|-----------------------------------|
-//! | `CpuBackend` | `cpu`      | Default, pure-Rust implementation |
-//! | `NdarrayBackend` | `ndarray` | Interop with `ndarray` ecosystem |
+//! | Backend        | Feature         | Use Case                                    |
+//! |----------------|-----------------|---------------------------------------------|
+//! | `CpuBackend`   | `cpu`           | Default, pure-Rust implementation           |
+//! | `NdarrayBackend` | `ndarray`     | Interop with `ndarray` ecosystem            |
+//! | `BlasBackend`  | `blas-*`        | BLAS-accelerated CPU (OpenBLAS, Accelerate) |
 //!
 //! ## Example
 //!
@@ -58,6 +59,12 @@ mod ndarray_backend;
 #[cfg(feature = "ndarray")]
 /// Backend backed by the `ndarray` crate for ecosystem interoperability.
 pub use ndarray_backend::{NdarrayBackend, NdarrayTensor2D};
+
+#[cfg(feature = "blas")]
+mod blas;
+#[cfg(feature = "blas")]
+/// BLAS-accelerated backend using OpenBLAS, Accelerate, or Netlib BLAS.
+pub use blas::{BlasBackend, BlasTensor2D};
 
 /// Scalar value representation and arithmetic operations.
 pub mod scalar;
