@@ -13,15 +13,16 @@
 //! - **Type-safe tensor handling**: Each backend defines its own tensor types (`Tensor1D`,
 //!   `Tensor2D`) that encapsulate storage details while exposing a uniform API.
 //! - **Feature-gated implementations**: Backends are enabled via Cargo features (`cpu`,
-//!   `ndarray`, `wgpu`, etc.), allowing users to minimize dependencies.
+//!   `ndarray`, `wgpu`, `blas`, etc.), allowing users to minimize dependencies.
 //!
 //! ## Available Backends
 //!
-//! | Backend        | Feature  | Use Case                                    |
-//! |----------------|----------|---------------------------------------------|
-//! | `CpuBackend`   | `cpu`    | Default, pure-Rust implementation           |
-//! | `NdarrayBackend` | `ndarray` | Interop with `ndarray` ecosystem          |
-//! | `WgpuBackend`  | `wgpu`   | Cross-platform GPU (Vulkan/Metal/D3D12/WebGPU) |
+//! | Backend        | Feature         | Use Case                                    |
+//! |----------------|-----------------|---------------------------------------------|
+//! | `CpuBackend`   | `cpu`           | Default, pure-Rust implementation           |
+//! | `NdarrayBackend` | `ndarray`     | Interop with `ndarray` ecosystem            |
+//! | `WgpuBackend`  | `wgpu`          | Cross-platform GPU (Vulkan/Metal/D3D12/WebGPU) |
+//! | `BlasBackend`  | `blas-*`        | BLAS-accelerated CPU (OpenBLAS, Accelerate) |
 //!
 //! ## Example
 //!
@@ -65,6 +66,12 @@ pub mod wgpu_backend;
 #[cfg(feature = "wgpu")]
 /// Cross-platform GPU backend using wgpu (Vulkan/Metal/D3D12/WebGPU).
 pub use wgpu_backend::{WgpuBackend, WgpuDevice, WgpuTensor2D};
+
+#[cfg(feature = "blas")]
+mod blas;
+#[cfg(feature = "blas")]
+/// BLAS-accelerated backend using OpenBLAS, Accelerate, or Netlib BLAS.
+pub use blas::{BlasBackend, BlasTensor2D};
 
 /// Scalar value representation and arithmetic operations.
 pub mod scalar;

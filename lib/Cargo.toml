@@ -17,6 +17,9 @@ pollster = { version = "0.4", optional = true }
 bytemuck = { version = "1.21", features = ["derive"], optional = true }
 futures = { version = "0.3", optional = true }
 
+# BLAS backend dependencies (optional)
+blas-src = { version = "0.10", optional = true }
+
 [dev-dependencies]
 tempfile = "3.10"
 serde_json = "1.0"
@@ -29,3 +32,9 @@ ndarray = ["dep:ndarray"]
 
 # GPU backends
 wgpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck", "dep:futures"]
+
+# BLAS backends (Priority 2)
+blas = ["dep:blas-src", "dep:ndarray"]
+blas-openblas = ["blas", "blas-src/openblas"]
+blas-netlib = ["blas", "blas-src/netlib"]
+blas-accelerate = ["blas", "blas-src/accelerate"]
