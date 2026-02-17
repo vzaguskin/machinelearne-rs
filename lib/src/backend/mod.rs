@@ -59,6 +59,12 @@ mod ndarray_backend;
 /// Backend backed by the `ndarray` crate for ecosystem interoperability.
 pub use ndarray_backend::{NdarrayBackend, NdarrayTensor2D};
 
+#[cfg(feature = "metal")]
+pub mod metal;
+#[cfg(feature = "metal")]
+/// Apple Metal GPU backend for high-performance tensor operations on macOS/iOS.
+pub use metal::{MetalBackend, MetalDevice, MetalTensor1D, MetalTensor2D};
+
 /// Scalar value representation and arithmetic operations.
 pub mod scalar;
 /// One-dimensional tensor abstraction.
