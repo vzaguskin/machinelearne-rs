@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### Linear Algebra
+- `linalg` module with matrix inverse (`inverse`) and normal equation solver (`solve_normal_equation`)
+- `Tensor2D::matmul`: Matrix-matrix multiplication
+- `Tensor2D::add`: Element-wise addition for 2D tensors
+- `Tensor2D::transpose`: Matrix transpose method
+- `Backend::matmul`: Matrix multiplication trait method
+
+#### Linear Regression
+- `LinearRegression::fit_closed_form`: One-step solution using normal equation (no hyperparameters needed)
+- Example `train_linear_closed_form`: Compares closed-form vs SGD performance and accuracy
+
 #### Regularization
 - `L1<B>`: L1 (Lasso) regularizer for encouraging sparsity in model weights
 

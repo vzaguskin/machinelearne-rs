@@ -671,6 +671,31 @@ impl Backend for CpuBackend {
         CpuTensor2D::new(out, *cols, *rows)
     }
 
+    /// Matrix-matrix multiplication: C = A * B
+    ///
+    /// A is (m × k), B is (k × n), result is (m × n)
+    fn matmul(a: &CpuTensor2D, b: &CpuTensor2D) -> Self::Tensor2D {
+        let (m, k1) = (a.1, a.2);
+        let (k2, n) = (b.1, b.2);
+        assert_eq!(
+            k1, k2,
+            "Matrix dimensions don't match for multiplication: ({}, {}) x ({}, {})",
+            m, k1, k2, n
+        );
+
+        let mut result = vec![0.0; m * n];
+        for i in 0..m {
+            for j in 0..n {
+                let mut sum = 0.0;
+                for k in 0..k1 {
+                    sum += a.0[i * k1 + k] * b.0[k * n + j];
+                }
+                result[i * n + j] = sum;
+            }
+        }
+        CpuTensor2D::new(result, m, n)
+    }
+
     /// Returns the shape of a 2D tensor as `(rows, cols)`.
     fn shape(t: &Self::Tensor2D) -> (usize, usize) {
         (t.1, t.2)

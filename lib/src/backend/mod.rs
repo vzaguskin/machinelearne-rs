@@ -360,6 +360,15 @@ pub trait Backend: Clone + Copy + 'static {
     /// Converts an (m × n) matrix to (n × m) with elements at (i,j) ↔ (j,i).
     fn transpose(t: &Self::Tensor2D) -> Self::Tensor2D;
 
+    /// Matrix-matrix multiplication with shape checking.
+    ///
+    /// Computes `C = A * B` where `A` is (m × k) and `B` is (k × n).
+    /// Returns a (m × n) matrix.
+    ///
+    /// # Panics
+    /// If `A.cols() != B.rows()`.
+    fn matmul(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D;
+
     /// Returns the shape of a 2D tensor as (rows, cols).
     fn shape(t: &Self::Tensor2D) -> (usize, usize);
 

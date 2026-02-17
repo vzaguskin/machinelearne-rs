@@ -251,6 +251,11 @@ impl super::Backend for NdarrayBackend {
         NdarrayTensor2D(a.0.t().to_owned())
     }
 
+    /// Matrix-matrix multiplication: C = A * B
+    fn matmul(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(a.0.dot(&b.0))
+    }
+
     /// Returns the shape of a 2D tensor as (rows, columns).
     ///
     /// # Arguments
