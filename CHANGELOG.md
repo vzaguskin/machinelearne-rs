@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+#### Backend
+- `sub_scalar_1d`, `div_scalar_1d`: Subtract/divide scalar from 1D tensor elements
+- `sub_scalar_2d`, `div_scalar_2d`: Subtract/divide scalar from 2D tensor elements
+- `Tensor1D::sub_scalar`, `Tensor1D::mul_scalar`, `Tensor1D::div_scalar`: Wrapper methods for scalar operations
+- `Tensor2D::sub_scalar`, `Tensor2D::mul_scalar`, `Tensor2D::div_scalar`: Wrapper methods for scalar operations
+
+### Fixed
+- `len_2d` documentation now correctly states it returns number of rows (not total elements)
+
 ## [0.1.0] - 2025-02-17
 
 ### Added

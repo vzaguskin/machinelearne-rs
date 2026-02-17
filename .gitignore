@@ -1,2 +1,4 @@
 /target
 benchmarks/results/rust_metrics.json
+tarpaulin-report.html
+target/tarpaulin/
