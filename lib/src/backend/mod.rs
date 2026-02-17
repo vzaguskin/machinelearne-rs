@@ -59,6 +59,12 @@ mod ndarray_backend;
 /// Backend backed by the `ndarray` crate for ecosystem interoperability.
 pub use ndarray_backend::{NdarrayBackend, NdarrayTensor2D};
 
+#[cfg(feature = "cuda")]
+pub mod cuda;
+#[cfg(feature = "cuda")]
+/// NVIDIA GPU backend using CUDA for high-performance tensor operations.
+pub use cuda::{CudaBackend, CudaDevice, CudaTensor1D, CudaTensor2D};
+
 /// Scalar value representation and arithmetic operations.
 pub mod scalar;
 /// One-dimensional tensor abstraction.
