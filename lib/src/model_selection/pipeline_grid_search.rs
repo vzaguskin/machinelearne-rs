@@ -17,31 +17,34 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```rust
 //! use machinelearne_rs::model_selection::{
 //!     PipelineGridSearchCV, PipelineGrid, PreprocessingGrid, ScalerGrid, ScalerType,
 //!     LinearRegressionGrid, KFold
 //! };
 //! use machinelearne_rs::metrics::RegressionMetric;
-//! use machinelearne_rs::backend::CpuBackend;
+//! use machinelearne_rs::backend::{CpuBackend, Tensor2D, Tensor1D};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let x = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
+//! let y = Tensor1D::<CpuBackend>::new(vec![3.0, 5.0, 7.0]);
 //!
 //! let preprocessing = PreprocessingGrid::new()
-//!     .with_scaler(ScalerGrid::new(vec![ScalerType::Standard, ScalerType::MinMax]));
+//!     .with_scaler(ScalerGrid::new(vec![ScalerType::Standard]));
 //!
 //! let model = LinearRegressionGrid::new()
-//!     .with_learning_rates(vec![0.01, 0.1]);
+//!     .with_learning_rates(vec![0.1]);
 //!
 //! let search = PipelineGridSearchCV::<CpuBackend, _>::new(
 //!     PipelineGrid::new(preprocessing, model),
 //!     RegressionMetric::R2,
 //! )
-//! .with_cv(KFold::new(5))
-//! .verbose(1);
+//! .with_cv(KFold::new(2).with_random_state(42));
 //!
-//! let result = search.fit(&raw_x, &y)?;
-//!
-//! // Get the best pipeline (ready for deployment)
-//! result.best_pipeline.save_to_file("model.bin")?;
+//! let result = search.fit(&x, &y)?;
+//! println!("Best R² score: {:.4}", result.best_params.mean_score);
+//! # Ok(())
+//! # }
 //! ```
 
 use std::fmt::{Debug, Display};

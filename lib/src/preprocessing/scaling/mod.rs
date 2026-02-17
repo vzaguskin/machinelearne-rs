@@ -15,14 +15,21 @@
 //!
 //! # Example
 //!
-//! ```ignore
+//! ```
 //! use machinelearne_rs::preprocessing::scaling::StandardScaler;
-//! use machinelearne_rs::preprocessing::Transformer;
-//! use machinelearne_rs::backend::CpuBackend;
+//! use machinelearne_rs::preprocessing::{Transformer, FittedTransformer};
+//! use machinelearne_rs::backend::{CpuBackend, Tensor2D};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let data = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
 //!
 //! let scaler = StandardScaler::<CpuBackend>::new();
 //! let fitted = scaler.fit(&data)?;
-//! let scaled = fitted.transform(&new_data)?;
+//! let scaled = fitted.transform(&data)?;
+//!
+//! assert_eq!(scaled.shape(), (2, 2));
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod maxabs;

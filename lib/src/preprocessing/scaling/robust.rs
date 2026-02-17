@@ -11,15 +11,22 @@
 //! where IQR is the range between the 1st quartile (25%) and 3rd quartile (75%).
 //!
 //! # Example
-//! ```ignore
-//! use machinelearne_rs::preprocessing::{Transformer, RobustScaler};
-//! use machinelearne_rs::backend::CpuBackend;
+//! ```
+//! use machinelearne_rs::preprocessing::{Transformer, FittedTransformer, RobustScaler};
+//! use machinelearne_rs::backend::{CpuBackend, Tensor2D};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let data = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
 //!
 //! let scaler = RobustScaler::<CpuBackend>::new()
 //!     .with_centering(true);
 //!
 //! let fitted = scaler.fit(&data)?;
 //! let scaled = fitted.transform(&data)?;
+//!
+//! assert_eq!(scaled.shape(), (3, 2));
+//! # Ok(())
+//! # }
 //! ```
 
 use crate::backend::{Backend, Tensor1D, Tensor2D};

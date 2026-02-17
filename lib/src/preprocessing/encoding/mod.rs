@@ -8,7 +8,7 @@
 //! ## OneHotEncoder
 //! Converts categorical integer values to one-hot (dummy) encoding.
 //!
-//! ```ignore
+//! ```
 //! // Input: [[0], [1], [2]]  (3 samples, 1 categorical feature)
 //! // Output: [[1,0,0], [0,1,0], [0,0,1]]  (3 samples, 3 binary features)
 //! ```

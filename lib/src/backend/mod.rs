@@ -94,28 +94,23 @@ pub use tensor2d::Tensor2D;
 ///   caller must ensure correctness
 /// - Tensor types are `Clone + Send + Sync` for safe concurrent usage
 ///
-/// # Example Implementation Sketch
+/// # Example
 ///
-/// ```ignore
-/// use machinelearne_rs::backend::{Backend, ScalarOps};
-/// #[derive(Clone, Debug, Copy)]
-/// struct MyBackend;
+/// ```
+/// use machinelearne_rs::backend::{Backend, CpuBackend, cpu::CpuTensor2D};
 ///
-///  #[derive(Clone, Debug, Copy)]
-/// struct MyTensor1D;
+/// // Create a 2x2 matrix
+/// let a = CpuTensor2D::new(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
+/// let b = vec![1.0, 2.0]; // 1D tensor is Vec<f64> for CpuBackend
 ///
-///  #[derive(Clone, Debug, Copy)]
-/// struct MyTensor2D;
+/// // Matrix-vector multiplication
+/// let result = CpuBackend::matvec(&a, &b);
+/// assert_eq!(result.len(), 2);
 ///
-/// impl Backend for MyBackend {
-///     type Scalar = f64;
-///     type Tensor1D = MyTensor1D;
-///     type Tensor2D = MyTensor2D;
-///     type Device = ();
-///
-///     fn default_device() -> Self::Device { () }
-///     // ... implement all required methods
-/// }
+/// // Get tensor shape
+/// let (rows, cols) = CpuBackend::shape(&a);
+/// assert_eq!(rows, 2);
+/// assert_eq!(cols, 2);
 /// ```
 pub trait Backend: Clone + Copy + 'static {
     /// Scalar type supporting arithmetic operations.
@@ -452,11 +447,16 @@ pub trait Backend: Clone + Copy + 'static {
     /// Panics if tensors have different row counts or if the slice is empty.
     ///
     /// # Example
-    /// ```ignore
+    /// ```
+    /// use machinelearne_rs::backend::{Backend, CpuBackend, cpu::CpuTensor2D};
+    ///
     /// // [[1, 2]] + [[3]] -> [[1, 2, 3]]
-    /// let a = Tensor2D::new(vec![1.0, 2.0], 1, 2);
-    /// let b = Tensor2D::new(vec![3.0], 1, 1);
-    /// let c = B::hcat_2d(&[a, b]); // shape (1, 3)
+    /// let a = CpuTensor2D::new(vec![1.0, 2.0], 1, 2);
+    /// let b = CpuTensor2D::new(vec![3.0], 1, 1);
+    /// let c = CpuBackend::hcat_2d(&[a, b]).unwrap(); // shape (1, 3)
+    /// let (rows, cols) = CpuBackend::shape(&c);
+    /// assert_eq!(rows, 1);
+    /// assert_eq!(cols, 3);
     /// ```
     fn hcat_2d(tensors: &[Self::Tensor2D]) -> Result<Self::Tensor2D, PreprocessingError>;
 

@@ -4,18 +4,25 @@
 //! of one transformer becomes the input to the next.
 //!
 //! # Example
-//! ```ignore
+//! ```
 //! use machinelearne_rs::preprocessing::{
-//!     Pipeline, StandardScaler, MinMaxScaler, Transformer
+//!     Pipeline, StandardScaler, MinMaxScaler, Transformer, FittedTransformer
 //! };
-//! use machinelearne_rs::backend::CpuBackend;
+//! use machinelearne_rs::backend::{CpuBackend, Tensor2D};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let data = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
 //!
 //! let pipeline = Pipeline::<CpuBackend>::new()
-//!     .add(StandardScaler::new())
-//!     .add(MinMaxScaler::new().with_range(0.0, 1.0));
+//!     .add_standard_scaler(StandardScaler::new())
+//!     .add_minmax_scaler(MinMaxScaler::new().with_range(0.0, 1.0));
 //!
 //! let fitted = pipeline.fit(&data)?;
 //! let transformed = fitted.transform(&data)?;
+//!
+//! assert_eq!(transformed.shape(), (3, 2));
+//! # Ok(())
+//! # }
 //! ```
 
 use crate::backend::{Backend, Tensor2D};

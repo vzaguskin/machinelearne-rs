@@ -162,20 +162,25 @@ fn fit_step<B: Backend>(
 /// numerical features, one-hot encode categorical features).
 ///
 /// # Example
-/// ```ignore
+/// ```
 /// use machinelearne_rs::preprocessing::{
-///     ColumnTransformer, ColumnSpec, StandardScaler, OneHotEncoder, Transformer
+///     ColumnTransformer, ColumnSpec, StandardScaler, Transformer, FittedTransformer
 /// };
-/// use machinelearne_rs::backend::CpuBackend;
+/// use machinelearne_rs::backend::{CpuBackend, Tensor2D};
 ///
-/// // Columns: [age, income, city_code]
-/// // Scale numerical cols [0, 1], one-hot encode col [2]
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let data = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
+///
+/// // Scale columns 0 and 1
 /// let ct = ColumnTransformer::<CpuBackend>::new()
-///     .add(StandardScaler::new(), ColumnSpec::Indices(vec![0, 1]))
-///     .add(OneHotEncoder::new(), ColumnSpec::Indices(vec![2]));
+///     .add_standard_scaler(StandardScaler::new(), ColumnSpec::Indices(vec![0, 1]));
 ///
 /// let fitted = ct.fit(&data)?;
 /// let transformed = fitted.transform(&data)?;
+///
+/// assert!(transformed.shape().0 > 0);
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Clone)]
 pub struct ColumnTransformer<B: Backend> {

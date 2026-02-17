@@ -7,13 +7,20 @@
 //! It does not shift/center the data, and thus does not destroy any sparsity.
 //!
 //! # Example
-//! ```ignore
-//! use machinelearne_rs::preprocessing::{Transformer, MaxAbsScaler};
-//! use machinelearne_rs::backend::CpuBackend;
+//! ```
+//! use machinelearne_rs::preprocessing::{Transformer, FittedTransformer, MaxAbsScaler};
+//! use machinelearne_rs::backend::{CpuBackend, Tensor2D};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let data = Tensor2D::<CpuBackend>::new(vec![1.0, -2.0, 3.0, -4.0, 5.0, -6.0], 3, 2);
 //!
 //! let scaler = MaxAbsScaler::<CpuBackend>::new();
 //! let fitted = scaler.fit(&data)?;
 //! let scaled = fitted.transform(&data)?;
+//!
+//! assert_eq!(scaled.shape(), (3, 2));
+//! # Ok(())
+//! # }
 //! ```
 
 use crate::backend::{Backend, Tensor1D, Tensor2D};

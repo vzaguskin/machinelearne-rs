@@ -6,13 +6,20 @@
 //! Note: This implementation treats NaN as missing values.
 //!
 //! # Example
-//! ```ignore
-//! use machinelearne_rs::preprocessing::{Transformer, SimpleImputer, ImputeStrategy};
-//! use machinelearne_rs::backend::CpuBackend;
+//! ```
+//! use machinelearne_rs::preprocessing::{Transformer, FittedTransformer, SimpleImputer, ImputeStrategy};
+//! use machinelearne_rs::backend::{CpuBackend, Tensor2D};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let data = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
 //!
 //! let imputer = SimpleImputer::<CpuBackend>::new(ImputeStrategy::Mean);
 //! let fitted = imputer.fit(&data)?;
 //! let imputed = fitted.transform(&data)?;
+//!
+//! assert_eq!(imputed.shape(), (3, 2));
+//! # Ok(())
+//! # }
 //! ```
 
 use crate::backend::{Backend, Tensor1D, Tensor2D};
