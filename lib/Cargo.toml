@@ -33,6 +33,7 @@ ndarray = ["dep:ndarray"]
 # GPU backends
 wgpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck", "dep:futures"]
 cuda = []
+metal = []
 # cudarc = ["dep:cudarc"]  # Optional: enable cudarc for real GPU support
 # tch = ["dep:tch"]
 # burn = ["dep:burn"]

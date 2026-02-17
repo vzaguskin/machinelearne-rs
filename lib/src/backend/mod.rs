@@ -24,6 +24,7 @@
 //! | `WgpuBackend`  | `wgpu`          | Cross-platform GPU (Vulkan/Metal/D3D12/WebGPU) |
 //! | `BlasBackend`  | `blas-*`        | BLAS-accelerated CPU (OpenBLAS, Accelerate) |
 //! | `CudaBackend`  | `cuda`          | NVIDIA GPU for high-performance tensor ops  |
+//! | `MetalBackend` | `metal`         | Apple Metal GPU for macOS/iOS               |
 //!
 //! ## Example
 //!
@@ -79,6 +80,12 @@ pub mod cuda;
 #[cfg(feature = "cuda")]
 /// NVIDIA GPU backend using CUDA for high-performance tensor operations.
 pub use cuda::{CudaBackend, CudaDevice, CudaTensor1D, CudaTensor2D};
+
+#[cfg(feature = "metal")]
+pub mod metal;
+#[cfg(feature = "metal")]
+/// Apple Metal GPU backend for high-performance tensor operations on macOS/iOS.
+pub use metal::{MetalBackend, MetalDevice, MetalTensor1D, MetalTensor2D};
 
 /// Scalar value representation and arithmetic operations.
 pub mod scalar;
