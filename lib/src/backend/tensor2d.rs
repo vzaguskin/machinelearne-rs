@@ -692,6 +692,66 @@ mod tests {
     }
 
     #[test]
+    fn test_sub_scalar() {
+        let t = Tensor2D::<CpuBackend>::new(vec![10.0f32, 20.0, 30.0, 40.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(5.0);
+        let result = t.sub_scalar(s);
+
+        let values = result.ravel().to_vec();
+        assert_eq!(values, vec![5.0, 15.0, 25.0, 35.0]);
+    }
+
+    #[test]
+    fn test_sub_scalar_negative() {
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(-3.0);
+        let result = t.sub_scalar(s);
+
+        let values = result.ravel().to_vec();
+        assert_eq!(values, vec![4.0, 5.0, 6.0, 7.0]);
+    }
+
+    #[test]
+    fn test_mul_scalar() {
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(2.0);
+        let result = t.mul_scalar(s);
+
+        let values = result.ravel().to_vec();
+        assert_eq!(values, vec![2.0, 4.0, 6.0, 8.0]);
+    }
+
+    #[test]
+    fn test_mul_scalar_fractional() {
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(0.5);
+        let result = t.mul_scalar(s);
+
+        let values = result.ravel().to_vec();
+        assert_eq!(values, vec![0.5, 1.0, 1.5, 2.0]);
+    }
+
+    #[test]
+    fn test_div_scalar() {
+        let t = Tensor2D::<CpuBackend>::new(vec![10.0f32, 20.0, 30.0, 40.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(2.0);
+        let result = t.div_scalar(s);
+
+        let values = result.ravel().to_vec();
+        assert_eq!(values, vec![5.0, 10.0, 15.0, 20.0]);
+    }
+
+    #[test]
+    fn test_div_scalar_fractional() {
+        let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let s = Scalar::<CpuBackend>::new(0.5);
+        let result = t.div_scalar(s);
+
+        let values = result.ravel().to_vec();
+        assert_eq!(values, vec![2.0, 4.0, 6.0, 8.0]);
+    }
+
+    #[test]
     fn test_maximum_elementwise() {
         let a = Tensor2D::<CpuBackend>::new(vec![1.0f32, 5.0, -2.0, 0.0], 2, 2);
         let b = Tensor2D::<CpuBackend>::new(vec![3.0f32, 2.0, -5.0, 4.0], 2, 2);

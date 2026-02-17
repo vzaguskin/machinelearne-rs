@@ -779,6 +779,60 @@ mod tests {
         assert_eq!(result.to_vec(), vec![2.0, 7.0]);
     }
 
+    // === sub_scalar Tests ===
+
+    #[test]
+    fn test_tensor1d_sub_scalar() {
+        let t = Tensor1D::<CpuBackend>::new(vec![10.0, 20.0, 30.0]);
+        let s = Scalar::<CpuBackend>::new(5.0);
+        let result = t.sub_scalar(&s);
+        assert_eq!(result.to_vec(), vec![5.0, 15.0, 25.0]);
+    }
+
+    #[test]
+    fn test_tensor1d_sub_scalar_negative() {
+        let t = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0]);
+        let s = Scalar::<CpuBackend>::new(-3.0);
+        let result = t.sub_scalar(&s);
+        assert_eq!(result.to_vec(), vec![4.0, 5.0]);
+    }
+
+    // === mul_scalar Tests ===
+
+    #[test]
+    fn test_tensor1d_mul_scalar() {
+        let t = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0, 3.0]);
+        let s = Scalar::<CpuBackend>::new(2.0);
+        let result = t.mul_scalar(&s);
+        assert_eq!(result.to_vec(), vec![2.0, 4.0, 6.0]);
+    }
+
+    #[test]
+    fn test_tensor1d_mul_scalar_fractional() {
+        let t = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0]);
+        let s = Scalar::<CpuBackend>::new(0.5);
+        let result = t.mul_scalar(&s);
+        assert_eq!(result.to_vec(), vec![0.5, 1.0]);
+    }
+
+    // === div_scalar Tests ===
+
+    #[test]
+    fn test_tensor1d_div_scalar() {
+        let t = Tensor1D::<CpuBackend>::new(vec![10.0, 20.0, 30.0]);
+        let s = Scalar::<CpuBackend>::new(2.0);
+        let result = t.div_scalar(&s);
+        assert_eq!(result.to_vec(), vec![5.0, 10.0, 15.0]);
+    }
+
+    #[test]
+    fn test_tensor1d_div_scalar_fractional() {
+        let t = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0]);
+        let s = Scalar::<CpuBackend>::new(0.5);
+        let result = t.div_scalar(&s);
+        assert_eq!(result.to_vec(), vec![2.0, 4.0]);
+    }
+
     // === maximum Tests ===
 
     #[test]
