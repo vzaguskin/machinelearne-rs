@@ -136,6 +136,29 @@ impl<B: Backend> Tensor2D<B> {
         }
     }
 
+    /// Computes element-wise addition: `self + other`.
+    ///
+    /// # Panics
+    /// Panics if tensors have different shapes.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor2D;
+    ///
+    /// let a = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+    /// let b = Tensor2D::<CpuBackend>::new(vec![5.0f32, 6.0, 7.0, 8.0], 2, 2);
+    /// let sum = a.add(&b);
+    /// // Result: [[6.0, 8.0], [10.0, 12.0]]
+    /// assert_eq!(sum.mean().to_f64(), 9.0);
+    /// ```
+    pub fn add(&self, other: &Self) -> Self {
+        Self {
+            data: B::add_2d(&self.data, &other.data),
+            backend: PhantomData,
+        }
+    }
+
     /// Computes the arithmetic mean of all elements in the tensor.
     ///
     /// # Returns
@@ -237,6 +260,53 @@ impl<B: Backend> Tensor2D<B> {
     pub fn tdot(&self, other: &Tensor1D<B>) -> Tensor1D<B> {
         Tensor1D {
             data: B::matvec_transposed(&self.data, &other.data),
+            backend: PhantomData,
+        }
+    }
+
+    /// Computes matrix-matrix multiplication: `self @ other`.
+    ///
+    /// For an (m × k) matrix `self` and (k × n) matrix `other`,
+    /// returns an (m × n) matrix.
+    ///
+    /// # Panics
+    /// Panics if `self.cols() != other.rows()`.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor2D;
+    ///
+    /// // A = [[1, 2], [3, 4]]  (2×2)
+    /// let a = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+    /// // B = [[5, 6], [7, 8]]  (2×2)
+    /// let b = Tensor2D::<CpuBackend>::new(vec![5.0f32, 6.0, 7.0, 8.0], 2, 2);
+    ///
+    /// // C = A @ B = [[19, 22], [43, 50]]
+    /// let c = a.matmul(&b);
+    /// assert_eq!(c.shape(), (2, 2));
+    /// ```
+    pub fn matmul(&self, other: &Self) -> Self {
+        Self {
+            data: B::matmul(&self.data, &other.data),
+            backend: PhantomData,
+        }
+    }
+
+    /// Returns the transpose of this matrix.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor2D;
+    ///
+    /// let a = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3);
+    /// let at = a.transpose();
+    /// assert_eq!(at.shape(), (3, 2));
+    /// ```
+    pub fn transpose(&self) -> Self {
+        Self {
+            data: B::transpose(&self.data),
             backend: PhantomData,
         }
     }

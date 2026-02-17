@@ -224,6 +224,68 @@ impl<B: Backend> LinearRegression<B> {
             _state: PhantomData,
         }
     }
+
+    /// Fits the model using the closed-form normal equation solution.
+    ///
+    /// Computes optimal parameters in one step: w = (X^T X)^(-1) X^T y
+    ///
+    /// This is faster than iterative SGD for small-to-medium datasets and
+    /// requires no hyperparameter tuning (no learning rate, epochs).
+    ///
+    /// # Arguments
+    /// * `x` - Design matrix with shape (n_samples, n_features)
+    /// * `y` - Target values with shape (n_samples,)
+    ///
+    /// # Returns
+    /// A fitted model ready for inference, or an error if:
+    /// - The design matrix is singular (highly correlated features)
+    /// - Dimensions don't match
+    /// - Input is empty
+    ///
+    /// # Example
+    /// ```rust
+    /// use machinelearne_rs::model::linear::LinearRegressor;
+    /// use machinelearne_rs::backend::{Tensor2D, Tensor1D, CpuBackend};
+    /// use machinelearne_rs::model::linear::InferenceModel;
+    ///
+    /// // Data: y = 2x + 1
+    /// let x = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 4, 1);
+    /// let y = Tensor1D::<CpuBackend>::new(vec![3.0, 5.0, 7.0, 9.0]);
+    ///
+    /// let model = LinearRegressor::new(1);
+    /// let fitted = model.fit_closed_form(&x, &y).unwrap();
+    ///
+    /// // Predict on new data
+    /// let pred = fitted.predict(&Tensor1D::<CpuBackend>::new(vec![5.0]));
+    /// assert!((pred.to_f64() - 11.0).abs() < 1e-4);
+    /// ```
+    pub fn fit_closed_form(
+        self,
+        x: &Tensor2D<B>,
+        y: &Tensor1D<B>,
+    ) -> Result<LinearModel<B, Fitted>, crate::linalg::LinalgError> {
+        let solution = crate::linalg::solve_normal_equation(x, y)?;
+        let solution_vec = solution.to_vec();
+
+        let (n_features, _) = {
+            let shape = x.shape();
+            (shape.1, shape.0)
+        };
+
+        // Extract weights and bias from solution
+        let weights: Vec<f32> = solution_vec[..n_features]
+            .iter()
+            .map(|&v| v as f32)
+            .collect();
+        let bias = solution_vec[n_features] as f32;
+
+        let params = LinearParams {
+            weights: Tensor1D::<B>::new(weights),
+            bias: Scalar::<B>::new(bias as f64),
+        };
+
+        Ok(LinearModel::<B, Fitted>::new(params))
+    }
 }
 
 // Convenient alias for CPU-based linear regression.
@@ -676,5 +738,91 @@ mod tests {
         assert!((original.bias.data.to_f64() - restored.bias.data.to_f64()).abs() < 1e-6);
 
         Ok(())
+    }
+
+    // === Closed-Form Solution Tests ===
+
+    #[test]
+    fn test_fit_closed_form_simple() {
+        // y = 2x + 1
+        let x = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 4, 1);
+        let y = Tensor1D::<CpuBackend>::new(vec![3.0, 5.0, 7.0, 9.0]);
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let fitted = model.fit_closed_form(&x, &y).unwrap();
+
+        let params = fitted.extract_params();
+        assert!((params.weights[0] - 2.0).abs() < 1e-5);
+        assert!((params.bias - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_fit_closed_form_multifeature() {
+        // y = 2*x1 + 3*x2 + 1
+        let x = Tensor2D::<CpuBackend>::new(vec![1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 3.0], 4, 2);
+        let y = Tensor1D::<CpuBackend>::new(vec![3.0, 4.0, 6.0, 14.0]);
+
+        let model = LinearRegression::<CpuBackend>::new(2);
+        let fitted = model.fit_closed_form(&x, &y).unwrap();
+
+        let params = fitted.extract_params();
+        assert!((params.weights[0] - 2.0).abs() < 1e-5);
+        assert!((params.weights[1] - 3.0).abs() < 1e-5);
+        assert!((params.bias - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_fit_closed_form_prediction() {
+        // y = 2x + 1
+        let x = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0], 3, 1);
+        let y = Tensor1D::<CpuBackend>::new(vec![3.0, 5.0, 7.0]);
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let fitted = model.fit_closed_form(&x, &y).unwrap();
+
+        // Predict on new data
+        let pred = fitted.predict(&Tensor1D::<CpuBackend>::new(vec![5.0]));
+        assert!((pred.to_f64() - 11.0).abs() < 1e-4);
+
+        let pred_batch = fitted.predict_batch(&Tensor2D::<CpuBackend>::new(vec![5.0, 10.0], 2, 1));
+        let batch_vec = pred_batch.to_vec();
+        assert!((batch_vec[0] - 11.0).abs() < 1e-4);
+        assert!((batch_vec[1] - 21.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_fit_closed_form_empty_input() {
+        let x = Tensor2D::<CpuBackend>::new(vec![], 0, 1);
+        let y = Tensor1D::<CpuBackend>::new(vec![]);
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let result = model.fit_closed_form(&x, &y);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_fit_closed_form_dimension_mismatch() {
+        let x = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0], 3, 1);
+        let y = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0]); // Wrong length
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let result = model.fit_closed_form(&x, &y);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_fit_closed_form_vs_sgd_accuracy() {
+        // Generate data: y = 2x + 1 with some samples
+        let x = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 6, 1);
+        let y = Tensor1D::<CpuBackend>::new(vec![3.0, 5.0, 7.0, 9.0, 11.0, 13.0]);
+
+        // Closed-form solution
+        let model_cf = LinearRegression::<CpuBackend>::new(1);
+        let fitted_cf = model_cf.fit_closed_form(&x, &y).unwrap();
+        let params_cf = fitted_cf.extract_params();
+
+        // Closed-form should give exact solution
+        assert!((params_cf.weights[0] - 2.0).abs() < 1e-5);
+        assert!((params_cf.bias - 1.0).abs() < 1e-5);
     }
 }

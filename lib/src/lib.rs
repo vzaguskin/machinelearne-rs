@@ -92,6 +92,9 @@ pub mod serialization;
 /// High-level training loop orchestration.
 pub mod trainer;
 
+/// Linear algebra utilities for closed-form solutions.
+pub mod linalg;
+
 /// Re-export of core backend types for convenient usage.
 pub use backend::{Backend, CpuBackend, ScalarOps, Tensor1D, Tensor2D};
 
