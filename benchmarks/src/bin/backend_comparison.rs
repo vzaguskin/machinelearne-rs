@@ -209,6 +209,104 @@ fn benchmark_ndarray_backend(n_features: usize) -> serde_json::Value {
     })
 }
 
+/// Benchmark WGPU backend (only available with wgpu feature)
+#[cfg(feature = "wgpu")]
+fn benchmark_wgpu_backend(n_features: usize) -> serde_json::Value {
+    use machinelearne_rs::backend::{Tensor2D as WgpuTensor2D, WgpuBackend};
+    use machinelearne_rs::preprocessing::{FittedTransformer, StandardScaler, Transformer};
+
+    let feature_indices: Vec<usize> = (0..n_features).collect();
+
+    let dataset = CaliforniaHousingDataset::load("benchmarks/datasets/california_housing.csv")
+        .expect("Failed to load dataset");
+    let subset = dataset.select_features(&feature_indices);
+    let (train_dataset, _, test_dataset) = subset.split_train_val_test(0.8, 0.0);
+
+    let train_features = train_dataset.features();
+    let train_target = train_dataset.target();
+    let test_features = test_dataset.features();
+    let test_target = test_dataset.target();
+
+    // Create GPU tensors for standardization
+    let train_flat: Vec<f32> = train_features.iter().flatten().copied().collect();
+    let train_tensor =
+        WgpuTensor2D::<WgpuBackend>::new(train_flat, train_features.len(), n_features);
+
+    // Standardize on GPU
+    let scaler = StandardScaler::<WgpuBackend>::new();
+    let fitted_scaler = scaler.fit(&train_tensor).expect("Failed to fit scaler");
+    let train_scaled = fitted_scaler
+        .transform(&train_tensor)
+        .expect("Failed to transform train");
+
+    // Convert scaled data back to Vec<Vec<f32>> for InMemoryDataset
+    let (n_train, _) = train_scaled.shape();
+    let train_flat_scaled = train_scaled.ravel().to_vec();
+    let train_features_scaled: Vec<Vec<f32>> = (0..n_train)
+        .map(|r| {
+            (0..n_features)
+                .map(|c| train_flat_scaled[r * n_features + c] as f32)
+                .collect()
+        })
+        .collect();
+
+    let train_memory = InMemoryDataset::new(train_features_scaled, train_target.to_vec())
+        .expect("Failed to create training dataset");
+
+    let lr = 0.01;
+    let model = LinearRegression::<WgpuBackend>::new(n_features);
+    let optimizer = SGD::<WgpuBackend>::new(lr);
+
+    let trainer = Trainer::builder(MSELoss, optimizer, NoRegularizer)
+        .batch_size(32)
+        .max_epochs(50)
+        .build();
+
+    let start = Instant::now();
+    let fitted = trainer
+        .fit(model, &train_memory)
+        .expect("Failed to fit model");
+    let train_time_ms = start.elapsed().as_millis();
+
+    // Standardize test data on GPU
+    let test_flat: Vec<f32> = test_features.iter().flatten().copied().collect();
+    let test_tensor = WgpuTensor2D::<WgpuBackend>::new(test_flat, test_features.len(), n_features);
+    let test_scaled = fitted_scaler
+        .transform(&test_tensor)
+        .expect("Failed to transform test");
+
+    let pred_tensor = fitted.predict_batch(&test_scaled);
+
+    let predictions: Vec<f32> = pred_tensor.to_vec().into_iter().map(|v| v as f32).collect();
+
+    let mse = Metrics::mse(test_target, &predictions);
+    let mae = Metrics::mae(test_target, &predictions);
+    let r2 = Metrics::r_squared(test_target, &predictions);
+
+    json!({
+        "backend": "WgpuBackend",
+        "n_features": n_features,
+        "train_time_ms": train_time_ms,
+        "mse": mse,
+        "mae": mae,
+        "r2": r2,
+    })
+}
+
+/// Placeholder for when wgpu feature is not enabled
+#[cfg(not(feature = "wgpu"))]
+fn benchmark_wgpu_backend(n_features: usize) -> serde_json::Value {
+    json!({
+        "backend": "WgpuBackend",
+        "n_features": n_features,
+        "train_time_ms": null,
+        "mse": null,
+        "mae": null,
+        "r2": null,
+        "disabled_reason": "wgpu feature not enabled"
+    })
+}
+
 fn main() {
     println!("Running backend comparison benchmarks...\n");
 
@@ -225,6 +323,10 @@ fn main() {
         // Ndarray Backend (if available)
         println!("  NdarrayBackend...");
         results.push(benchmark_ndarray_backend(n_features));
+
+        // WGPU Backend (if available)
+        println!("  WgpuBackend...");
+        results.push(benchmark_wgpu_backend(n_features));
     }
 
     let output = json!({
@@ -247,25 +349,13 @@ fn main() {
     );
     println!("{}", "-".repeat(70));
 
-    #[cfg(feature = "ndarray")]
     for n_features in [1, 2, 4, 8] {
         let cpu_result = results
             .iter()
             .find(|r| r["backend"] == "CpuBackend" && r["n_features"] == n_features)
             .unwrap();
 
-        let ndarray_result = results
-            .iter()
-            .find(|r| r["backend"] == "NdarrayBackend" && r["n_features"] == n_features)
-            .unwrap();
-
         let cpu_time = cpu_result["train_time_ms"].as_f64().unwrap();
-        let ndarray_time = ndarray_result["train_time_ms"].as_f64().unwrap();
-        let speedup = if ndarray_time > 0.0 {
-            cpu_time / ndarray_time
-        } else {
-            0.0
-        };
 
         println!(
             "{:<15} {:<12} {:>12.2} {:>10.4} {:>10.4} {:>10.4}",
@@ -277,9 +367,20 @@ fn main() {
             cpu_result["r2"].as_f64().unwrap(),
         );
 
-        if ndarray_time > 0.0 {
+        // Ndarray Backend
+        let ndarray_result = results
+            .iter()
+            .find(|r| r["backend"] == "NdarrayBackend" && r["n_features"] == n_features)
+            .unwrap();
+
+        if let Some(ndarray_time) = ndarray_result["train_time_ms"].as_f64() {
+            let speedup = if ndarray_time > 0.0 {
+                cpu_time / ndarray_time
+            } else {
+                0.0
+            };
             println!(
-                "{:<15} {:<12} {:>12.2} {:>10.4} {:>10.4} {:>10.4} [{:>6.1}x]",
+                "{:<15} {:<12} {:>12.2} {:>10.4} {:>10.4} {:>10.4} [{:>5.1}x]",
                 "NdarrayBackend",
                 n_features,
                 ndarray_time,
@@ -290,13 +391,37 @@ fn main() {
             );
         } else {
             println!(
-                "{:<15} {:<12} {:>12.2} {:>10.4} {:>10.4} {:>10.4} [N/A]",
-                "NdarrayBackend",
+                "{:<15} {:<12} {:>12} {:>10} {:>10} {:>10}",
+                "NdarrayBackend", n_features, "N/A", "N/A", "N/A", "N/A",
+            );
+        }
+
+        // WGPU Backend
+        let wgpu_result = results
+            .iter()
+            .find(|r| r["backend"] == "WgpuBackend" && r["n_features"] == n_features)
+            .unwrap();
+
+        if let Some(wgpu_time) = wgpu_result["train_time_ms"].as_f64() {
+            let speedup = if wgpu_time > 0.0 {
+                cpu_time / wgpu_time
+            } else {
+                0.0
+            };
+            println!(
+                "{:<15} {:<12} {:>12.2} {:>10.4} {:>10.4} {:>10.4} [{:>5.1}x]",
+                "WgpuBackend",
                 n_features,
-                ndarray_time,
-                ndarray_result["mse"].as_f64().unwrap(),
-                ndarray_result["mae"].as_f64().unwrap(),
-                ndarray_result["r2"].as_f64().unwrap(),
+                wgpu_time,
+                wgpu_result["mse"].as_f64().unwrap(),
+                wgpu_result["mae"].as_f64().unwrap(),
+                wgpu_result["r2"].as_f64().unwrap(),
+                speedup,
+            );
+        } else {
+            println!(
+                "{:<15} {:<12} {:>12} {:>10} {:>10} {:>10}",
+                "WgpuBackend", n_features, "N/A", "N/A", "N/A", "N/A",
             );
         }
 
@@ -304,9 +429,10 @@ fn main() {
     }
 
     #[cfg(not(feature = "ndarray"))]
-    {
-        println!("\nNote: Run with --features ndarray to benchmark ndarray backend");
-    }
+    println!("Note: Run with --features ndarray to benchmark ndarray backend");
+
+    #[cfg(not(feature = "wgpu"))]
+    println!("Note: Run with --features wgpu to benchmark WGPU backend");
 
     // Print sklearn comparison
     println!("Sklearn SGDRegressor (for reference, 1000 iterations):");

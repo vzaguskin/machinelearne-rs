@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### WGPU Backend Examples and Benchmarks
+- `train_linear_wgpu` example: Demonstrates GPU tensor operations using WGPU backend
+- `train_california_wgpu` example: Full ML training pipeline on GPU with California Housing dataset
+  - Displays GPU adapter information to verify GPU usage
+  - Feature standardization using GPU compute shaders
+  - Linear regression training on GPU
+  - Training time, MSE, MAE, and R² metrics reporting
+- WGPU backend benchmark in `backend_comparison` binary
+  - Benchmarks WGPU against CPU and ndarray backends
+  - Speedup comparison table with all backends
+
 #### Linear Algebra
 - `linalg` module with matrix inverse (`inverse`) and normal equation solver (`solve_normal_equation`)
 - `Tensor2D::matmul`: Matrix-matrix multiplication
