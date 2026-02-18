@@ -1,7 +1,11 @@
 //! GPU device management for WGPU backend.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use wgpu::{Device, Features, Instance, Limits, Queue};
+
+/// Global device singleton for WGPU backend.
+/// Using a single device ensures all buffers are compatible.
+static GLOBAL_DEVICE: OnceLock<WgpuDevice> = OnceLock::new();
 
 /// GPU device handle for WGPU backend.
 ///
@@ -15,7 +19,7 @@ pub struct WgpuDevice {
 
 impl WgpuDevice {
     /// Creates a new WgpuDevice by selecting the best available GPU.
-    pub async fn new() -> Self {
+    async fn create() -> Self {
         let instance = Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
@@ -47,6 +51,20 @@ impl WgpuDevice {
             device: Arc::new(device),
             queue: Arc::new(queue),
         }
+    }
+
+    /// Returns the global WgpuDevice, creating it if necessary.
+    /// This ensures all tensors share the same device for buffer compatibility.
+    pub fn global() -> Self {
+        GLOBAL_DEVICE
+            .get_or_init(|| pollster::block_on(Self::create()))
+            .clone()
+    }
+
+    /// Creates a new WgpuDevice (for advanced use cases).
+    /// Note: Buffers created on different devices are not compatible.
+    pub async fn new() -> Self {
+        Self::create().await
     }
 
     /// Enumerates all available GPU adapters.

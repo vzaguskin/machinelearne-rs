@@ -52,7 +52,7 @@ impl Backend for WgpuBackend {
     type Device = WgpuDevice;
 
     fn default_device() -> Self::Device {
-        pollster::block_on(WgpuDevice::new())
+        WgpuDevice::global()
     }
 
     // --- Constructors ---

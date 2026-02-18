@@ -172,9 +172,8 @@ impl WgpuTensor1D {
 
     /// Copies the tensor data to CPU as a Vec<f64>.
     pub async fn to_vec(&self) -> Vec<f64> {
-        // This requires a staging buffer to read back from GPU
-        // For simplicity, we'll use a blocking approach
-        let device = pollster::block_on(WgpuDevice::new());
+        // Use global device for buffer compatibility
+        let device = WgpuDevice::global();
 
         let staging_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("staging_buffer_1d"),
@@ -1660,8 +1659,8 @@ impl WgpuTensor2D {
                 });
                 compute_pass.set_pipeline(&pipeline.pipeline);
                 compute_pass.set_bind_group(0, &bind_group, &[]);
-                let workgroups_x = (tensor.cols + 15) / 16;
-                let workgroups_y = (rows + 15) / 16;
+                let workgroups_x = tensor.cols.div_ceil(16);
+                let workgroups_y = rows.div_ceil(16);
                 compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
             }
 
@@ -1750,8 +1749,8 @@ impl WgpuTensor2D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = (out_cols + 15) / 16;
-            let workgroups_y = (rows + 15) / 16;
+            let workgroups_x = out_cols.div_ceil(16);
+            let workgroups_y = rows.div_ceil(16);
             compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
         }
 
@@ -1841,7 +1840,7 @@ impl WgpuTensor2D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = (n + 255) / 256;
+            let workgroups = n.div_ceil(256);
             compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
         }
 
