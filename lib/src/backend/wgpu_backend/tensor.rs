@@ -86,6 +86,41 @@ struct ColRowParams {
     _padding: [u32; 2],
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct ColMinMaxParams {
+    op: u32,
+    rows: u32,
+    cols: u32,
+    _padding: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct SelectColumnsParams {
+    rows: u32,
+    in_cols: u32,
+    out_cols: u32,
+    num_indices: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct OneHotParams {
+    n: u32,
+    num_classes: u32,
+    _padding: [u32; 2],
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct HcatParams {
+    rows: u32,
+    out_cols: u32,
+    tensor_cols: u32,
+    col_offset: u32,
+}
+
 /// 1D tensor stored on GPU.
 #[derive(Clone)]
 pub struct WgpuTensor1D {
@@ -1302,32 +1337,138 @@ impl WgpuTensor2D {
 
     /// Column-wise min.
     pub async fn col_min(&self, device: &WgpuDevice) -> WgpuTensor1D {
-        // For now, use CPU fallback
-        let data = self.read_to_vec(device).await;
-        let mins: Vec<f64> = (0..self.cols)
-            .map(|col| {
-                (0..self.rows)
-                    .map(|row| data[row * self.cols + col] as f64)
-                    .fold(f64::INFINITY, f64::min)
-            })
-            .collect();
+        let registry = get_registry(&device.device);
+        let pipeline = &registry.col_minmax;
 
-        WgpuTensor1D::from_vec(device, mins.iter().map(|&x| x as f32).collect()).await
+        let output_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("col_min_output"),
+            size: (self.cols * std::mem::size_of::<f32>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let params = ColMinMaxParams {
+            op: 0, // min
+            rows: self.rows as u32,
+            cols: self.cols as u32,
+            _padding: 0u32,
+        };
+        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("col_min_params"),
+            contents: bytemuck::bytes_of(&params),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("col_min_bind_group"),
+            layout: &pipeline.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: output_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let mut encoder = device
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("col_min_encoder"),
+            });
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("col_min_pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(&pipeline.pipeline);
+            compute_pass.set_bind_group(0, &bind_group, &[]);
+            // One workgroup per column
+            compute_pass.dispatch_workgroups(self.cols as u32, 1, 1);
+        }
+
+        device.queue.submit(std::iter::once(encoder.finish()));
+
+        WgpuTensor1D {
+            buffer: Arc::new(output_buffer),
+            len: self.cols,
+        }
     }
 
     /// Column-wise max.
     pub async fn col_max(&self, device: &WgpuDevice) -> WgpuTensor1D {
-        // For now, use CPU fallback
-        let data = self.read_to_vec(device).await;
-        let maxes: Vec<f64> = (0..self.cols)
-            .map(|col| {
-                (0..self.rows)
-                    .map(|row| data[row * self.cols + col] as f64)
-                    .fold(f64::NEG_INFINITY, f64::max)
-            })
-            .collect();
+        let registry = get_registry(&device.device);
+        let pipeline = &registry.col_minmax;
 
-        WgpuTensor1D::from_vec(device, maxes.iter().map(|&x| x as f32).collect()).await
+        let output_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("col_max_output"),
+            size: (self.cols * std::mem::size_of::<f32>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let params = ColMinMaxParams {
+            op: 1, // max
+            rows: self.rows as u32,
+            cols: self.cols as u32,
+            _padding: 0u32,
+        };
+        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("col_max_params"),
+            contents: bytemuck::bytes_of(&params),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("col_max_bind_group"),
+            layout: &pipeline.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: output_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let mut encoder = device
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("col_max_encoder"),
+            });
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("col_max_pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(&pipeline.pipeline);
+            compute_pass.set_bind_group(0, &bind_group, &[]);
+            // One workgroup per column
+            compute_pass.dispatch_workgroups(self.cols as u32, 1, 1);
+        }
+
+        device.queue.submit(std::iter::once(encoder.finish()));
+
+        WgpuTensor1D {
+            buffer: Arc::new(output_buffer),
+            len: self.cols,
+        }
     }
 
     /// Broadcast operation with 1D tensor.
@@ -1454,21 +1595,85 @@ impl WgpuTensor2D {
         rows: usize,
         total_cols: usize,
     ) -> Result<Self, PreprocessingError> {
-        // For simplicity, use CPU fallback
-        let mut result = vec![0.0f32; rows * total_cols];
-        let mut col_offset = 0;
+        let registry = get_registry(&device.device);
+        let pipeline = &registry.hcat;
 
+        // Create output buffer
+        let output_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("hcat_output"),
+            size: (rows * total_cols * std::mem::size_of::<f32>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        // Zero the output buffer first
+        let zeros = vec![0.0f32; rows * total_cols];
+        device
+            .queue
+            .write_buffer(&output_buffer, 0, bytemuck::cast_slice(&zeros));
+
+        // Copy each tensor to the output
+        let mut col_offset = 0;
         for tensor in tensors {
-            let data = tensor.read_to_vec(device).await;
-            for row in 0..rows {
-                for col in 0..tensor.cols {
-                    result[row * total_cols + col_offset + col] = data[row * tensor.cols + col];
-                }
+            let params = HcatParams {
+                rows: rows as u32,
+                out_cols: total_cols as u32,
+                tensor_cols: tensor.cols as u32,
+                col_offset: col_offset as u32,
+            };
+            let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
+                label: Some("hcat_params"),
+                contents: bytemuck::bytes_of(&params),
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            });
+
+            let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("hcat_bind_group"),
+                layout: &pipeline.bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: tensor.buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: output_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: params_buffer.as_entire_binding(),
+                    },
+                ],
+            });
+
+            let mut encoder =
+                device
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("hcat_encoder"),
+                    });
+
+            {
+                let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("hcat_pass"),
+                    timestamp_writes: None,
+                });
+                compute_pass.set_pipeline(&pipeline.pipeline);
+                compute_pass.set_bind_group(0, &bind_group, &[]);
+                let workgroups_x = (tensor.cols + 15) / 16;
+                let workgroups_y = (rows + 15) / 16;
+                compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
             }
+
+            device.queue.submit(std::iter::once(encoder.finish()));
             col_offset += tensor.cols;
         }
 
-        Ok(Self::from_vec(device, result, rows, total_cols).await)
+        Ok(WgpuTensor2D {
+            buffer: Arc::new(output_buffer),
+            rows,
+            cols: total_cols,
+        })
     }
 
     /// Select columns by indices.
@@ -1478,17 +1683,85 @@ impl WgpuTensor2D {
         columns: &[usize],
         rows: usize,
     ) -> Self {
-        // For simplicity, use CPU fallback
-        let data = self.read_to_vec(device).await;
-        let mut result = vec![0.0f32; rows * columns.len()];
+        let registry = get_registry(&device.device);
+        let pipeline = &registry.select_columns;
 
-        for row in 0..rows {
-            for (out_col, &in_col) in columns.iter().enumerate() {
-                result[row * columns.len() + out_col] = data[row * self.cols + in_col];
-            }
+        let out_cols = columns.len();
+        let output_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("select_columns_output"),
+            size: (rows * out_cols * std::mem::size_of::<f32>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        // Create indices buffer
+        let indices: Vec<u32> = columns.iter().map(|&i| i as u32).collect();
+        let indices_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("select_columns_indices"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let params = SelectColumnsParams {
+            rows: rows as u32,
+            in_cols: self.cols as u32,
+            out_cols: out_cols as u32,
+            num_indices: out_cols as u32,
+        };
+        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("select_columns_params"),
+            contents: bytemuck::bytes_of(&params),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("select_columns_bind_group"),
+            layout: &pipeline.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: indices_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: output_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let mut encoder = device
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("select_columns_encoder"),
+            });
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("select_columns_pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(&pipeline.pipeline);
+            compute_pass.set_bind_group(0, &bind_group, &[]);
+            let workgroups_x = (out_cols + 15) / 16;
+            let workgroups_y = (rows + 15) / 16;
+            compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
         }
 
-        Self::from_vec(device, result, rows, columns.len()).await
+        device.queue.submit(std::iter::once(encoder.finish()));
+
+        WgpuTensor2D {
+            buffer: Arc::new(output_buffer),
+            rows,
+            cols: out_cols,
+        }
     }
 
     /// Create one-hot encoded matrix.
@@ -1498,21 +1771,86 @@ impl WgpuTensor2D {
         num_classes: usize,
         n: usize,
     ) -> Self {
-        // For simplicity, use CPU fallback
-        let indices_data = indices.to_vec().await;
-        let mut result = vec![0.0f32; n * num_classes];
+        let registry = get_registry(&device.device);
+        let pipeline = &registry.one_hot;
 
-        for (i, &idx) in indices_data.iter().enumerate() {
-            let class_idx = idx as usize;
-            assert!(
-                class_idx < num_classes,
-                "Index {} >= num_classes {}",
-                class_idx,
-                num_classes
-            );
-            result[i * num_classes + class_idx] = 1.0;
+        // Create output buffer pre-filled with zeros
+        let total = n * num_classes;
+        let output_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("one_hot_output"),
+            size: (total * std::mem::size_of::<f32>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        // Zero the output buffer first
+        let zeros = vec![0.0f32; total];
+        device
+            .queue
+            .write_buffer(&output_buffer, 0, bytemuck::cast_slice(&zeros));
+
+        // Convert indices from f64 to u32 for the shader
+        let indices_data = indices.to_vec().await;
+        let indices_u32: Vec<u32> = indices_data.iter().map(|&x| x as u32).collect();
+        let indices_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("one_hot_indices"),
+            contents: bytemuck::cast_slice(&indices_u32),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+        });
+
+        let params = OneHotParams {
+            n: n as u32,
+            num_classes: num_classes as u32,
+            _padding: [0u32; 2],
+        };
+        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("one_hot_params"),
+            contents: bytemuck::bytes_of(&params),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("one_hot_bind_group"),
+            layout: &pipeline.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: indices_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: output_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let mut encoder = device
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("one_hot_encoder"),
+            });
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("one_hot_pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(&pipeline.pipeline);
+            compute_pass.set_bind_group(0, &bind_group, &[]);
+            let workgroups = (n + 255) / 256;
+            compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
         }
 
-        Self::from_vec(device, result, n, num_classes).await
+        device.queue.submit(std::iter::once(encoder.finish()));
+
+        WgpuTensor2D {
+            buffer: Arc::new(output_buffer),
+            rows: n,
+            cols: num_classes,
+        }
     }
 }
