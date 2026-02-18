@@ -54,7 +54,7 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Run coverage (library only, exclude benchmarks)
-        run: cargo tarpaulin -p machinelearne-rs --features "$CI_FEATURES" --out Xml --fail-under $COVERAGE_THRESHOLD
+        run: cargo tarpaulin -p machinelearne-rs --features "serde,ndarray" --out Xml --fail-under $COVERAGE_THRESHOLD
 
   benchmarks:
     runs-on: ubuntu-latest
