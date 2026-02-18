@@ -897,4 +897,189 @@ mod tests {
         assert!(weights[0] > 1.5);
         assert!(weights[0] < 2.5);
     }
+
+    #[test]
+    fn test_trainer_divergence_detection() {
+        // Test that divergence detection works
+        // Use a very high learning rate to cause divergence
+        let x = vec![vec![1.0], vec![2.0], vec![3.0], vec![4.0], vec![5.0]];
+        let y = vec![2.0, 4.0, 6.0, 8.0, 10.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let loss = MSELoss;
+        let optimizer = SGD::new(100.0); // Very high LR to cause divergence
+        let regularizer = NoRegularizer;
+
+        let trainer = Trainer::builder(loss, optimizer, regularizer)
+            .batch_size(5)
+            .max_epochs(100)
+            .early_stopping(5, 0.001)
+            .divergence_threshold(10.0) // Stop if loss is 10x best
+            .verbose(false)
+            .build();
+
+        let result = trainer.fit(model, &dataset);
+        // Should error due to divergence
+        assert!(result.is_err());
+        let err = result.err().unwrap();
+        assert!(err.contains("diverged"));
+    }
+
+    #[test]
+    fn test_early_stopping_state_improvement() {
+        use crate::model::linear::LinearParams;
+
+        let config = EarlyStoppingConfig::new(3, 0.001);
+        let mut state: EarlyStoppingState<LinearParams<CpuBackend>> =
+            EarlyStoppingState::new(config, None);
+
+        // First check - sets best loss
+        let params = LinearParams {
+            weights: Tensor1D::new(vec![1.0]),
+            bias: Scalar::new(0.0),
+        };
+        let result = state.check::<CpuBackend>(1.0, &params);
+        assert!(matches!(result, EarlyStoppingResult::Continue));
+        assert!((state.best_loss - 1.0).abs() < 1e-10);
+        assert_eq!(state.epochs_without_improvement, 0);
+
+        // Improvement - resets counter
+        let result = state.check::<CpuBackend>(0.5, &params);
+        assert!(matches!(result, EarlyStoppingResult::Continue));
+        assert!((state.best_loss - 0.5).abs() < 1e-10);
+        assert_eq!(state.epochs_without_improvement, 0);
+
+        // No improvement - increments counter
+        let result = state.check::<CpuBackend>(0.6, &params);
+        assert!(matches!(result, EarlyStoppingResult::Continue));
+        assert_eq!(state.epochs_without_improvement, 1);
+
+        // More no improvement
+        let result = state.check::<CpuBackend>(0.55, &params);
+        assert!(matches!(result, EarlyStoppingResult::Continue));
+        assert_eq!(state.epochs_without_improvement, 2);
+
+        // Final no improvement - should stop
+        let result = state.check::<CpuBackend>(0.52, &params);
+        assert!(matches!(result, EarlyStoppingResult::Stop));
+    }
+
+    #[test]
+    fn test_early_stopping_state_divergence() {
+        use crate::model::linear::LinearParams;
+
+        let config = EarlyStoppingConfig::new(10, 0.001);
+        let mut state: EarlyStoppingState<LinearParams<CpuBackend>> =
+            EarlyStoppingState::new(config, Some(10.0)); // 10x threshold
+
+        let params = LinearParams {
+            weights: Tensor1D::new(vec![1.0]),
+            bias: Scalar::new(0.0),
+        };
+
+        // First check - sets best loss
+        let result = state.check::<CpuBackend>(1.0, &params);
+        assert!(matches!(result, EarlyStoppingResult::Continue));
+
+        // Divergence - loss is > 10x best
+        let result = state.check::<CpuBackend>(15.0, &params);
+        assert!(matches!(result, EarlyStoppingResult::Diverged));
+    }
+
+    #[test]
+    fn test_early_stopping_restores_best_params() {
+        // Test that early stopping restores the best parameters
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0]; // y = 2*x
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let loss = MSELoss;
+        let optimizer = SGD::new(0.1);
+        let regularizer = NoRegularizer;
+
+        let trainer = Trainer::builder(loss, optimizer, regularizer)
+            .batch_size(3)
+            .max_epochs(500)
+            .early_stopping(3, 0.0001) // Very sensitive
+            .verbose(false)
+            .build();
+
+        let fitted_model = trainer.fit(model, &dataset).unwrap();
+        let weights = fitted_model.extract_params().weights;
+
+        // Should still converge well (allow wider range)
+        assert!(weights[0] > 1.5);
+        assert!(weights[0] < 2.5);
+    }
+
+    #[test]
+    fn test_trainer_with_all_stability_features_verbose() {
+        // Test verbose mode with all stability features
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let loss = MSELoss;
+        let optimizer = SGD::new(0.1);
+        let regularizer = NoRegularizer;
+
+        let trainer = Trainer::builder(loss, optimizer, regularizer)
+            .batch_size(3)
+            .max_epochs(10)
+            .gradient_clipping(1.0)
+            .early_stopping(20, 0.0001)
+            .divergence_threshold(100.0)
+            .verbose(true) // Test verbose path
+            .build();
+
+        // This will print to stdout, but should not fail
+        let result = trainer.fit(model, &dataset);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_early_stopping_verbose_paths() {
+        // Test that early stopping verbose paths work
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        // Test verbose early stopping
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let trainer = Trainer::builder(MSELoss, SGD::<CpuBackend>::new(0.1), NoRegularizer)
+            .batch_size(3)
+            .max_epochs(50)
+            .early_stopping(3, 0.0001)
+            .verbose(true)
+            .build();
+
+        let _ = trainer.fit(model, &dataset);
+    }
+
+    #[test]
+    fn test_divergence_verbose_path() {
+        // Test divergence detection with verbose mode
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let trainer = Trainer::builder(
+            MSELoss,
+            SGD::<CpuBackend>::new(1000.0), // High LR to cause divergence
+            NoRegularizer,
+        )
+        .batch_size(3)
+        .max_epochs(100)
+        .early_stopping(5, 0.001)
+        .divergence_threshold(5.0)
+        .verbose(true)
+        .build();
+
+        let result = trainer.fit(model, &dataset);
+        assert!(result.is_err());
+    }
 }

@@ -300,6 +300,9 @@ mod tests {
         let a = 4.0f64;
         assert_eq!(a.sqrt(), 2.0);
         assert_eq!(a.abs(), 4.0);
+        // Test abs on negative number to cover the abs implementation
+        let neg = -5.0f64;
+        assert_eq!(neg.abs(), 5.0);
         assert_eq!(f64::zero(), 0.0);
         assert_eq!(f64::one(), 1.0);
         assert_eq!(f64::from_f64(3.14), 3.14);
