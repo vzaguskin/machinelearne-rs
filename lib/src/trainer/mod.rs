@@ -10,6 +10,106 @@ use crate::{
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 
+/// Configuration for gradient clipping by global L2 norm.
+///
+/// When enabled, gradients are scaled to have a maximum L2 norm of `max_norm`.
+/// This prevents gradient explosion during training.
+#[derive(Clone, Copy, Debug)]
+pub struct GradientClipping {
+    /// Maximum allowed L2 norm for gradients.
+    pub max_norm: f32,
+}
+
+impl GradientClipping {
+    /// Creates a new gradient clipping configuration.
+    pub fn new(max_norm: f32) -> Self {
+        Self { max_norm }
+    }
+}
+
+/// Configuration for early stopping based on loss improvement.
+///
+/// Early stopping halts training when the loss does not improve for a specified
+/// number of epochs (patience), or when the loss diverges significantly.
+#[derive(Clone, Copy, Debug)]
+pub struct EarlyStoppingConfig {
+    /// Number of epochs to wait for improvement before stopping.
+    pub patience: usize,
+    /// Minimum change in loss to qualify as an improvement.
+    pub min_delta: f32,
+}
+
+impl EarlyStoppingConfig {
+    /// Creates a new early stopping configuration.
+    pub fn new(patience: usize, min_delta: f32) -> Self {
+        Self {
+            patience,
+            min_delta,
+        }
+    }
+}
+
+/// Result of early stopping check.
+enum EarlyStoppingResult {
+    /// Continue training.
+    Continue,
+    /// Stop training, loss has plateaued.
+    Stop,
+    /// Training has diverged (loss exploded).
+    Diverged,
+}
+
+/// Tracks early stopping state during training.
+struct EarlyStoppingState<P> {
+    best_loss: f64,
+    best_params: Option<P>,
+    epochs_without_improvement: usize,
+    config: EarlyStoppingConfig,
+    divergence_threshold: Option<f32>,
+}
+
+impl<P: Clone> EarlyStoppingState<P> {
+    fn new(config: EarlyStoppingConfig, divergence_threshold: Option<f32>) -> Self {
+        Self {
+            best_loss: f64::MAX,
+            best_params: None,
+            epochs_without_improvement: 0,
+            config,
+            divergence_threshold,
+        }
+    }
+
+    fn check<B>(&mut self, current_loss: f64, current_params: &P) -> EarlyStoppingResult
+    where
+        B: Backend,
+        P: ParamOps<B>,
+    {
+        // Check for divergence
+        if let Some(threshold) = self.divergence_threshold {
+            if self.best_loss < f64::MAX && current_loss > self.best_loss * threshold as f64 {
+                return EarlyStoppingResult::Diverged;
+            }
+        }
+
+        // Check for improvement
+        let improved = current_loss < self.best_loss - self.config.min_delta as f64;
+
+        if improved {
+            self.best_loss = current_loss;
+            self.best_params = Some(current_params.clone());
+            self.epochs_without_improvement = 0;
+        } else {
+            self.epochs_without_improvement += 1;
+        }
+
+        if self.epochs_without_improvement >= self.config.patience {
+            EarlyStoppingResult::Stop
+        } else {
+            EarlyStoppingResult::Continue
+        }
+    }
+}
+
 /// Orchestrates the training loop for a `TrainableModel`.
 ///
 /// Combines a loss function, optimizer, and regularizer to fit a model on a dataset.
@@ -31,6 +131,9 @@ where
     pub(crate) loss_fn: L,
     pub(crate) optimizer: O,
     pub(crate) regularizer: R,
+    pub(crate) gradient_clipping: Option<GradientClipping>,
+    pub(crate) early_stopping: Option<EarlyStoppingConfig>,
+    pub(crate) divergence_threshold: Option<f32>,
     _phantom_backend: PhantomData<B>,
     _phantom_model: PhantomData<M>,
 }
@@ -41,6 +144,9 @@ where
 /// - `batch_size`: 32
 /// - `max_epochs`: 1000
 /// - `verbose`: true
+/// - `gradient_clipping`: None (disabled)
+/// - `early_stopping`: None (disabled)
+/// - `divergence_threshold`: None (disabled)
 pub struct TrainerBuilder<B, L, O, M, P, R>
 where
     B: Backend,
@@ -55,6 +161,9 @@ where
     loss_fn: L,
     optimizer: O,
     regularizer: R,
+    gradient_clipping: Option<GradientClipping>,
+    early_stopping: Option<EarlyStoppingConfig>,
+    divergence_threshold: Option<f32>,
     _phantom_backend: PhantomData<B>,
     _phantom_model: PhantomData<M>,
 }
@@ -81,6 +190,9 @@ where
             loss_fn,
             optimizer,
             regularizer,
+            gradient_clipping: None,
+            early_stopping: None,
+            divergence_threshold: None,
             _phantom_backend: PhantomData,
             _phantom_model: PhantomData,
         }
@@ -105,6 +217,68 @@ where
         self
     }
 
+    /// Enables gradient clipping by global L2 norm.
+    ///
+    /// When enabled, gradients are scaled to have a maximum L2 norm of `max_norm`.
+    /// This prevents gradient explosion during training.
+    ///
+    /// # Arguments
+    /// * `max_norm` — Maximum allowed L2 norm for gradients. Common values: 0.5, 1.0, 5.0
+    ///
+    /// # Example
+    /// ```ignore
+    /// let trainer = Trainer::builder(loss, optimizer, regularizer)
+    ///     .gradient_clipping(1.0)
+    ///     .build();
+    /// ```
+    pub fn gradient_clipping(mut self, max_norm: f32) -> Self {
+        self.gradient_clipping = Some(GradientClipping::new(max_norm));
+        self
+    }
+
+    /// Enables early stopping based on loss improvement.
+    ///
+    /// Training stops when the loss does not improve by at least `min_delta`
+    /// for `patience` consecutive epochs.
+    ///
+    /// # Arguments
+    /// * `patience` — Number of epochs to wait for improvement before stopping
+    /// * `min_delta` — Minimum change in loss to qualify as an improvement
+    ///
+    /// # Example
+    /// ```ignore
+    /// let trainer = Trainer::builder(loss, optimizer, regularizer)
+    ///     .early_stopping(5, 0.001)  // Stop if no improvement > 0.001 for 5 epochs
+    ///     .build();
+    /// ```
+    pub fn early_stopping(mut self, patience: usize, min_delta: f32) -> Self {
+        self.early_stopping = Some(EarlyStoppingConfig::new(patience, min_delta));
+        self
+    }
+
+    /// Sets the divergence threshold for early stopping.
+    ///
+    /// When the loss exceeds `best_loss * threshold`, training is stopped immediately.
+    /// This detects when training has diverged (loss exploded).
+    ///
+    /// Only effective when early stopping is enabled.
+    ///
+    /// # Arguments
+    /// * `threshold` — Multiplier for best loss that triggers divergence detection.
+    ///   Common values: 10.0 (stop if loss becomes 10x the best)
+    ///
+    /// # Example
+    /// ```ignore
+    /// let trainer = Trainer::builder(loss, optimizer, regularizer)
+    ///     .early_stopping(5, 0.001)
+    ///     .divergence_threshold(10.0)  // Stop if loss exceeds 10x best
+    ///     .build();
+    /// ```
+    pub fn divergence_threshold(mut self, threshold: f32) -> Self {
+        self.divergence_threshold = Some(threshold);
+        self
+    }
+
     pub fn build(self) -> Trainer<B, L, O, M, P, R> {
         Trainer {
             batch_size: self.batch_size,
@@ -113,6 +287,9 @@ where
             loss_fn: self.loss_fn,
             optimizer: self.optimizer,
             regularizer: self.regularizer,
+            gradient_clipping: self.gradient_clipping,
+            early_stopping: self.early_stopping,
+            divergence_threshold: self.divergence_threshold,
             _phantom_backend: PhantomData,
             _phantom_model: PhantomData,
         }
@@ -143,10 +320,14 @@ where
     /// - The dataset is empty
     /// - The dataset length is unknown (required for loss averaging)
     /// - A batch fails to load
+    /// - Training diverged (loss exploded beyond divergence threshold)
     ///
     /// # Notes
     /// - Loss is averaged over the entire dataset per epoch.
     /// - Gradients are averaged per batch before applying regularization.
+    /// - If gradient clipping is enabled, gradients are clipped per batch.
+    /// - If early stopping is enabled, training may stop before `max_epochs`.
+    /// - When early stopping triggers, the model from the best epoch is returned.
     pub fn fit<D>(&self, mut model: M, dataset: &D) -> Result<M::Output, String>
     where
         D: Dataset,
@@ -156,13 +337,19 @@ where
             return Err("Dataset is empty".into());
         }
 
+        // Initialize early stopping state if enabled
+        let mut early_stopping_state = self
+            .early_stopping
+            .as_ref()
+            .map(|config| EarlyStoppingState::<P>::new(*config, self.divergence_threshold));
+
         for epoch in 0..self.max_epochs {
             let mut total_loss = Scalar::<B>::new(0.);
-            //let mut total_samples = 0;
+
             for batch_result in dataset.batches::<B>(self.batch_size) {
                 let (batch_x, batch_y) =
                     batch_result.map_err(|e| format!("Data error: {:?}", e))?;
-                //let mut total_loss = Scalar::<B>::new(0.);
+
                 let preds = model.forward(&batch_x);
                 total_loss = total_loss + self.loss_fn.loss(&preds, &batch_y);
                 let (reg_penalty, reg_grad) = self.regularizer.regularizer_penalty_grad(&model);
@@ -170,14 +357,58 @@ where
                 let grad_preds = self.loss_fn.grad_wrt_prediction(&preds, &batch_y);
                 let grads = model.backward(&batch_x, &grad_preds);
 
-                let total_grads = grads.add(&reg_grad);
+                let mut total_grads = grads.add(&reg_grad);
+
+                // Apply gradient clipping if enabled
+                if let Some(clipping) = &self.gradient_clipping {
+                    total_grads = total_grads.clip_by_norm(clipping.max_norm);
+                }
+
                 let new_params = self.optimizer.step(model.params(), &total_grads);
                 model.update_params(&new_params);
             }
 
             let avg_loss = total_loss / Scalar::<B>::new(n_total as f64);
+            let loss_value = avg_loss.data.to_f64();
+
             if self.verbose {
-                println!("Epoch {}: loss = {}", epoch, avg_loss.data.to_f64());
+                println!("Epoch {}: loss = {}", epoch, loss_value);
+            }
+
+            // Check early stopping if enabled
+            if let Some(ref mut state) = early_stopping_state {
+                let current_params = model.params();
+                match state.check::<B>(loss_value, current_params) {
+                    EarlyStoppingResult::Diverged => {
+                        if self.verbose {
+                            println!("Training diverged at epoch {}", epoch);
+                        }
+                        return Err(format!(
+                            "Training diverged at epoch {} (loss = {})",
+                            epoch, loss_value
+                        ));
+                    }
+                    EarlyStoppingResult::Stop => {
+                        if self.verbose {
+                            println!("Early stopping triggered at epoch {}", epoch);
+                        }
+                        // Restore best parameters if available
+                        if let Some(best_params) = &state.best_params {
+                            model.update_params(best_params);
+                        }
+                        break;
+                    }
+                    EarlyStoppingResult::Continue => {
+                        // Continue training
+                    }
+                }
+            }
+        }
+
+        // If early stopping was enabled and we have best params, restore them
+        if let Some(ref state) = early_stopping_state {
+            if let Some(best_params) = &state.best_params {
+                model.update_params(best_params);
             }
         }
 
@@ -484,5 +715,186 @@ mod tests {
 
         let result = trainer.fit(model, &dataset);
         assert!(result.is_err());
+    }
+
+    // === Gradient Clipping Tests ===
+
+    #[test]
+    fn test_gradient_clipping_builder() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .gradient_clipping(1.0);
+
+        assert!(builder.gradient_clipping.is_some());
+        assert_eq!(builder.gradient_clipping.unwrap().max_norm, 1.0);
+    }
+
+    #[test]
+    fn test_gradient_clipping_disabled_by_default() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer);
+
+        assert!(builder.gradient_clipping.is_none());
+    }
+
+    #[test]
+    fn test_param_ops_l2_norm() {
+        use crate::model::linear::LinearParams;
+
+        // Create params with weights [3.0, 4.0] and bias 0.0
+        // L2 norm should be sqrt(9 + 16 + 0) = 5.0
+        let params: LinearParams<CpuBackend> = LinearParams {
+            weights: Tensor1D::new(vec![3.0, 4.0]),
+            bias: Scalar::new(0.0),
+        };
+
+        let norm = params.l2_norm();
+        assert!((norm.to_f64() - 5.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_param_ops_clip_by_norm_exceeding() {
+        use crate::model::linear::LinearParams;
+
+        // Create params with weights [3.0, 4.0] and bias 0.0
+        // L2 norm = 5.0, clip to 1.0 should scale to [0.6, 0.8]
+        let params: LinearParams<CpuBackend> = LinearParams {
+            weights: Tensor1D::new(vec![3.0, 4.0]),
+            bias: Scalar::new(0.0),
+        };
+
+        let clipped = params.clip_by_norm(1.0);
+        let weights = clipped.weights.to_vec();
+
+        assert!((weights[0] - 0.6).abs() < 1e-6);
+        assert!((weights[1] - 0.8).abs() < 1e-6);
+        assert!((clipped.bias.to_f64() - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_param_ops_clip_by_norm_within() {
+        use crate::model::linear::LinearParams;
+
+        // Create params with weights [0.3, 0.4] and bias 0.0
+        // L2 norm = 0.5, clip to 1.0 should leave unchanged
+        let params: LinearParams<CpuBackend> = LinearParams {
+            weights: Tensor1D::new(vec![0.3, 0.4]),
+            bias: Scalar::new(0.0),
+        };
+
+        let clipped = params.clip_by_norm(1.0);
+        let weights = clipped.weights.to_vec();
+
+        assert!((weights[0] - 0.3).abs() < 1e-6);
+        assert!((weights[1] - 0.4).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_trainer_with_gradient_clipping() {
+        // Simple training with gradient clipping enabled
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0]; // y = 2*x
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let loss = MSELoss;
+        let optimizer = SGD::new(0.1);
+        let regularizer = NoRegularizer;
+
+        let trainer = Trainer::builder(loss, optimizer, regularizer)
+            .batch_size(3)
+            .max_epochs(50)
+            .gradient_clipping(1.0)
+            .verbose(false)
+            .build();
+
+        let fitted_model = trainer.fit(model, &dataset).unwrap();
+        let weights = fitted_model.extract_params().weights;
+
+        // Should still converge to approximately y = 2*x
+        assert!(weights[0] > 1.5);
+        assert!(weights[0] < 2.5);
+    }
+
+    // === Early Stopping Tests ===
+
+    #[test]
+    fn test_early_stopping_builder() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .early_stopping(5, 0.001);
+
+        assert!(builder.early_stopping.is_some());
+        let config = builder.early_stopping.unwrap();
+        assert_eq!(config.patience, 5);
+        assert!((config.min_delta - 0.001).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_divergence_threshold_builder() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+            .divergence_threshold(10.0);
+
+        assert_eq!(builder.divergence_threshold, Some(10.0));
+    }
+
+    #[test]
+    fn test_early_stopping_disabled_by_default() {
+        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer);
+
+        assert!(builder.early_stopping.is_none());
+        assert!(builder.divergence_threshold.is_none());
+    }
+
+    #[test]
+    fn test_trainer_with_early_stopping() {
+        // Training with early stopping - should stop before max_epochs
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0]; // y = 2*x
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let loss = MSELoss;
+        let optimizer = SGD::new(0.01);
+        let regularizer = NoRegularizer;
+
+        let trainer = Trainer::builder(loss, optimizer, regularizer)
+            .batch_size(3)
+            .max_epochs(1000) // High max epochs
+            .early_stopping(5, 0.0001) // Stop after 5 epochs without improvement
+            .verbose(false)
+            .build();
+
+        let fitted_model = trainer.fit(model, &dataset).unwrap();
+        let weights = fitted_model.extract_params().weights;
+
+        // Should still converge
+        assert!(weights[0] > 1.5);
+        assert!(weights[0] < 2.5);
+    }
+
+    #[test]
+    fn test_trainer_with_clipping_and_early_stopping() {
+        // Training with both gradient clipping and early stopping
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0]; // y = 2*x
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let loss = MSELoss;
+        let optimizer = SGD::new(0.1);
+        let regularizer = NoRegularizer;
+
+        let trainer = Trainer::builder(loss, optimizer, regularizer)
+            .batch_size(3)
+            .max_epochs(100)
+            .gradient_clipping(1.0)
+            .early_stopping(10, 0.0001)
+            .verbose(false)
+            .build();
+
+        let fitted_model = trainer.fit(model, &dataset).unwrap();
+        let weights = fitted_model.extract_params().weights;
+
+        // Should converge to approximately y = 2*x
+        assert!(weights[0] > 1.5);
+        assert!(weights[0] < 2.5);
     }
 }

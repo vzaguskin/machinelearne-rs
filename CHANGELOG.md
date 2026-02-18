@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### Training Stability Features
+- `gradient_clipping(max_norm)`: Clips gradients by global L2 norm to prevent gradient explosion
+  - Configured via `TrainerBuilder::gradient_clipping()`
+  - Applied per-batch before optimizer step
+- `early_stopping(patience, min_delta)`: Stops training when loss plateaus
+  - Configured via `TrainerBuilder::early_stopping()`
+  - Restores model parameters from best epoch
+- `divergence_threshold(threshold)`: Detects and stops training when loss diverges
+  - Configured via `TrainerBuilder::divergence_threshold()`
+  - Returns error when loss exceeds `best_loss * threshold`
+- `Scalar::sqrt()`: Square root method for scalar values
+- `ParamOps::l2_norm()`: Computes L2 norm of parameters
+- `ParamOps::clip_by_norm()`: Clips parameters to maximum L2 norm
+
 #### WGPU Backend Examples and Benchmarks
 - `train_linear_wgpu` example: Demonstrates GPU tensor operations using WGPU backend
 - `train_california_wgpu` example: Full ML training pipeline on GPU with California Housing dataset

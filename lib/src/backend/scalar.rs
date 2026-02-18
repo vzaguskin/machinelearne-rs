@@ -201,6 +201,26 @@ impl<B: Backend> Scalar<B> {
             backend: PhantomData,
         }
     }
+
+    /// Computes the square root of this scalar.
+    ///
+    /// Delegates to the backend's scalar implementation of `sqrt`.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Scalar;
+    ///
+    /// let s: Scalar<CpuBackend> = Scalar::new(4.0);
+    /// let sqrt_s = s.sqrt();
+    /// assert!((sqrt_s.to_f64() - 2.0).abs() < 1e-12);
+    /// ```
+    pub fn sqrt(&self) -> Self {
+        Self {
+            data: self.data.sqrt(),
+            backend: PhantomData,
+        }
+    }
 }
 
 // === Standard arithmetic trait implementations ===
