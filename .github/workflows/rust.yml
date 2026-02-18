@@ -51,7 +51,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
+        uses: taiki-e/install-action@cargo-tarpaulin
 
       - name: Run coverage (library only, exclude benchmarks)
         run: cargo tarpaulin -p machinelearne-rs --features "serde,ndarray" --out Xml --fail-under $COVERAGE_THRESHOLD
