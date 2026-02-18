@@ -18,6 +18,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - WGPU backend benchmark in `backend_comparison` binary
   - Benchmarks WGPU against CPU and ndarray backends
   - Speedup comparison table with all backends
+- `wgpu_cpu_comparison` example: Direct head-to-head comparison of WGPU vs CPU backends
+  - Tests multiple dataset sizes (1K, 10K, 20K samples)
+  - Measures training time and accuracy for identical operations
+  - Analysis of GPU overhead vs benefit (currently shows WGPU ~200x slower - needs optimization)
 
 #### Linear Algebra
 - `linalg` module with matrix inverse (`inverse`) and normal equation solver (`solve_normal_equation`)
