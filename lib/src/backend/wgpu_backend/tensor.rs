@@ -135,6 +135,11 @@ impl WgpuTensor1D {
         self.len
     }
 
+    /// Returns true if the tensor is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
     /// Copies the tensor data to CPU as a Vec<f64>.
     pub async fn to_vec(&self) -> Vec<f64> {
         // This requires a staging buffer to read back from GPU
@@ -243,7 +248,7 @@ impl WgpuTensor1D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = (self.len + 255) / 256;
+            let workgroups = self.len.div_ceil(256);
             compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
         }
 
@@ -311,7 +316,7 @@ impl WgpuTensor1D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = (self.len + 255) / 256;
+            let workgroups = self.len.div_ceil(256);
             compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
         }
 
@@ -379,7 +384,7 @@ impl WgpuTensor1D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = (self.len + 255) / 256;
+            let workgroups = self.len.div_ceil(256);
             compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
         }
 
@@ -403,7 +408,7 @@ impl WgpuTensor1D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.sum_1d;
 
-        let workgroup_count = (self.len + 255) / 256;
+        let workgroup_count = self.len.div_ceil(256);
         let partial_sums = device.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("partial_sums"),
             size: (workgroup_count * std::mem::size_of::<f32>()) as u64,
@@ -597,8 +602,8 @@ impl WgpuTensor2D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = (self.cols + 15) / 16;
-            let workgroups_y = (self.rows + 15) / 16;
+            let workgroups_x = self.cols.div_ceil(16);
+            let workgroups_y = self.rows.div_ceil(16);
             compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
         }
 
@@ -668,8 +673,8 @@ impl WgpuTensor2D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = (self.cols + 15) / 16;
-            let workgroups_y = (self.rows + 15) / 16;
+            let workgroups_x = self.cols.div_ceil(16);
+            let workgroups_y = self.rows.div_ceil(16);
             compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
         }
 
@@ -739,8 +744,8 @@ impl WgpuTensor2D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = (self.cols + 15) / 16;
-            let workgroups_y = (self.rows + 15) / 16;
+            let workgroups_x = self.cols.div_ceil(16);
+            let workgroups_y = self.rows.div_ceil(16);
             compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
         }
 
@@ -765,7 +770,7 @@ impl WgpuTensor2D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.sum_2d;
 
-        let workgroup_count = (total + 255) / 256;
+        let workgroup_count = total.div_ceil(256);
         let partial_sums = device.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("partial_sums_2d"),
             size: (workgroup_count * std::mem::size_of::<f32>()) as u64,
@@ -905,7 +910,7 @@ impl WgpuTensor2D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = (self.rows + 15) / 16;
+            let workgroups = self.rows.div_ceil(16);
             compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
         }
 
@@ -976,7 +981,7 @@ impl WgpuTensor2D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = (self.cols + 15) / 16;
+            let workgroups = self.cols.div_ceil(16);
             compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
         }
 
@@ -1051,8 +1056,8 @@ impl WgpuTensor2D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = (n + 7) / 8;
-            let workgroups_y = (m + 7) / 8;
+            let workgroups_x = n.div_ceil(8);
+            let workgroups_y = m.div_ceil(8);
             compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
         }
 
@@ -1121,8 +1126,8 @@ impl WgpuTensor2D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = (self.cols + 15) / 16;
-            let workgroups_y = (self.rows + 15) / 16;
+            let workgroups_x = self.cols.div_ceil(16);
+            let workgroups_y = self.rows.div_ceil(16);
             compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
         }
 
@@ -1199,7 +1204,7 @@ impl WgpuTensor2D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = (self.cols + 255) / 256;
+            let workgroups = self.cols.div_ceil(256);
             compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
         }
 
@@ -1266,7 +1271,7 @@ impl WgpuTensor2D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = (self.rows + 255) / 256;
+            let workgroups = self.rows.div_ceil(256);
             compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
         }
 
@@ -1391,8 +1396,8 @@ impl WgpuTensor2D {
             });
             compute_pass.set_pipeline(&pipeline.pipeline);
             compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = (self.cols + 15) / 16;
-            let workgroups_y = (self.rows + 15) / 16;
+            let workgroups_x = self.cols.div_ceil(16);
+            let workgroups_y = self.rows.div_ceil(16);
             compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
         }
 
