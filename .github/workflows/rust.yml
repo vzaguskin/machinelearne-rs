@@ -9,6 +9,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   COVERAGE_THRESHOLD: 85
+  # Features to test on Linux CI (exclude platform-specific BLAS backends)
+  CI_FEATURES: "serde,ndarray,wgpu"
 
 jobs:
   lint:
@@ -25,7 +27,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-features -- -D warnings
+        run: cargo clippy --workspace --features "$CI_FEATURES" -- -D warnings
 
   build:
     runs-on: ubuntu-latest
@@ -37,7 +39,7 @@ jobs:
         run: cargo build --workspace --verbose
 
       - name: Run tests (library only)
-        run: cargo test -p machinelearne-rs --all-features --verbose
+        run: cargo test -p machinelearne-rs --features "$CI_FEATURES" --verbose
 
   coverage:
     runs-on: ubuntu-latest
@@ -52,7 +54,7 @@ jobs:
         run: cargo install cargo-tarpaulin
 
       - name: Run coverage (library only, exclude benchmarks)
-        run: cargo tarpaulin -p machinelearne-rs --all-features --out Xml --fail-under $COVERAGE_THRESHOLD
+        run: cargo tarpaulin -p machinelearne-rs --features "$CI_FEATURES" --out Xml --fail-under $COVERAGE_THRESHOLD
 
   benchmarks:
     runs-on: ubuntu-latest
