@@ -62,6 +62,32 @@ pub trait TrainableModel<B: Backend> {
 pub trait ParamOps<B: Backend>: Clone {
     fn add(&self, other: &Self) -> Self;
     fn scale(&self, scalar: Scalar<B>) -> Self;
+
+    /// Computes the L2 norm (Euclidean norm) of the parameters.
+    ///
+    /// This is used for gradient clipping to measure gradient magnitude.
+    fn l2_norm(&self) -> Scalar<B>;
+
+    /// Clips the parameters by L2 norm if it exceeds `max_norm`.
+    ///
+    /// If the L2 norm is greater than `max_norm`, scales the parameters
+    /// to have L2 norm equal to `max_norm`. Otherwise, returns unchanged.
+    ///
+    /// Returns the (potentially clipped) parameters.
+    fn clip_by_norm(&self, max_norm: f32) -> Self
+    where
+        Self: Sized,
+    {
+        let norm = self.l2_norm();
+        let norm_val = norm.to_f64();
+
+        if norm_val > max_norm as f64 && norm_val > 0.0 {
+            let scale = max_norm as f64 / norm_val;
+            self.scale(Scalar::<B>::new(scale))
+        } else {
+            self.clone()
+        }
+    }
 }
 /// A lightweight, serializable model for inference only.
 ///

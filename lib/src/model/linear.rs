@@ -88,6 +88,14 @@ where
             bias: b,
         }
     }
+
+    fn l2_norm(&self) -> Scalar<B> {
+        // L2 norm = sqrt(sum of squares of all parameters)
+        // For LinearParams: sqrt(||weights||^2 + bias^2)
+        let weights_sq = self.weights.dot(&self.weights);
+        let bias_sq = self.bias * self.bias;
+        (weights_sq + bias_sq).sqrt()
+    }
 }
 
 /// A linear model with state encoded at the type level.
