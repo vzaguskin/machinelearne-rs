@@ -51,6 +51,120 @@ cargo run --example train_logistic        # Binary classification with BCE
 1. **Always run `cargo fmt` before committing** to ensure consistent code formatting.
 2. **Always work in a feature branch**, never commit directly to `main`. Create a branch like `feature/your-feature-name`.
 
+## Feature Development Process
+
+**CRITICAL**: Follow this process for EVERY feature. No exceptions.
+
+### 1. Planning Phase
+
+Before writing any code, complete these steps in order:
+
+```bash
+# 1. Create OpenSpec change request
+openspec new change "feature-name-in-kebab-case"
+
+# 2. Create GitHub issue (reference the OpenSpec change)
+gh issue create --title "feat: short description" --body "Description linking to OpenSpec change"
+
+# 3. Create feature branch from main
+git checkout main && git pull
+git checkout -b feature/feature-name-in-kebab-case
+```
+
+**OpenSpec artifacts** (all required before implementation):
+- `proposal.md` - WHY this change is needed
+- `specs/<capability>/spec.md` - WHAT the system should do
+- `design.md` - HOW to implement it
+- `tasks.md` - Implementation checklist with `- [ ]` format
+
+### 2. Implementation Phase
+
+```bash
+# Work through tasks in tasks.md
+# Mark each task complete as you go: - [ ] → - [x]
+
+# Run tests frequently
+cargo test -p machinelearne-rs --all-features
+
+# Format before committing
+cargo fmt
+```
+
+### 3. Pre-Merge Phase (Single PR)
+
+Before creating the PR, archive the OpenSpec change **in the feature branch**:
+
+```bash
+# Archive OpenSpec (creates spec files, moves change to archive/)
+openspec archive "feature-name-in-kebab-case" -y
+
+# Commit the archive
+git add openspec/
+git commit -m "chore(openspec): archive feature-name change"
+```
+
+This ensures the feature implementation AND OpenSpec archive are in one PR.
+
+### 4. Pull Request Phase
+
+```bash
+# Push feature branch
+git push -u origin feature/feature-name-in-kebab-case
+
+# Create PR
+gh pr create --title "feat: description" --body "Summary, changes, test plan"
+```
+
+**PR must include:**
+- Feature implementation
+- OpenSpec archive commit
+- CHANGELOG.md update
+- All tests passing
+
+### 5. Post-Merge Phase
+
+After PR is merged:
+
+```bash
+# Switch back to main
+git checkout main && git pull
+
+# Close the GitHub issue
+gh issue close <issue-number> --comment "Implemented in #<pr-number>"
+```
+
+### Summary Checklist
+
+For every feature, ensure:
+- [ ] OpenSpec change created (`openspec new change "name"`)
+- [ ] GitHub issue created (`gh issue create`)
+- [ ] Feature branch created (`git checkout -b feature/name`)
+- [ ] All OpenSpec artifacts complete (proposal, specs, design, tasks)
+- [ ] Implementation complete with tests
+- [ ] CHANGELOG.md updated
+- [ ] OpenSpec archived in feature branch (`openspec archive "name"`)
+- [ ] PR created and CI passing
+- [ ] PR merged
+- [ ] GitHub issue closed
+
+### Quick Reference Commands
+
+```bash
+# OpenSpec workflow
+openspec new change "feature-name"           # Create new change
+openspec status --change "feature-name"      # Check progress
+openspec instructions apply --change "name"  # Get implementation instructions
+openspec archive "feature-name" -y           # Archive completed change
+
+# GitHub workflow
+gh issue create --title "..." --body "..."   # Create issue
+gh issue list                                # List open issues
+gh issue close <num> --comment "..."         # Close issue
+gh pr create --title "..." --body "..."      # Create PR
+gh pr checks <num> --watch                   # Watch CI
+gh pr merge <num> --squash --delete-branch   # Merge PR
+```
+
 ## Documentation Workflow
 
 After implementing any feature, follow these steps:
