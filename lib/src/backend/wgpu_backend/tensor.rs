@@ -242,12 +242,8 @@ impl WgpuTensor1D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.binary_1d;
 
-        let output_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("binary_op_output"),
-            size: (self.len * std::mem::size_of::<f32>()) as u64,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
+        // Acquire output buffer from pool
+        let output_buffer = device.with_pool(|pool| pool.acquire_1d(&device.device, self.len));
 
         let params = BinaryParams {
             op: op as u32,
@@ -260,41 +256,50 @@ impl WgpuTensor1D {
             .queue
             .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
-        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("binary_1d_bind_group"),
-            layout: &pipeline.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.buffer.as_entire_binding(),
+        // Use bind group cache
+        let bind_group = device.with_bind_group_cache(|cache| {
+            cache.get_or_create(
+                &pipeline.bind_group_layout,
+                &[&self.buffer, &other.buffer, &output_buffer, &params_buffer],
+                || {
+                    device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("binary_1d_bind_group"),
+                        layout: &pipeline.bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: self.buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: other.buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: output_buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 3,
+                                resource: params_buffer.as_entire_binding(),
+                            },
+                        ],
+                    })
                 },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: other.buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: output_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
+            )
         });
 
         // Queue the command instead of submitting immediately
         let workgroups = self.len.div_ceil(256) as u32;
         let command = ExecutableCommand::dispatch_1d(
             pipeline.clone(),
-            Arc::new(bind_group),
+            bind_group,
             workgroups,
             Some("binary_1d_pass"),
         );
         device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
-            buffer: Arc::new(output_buffer),
+            buffer: output_buffer,
             len: self.len,
         }
     }
@@ -304,12 +309,8 @@ impl WgpuTensor1D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.scalar_1d;
 
-        let output_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("scalar_op_output"),
-            size: (self.len * std::mem::size_of::<f32>()) as u64,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
+        // Acquire output buffer from pool
+        let output_buffer = device.with_pool(|pool| pool.acquire_1d(&device.device, self.len));
 
         let params = Scalar1DParams {
             op: op as u32,
@@ -323,37 +324,46 @@ impl WgpuTensor1D {
             .queue
             .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
-        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("scalar_1d_bind_group"),
-            layout: &pipeline.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.buffer.as_entire_binding(),
+        // Use bind group cache
+        let bind_group = device.with_bind_group_cache(|cache| {
+            cache.get_or_create(
+                &pipeline.bind_group_layout,
+                &[&self.buffer, &output_buffer, &params_buffer],
+                || {
+                    device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("scalar_1d_bind_group"),
+                        layout: &pipeline.bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: self.buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: output_buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: params_buffer.as_entire_binding(),
+                            },
+                        ],
+                    })
                 },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: output_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
+            )
         });
 
         // Queue the command instead of submitting immediately
         let workgroups = self.len.div_ceil(256) as u32;
         let command = ExecutableCommand::dispatch_1d(
             pipeline.clone(),
-            Arc::new(bind_group),
+            bind_group,
             workgroups,
             Some("scalar_1d_pass"),
         );
         device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
-            buffer: Arc::new(output_buffer),
+            buffer: output_buffer,
             len: self.len,
         }
     }
@@ -537,30 +547,39 @@ impl WgpuTensor1D {
             .queue
             .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
-        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("sgd_step_bind_group"),
-            layout: &pipeline.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.buffer.as_entire_binding(),
+        // Use bind group cache (in-place operation, no output buffer)
+        let bind_group = device.with_bind_group_cache(|cache| {
+            cache.get_or_create(
+                &pipeline.bind_group_layout,
+                &[&self.buffer, &gradient.buffer, &params_buffer],
+                || {
+                    device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("sgd_step_bind_group"),
+                        layout: &pipeline.bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: self.buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: gradient.buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: params_buffer.as_entire_binding(),
+                            },
+                        ],
+                    })
                 },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: gradient.buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
+            )
         });
 
         // Queue the command instead of submitting immediately
         let workgroups = self.len.div_ceil(256) as u32;
         let command = ExecutableCommand::dispatch_1d(
             pipeline.clone(),
-            Arc::new(bind_group),
+            bind_group,
             workgroups,
             Some("sgd_step_pass"),
         );
@@ -913,12 +932,8 @@ impl WgpuTensor2D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.matvec;
 
-        let output_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("matvec_output"),
-            size: (self.rows * std::mem::size_of::<f32>()) as u64,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
+        // Acquire output buffer from pool
+        let output_buffer = device.with_pool(|pool| pool.acquire_1d(&device.device, self.rows));
 
         let params = MatVecParams {
             rows: self.rows as u32,
@@ -931,41 +946,50 @@ impl WgpuTensor2D {
             .queue
             .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
-        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("matvec_bind_group"),
-            layout: &pipeline.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.buffer.as_entire_binding(),
+        // Use bind group cache
+        let bind_group = device.with_bind_group_cache(|cache| {
+            cache.get_or_create(
+                &pipeline.bind_group_layout,
+                &[&self.buffer, &x.buffer, &output_buffer, &params_buffer],
+                || {
+                    device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("matvec_bind_group"),
+                        layout: &pipeline.bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: self.buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: x.buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: output_buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 3,
+                                resource: params_buffer.as_entire_binding(),
+                            },
+                        ],
+                    })
                 },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: x.buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: output_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
+            )
         });
 
         // Queue the command instead of submitting immediately
         let workgroups = self.rows.div_ceil(16) as u32;
         let command = ExecutableCommand::dispatch_1d(
             pipeline.clone(),
-            Arc::new(bind_group),
+            bind_group,
             workgroups,
             Some("matvec_pass"),
         );
         device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
-            buffer: Arc::new(output_buffer),
+            buffer: output_buffer,
             len: self.rows,
         }
     }
@@ -984,12 +1008,8 @@ impl WgpuTensor2D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.matvec_bias;
 
-        let output_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("matvec_bias_output"),
-            size: (self.rows * std::mem::size_of::<f32>()) as u64,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
+        // Acquire output buffer from pool
+        let output_buffer = device.with_pool(|pool| pool.acquire_1d(&device.device, self.rows));
 
         // Params now include the scalar bias
         #[repr(C)]
@@ -1013,41 +1033,50 @@ impl WgpuTensor2D {
             .queue
             .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
-        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("matvec_bias_bind_group"),
-            layout: &pipeline.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.buffer.as_entire_binding(),
+        // Use bind group cache
+        let bind_group = device.with_bind_group_cache(|cache| {
+            cache.get_or_create(
+                &pipeline.bind_group_layout,
+                &[&self.buffer, &x.buffer, &output_buffer, &params_buffer],
+                || {
+                    device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("matvec_bias_bind_group"),
+                        layout: &pipeline.bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: self.buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: x.buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: output_buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 3,
+                                resource: params_buffer.as_entire_binding(),
+                            },
+                        ],
+                    })
                 },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: x.buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: output_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
+            )
         });
 
         // Queue the command instead of submitting immediately
         let workgroups = self.rows.div_ceil(16) as u32;
         let command = ExecutableCommand::dispatch_1d(
             pipeline.clone(),
-            Arc::new(bind_group),
+            bind_group,
             workgroups,
             Some("matvec_bias_pass"),
         );
         device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
-            buffer: Arc::new(output_buffer),
+            buffer: output_buffer,
             len: self.rows,
         }
     }
@@ -1057,12 +1086,8 @@ impl WgpuTensor2D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.matvec_transposed;
 
-        let output_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("matvec_t_output"),
-            size: (self.cols * std::mem::size_of::<f32>()) as u64,
-            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
+        // Acquire output buffer from pool
+        let output_buffer = device.with_pool(|pool| pool.acquire_1d(&device.device, self.cols));
 
         let params = MatVecParams {
             rows: self.rows as u32,
@@ -1075,41 +1100,50 @@ impl WgpuTensor2D {
             .queue
             .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
-        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("matvec_t_bind_group"),
-            layout: &pipeline.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.buffer.as_entire_binding(),
+        // Use bind group cache
+        let bind_group = device.with_bind_group_cache(|cache| {
+            cache.get_or_create(
+                &pipeline.bind_group_layout,
+                &[&self.buffer, &x.buffer, &output_buffer, &params_buffer],
+                || {
+                    device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("matvec_t_bind_group"),
+                        layout: &pipeline.bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: self.buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: x.buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: output_buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 3,
+                                resource: params_buffer.as_entire_binding(),
+                            },
+                        ],
+                    })
                 },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: x.buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: output_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
+            )
         });
 
         // Queue the command instead of submitting immediately
         let workgroups = self.cols.div_ceil(16) as u32;
         let command = ExecutableCommand::dispatch_1d(
             pipeline.clone(),
-            Arc::new(bind_group),
+            bind_group,
             workgroups,
             Some("matvec_t_pass"),
         );
         device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
-            buffer: Arc::new(output_buffer),
+            buffer: output_buffer,
             len: self.cols,
         }
     }

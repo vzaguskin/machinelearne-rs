@@ -5,6 +5,7 @@ use std::sync::{Arc, OnceLock};
 use wgpu::{Device, Features, Instance, Limits, Queue};
 
 use super::accumulator::CommandAccumulator;
+use super::bind_group_cache::BindGroupCache;
 use super::buffer_pool::BufferPool;
 
 /// Global device singleton for WGPU backend.
@@ -19,6 +20,11 @@ thread_local! {
 // Thread-local command accumulator for batching operations.
 thread_local! {
     static COMMAND_ACCUMULATOR: RefCell<CommandAccumulator> = RefCell::new(CommandAccumulator::new());
+}
+
+// Thread-local bind group cache for reducing bind group creation overhead.
+thread_local! {
+    static BIND_GROUP_CACHE: RefCell<BindGroupCache> = RefCell::new(BindGroupCache::new());
 }
 
 /// GPU device handle for WGPU backend.
@@ -190,6 +196,14 @@ impl WgpuDevice {
         if self.should_flush() {
             self.flush();
         }
+    }
+
+    /// Executes a function with access to the thread-local bind group cache.
+    pub fn with_bind_group_cache<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut BindGroupCache) -> R,
+    {
+        BIND_GROUP_CACHE.with(|cache| f(&mut cache.borrow_mut()))
     }
 }
 
