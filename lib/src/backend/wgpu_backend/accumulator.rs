@@ -226,6 +226,7 @@ pub fn flush_accumulator(device: &Device, queue: &Queue) {
 }
 
 /// Returns the pending operation count for the thread-local accumulator.
+#[allow(dead_code)]
 pub fn pending_ops_count() -> usize {
     COMMAND_ACCUMULATOR.with(|acc| acc.borrow().pending_count())
 }
