@@ -1,5 +1,6 @@
 //! GPU tensor types for WGPU backend.
 
+use super::accumulator::ExecutableCommand;
 use super::device::WgpuDevice;
 use super::shaders::{get_registry, BinaryOp, ScalarOp, UnaryOp};
 use crate::preprocessing::PreprocessingError;
@@ -274,24 +275,15 @@ impl WgpuTensor1D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("binary_1d_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("binary_1d_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = self.len.div_ceil(256);
-            compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups = self.len.div_ceil(256) as u32;
+        let command = ExecutableCommand::dispatch_1d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups,
+            Some("binary_1d_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
             buffer: Arc::new(output_buffer),
@@ -342,24 +334,15 @@ impl WgpuTensor1D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("scalar_1d_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("scalar_1d_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = self.len.div_ceil(256);
-            compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups = self.len.div_ceil(256) as u32;
+        let command = ExecutableCommand::dispatch_1d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups,
+            Some("scalar_1d_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
             buffer: Arc::new(output_buffer),
@@ -410,24 +393,15 @@ impl WgpuTensor1D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("unary_1d_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("unary_1d_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = self.len.div_ceil(256);
-            compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups = self.len.div_ceil(256) as u32;
+        let command = ExecutableCommand::dispatch_1d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups,
+            Some("unary_1d_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
             buffer: Arc::new(output_buffer),
@@ -442,6 +416,9 @@ impl WgpuTensor1D {
             let data = self.to_vec().await;
             return data.iter().sum();
         }
+
+        // Flush any pending operations first
+        device.flush();
 
         // Multi-stage reduction for larger tensors
         let registry = get_registry(&device.device);
@@ -628,25 +605,17 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("binary_2d_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("binary_2d_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = self.cols.div_ceil(16);
-            let workgroups_y = self.rows.div_ceil(16);
-            compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups_x = self.cols.div_ceil(16) as u32;
+        let workgroups_y = self.rows.div_ceil(16) as u32;
+        let command = ExecutableCommand::dispatch_2d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups_x,
+            workgroups_y,
+            Some("binary_2d_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor2D {
             buffer: Arc::new(output_buffer),
@@ -699,25 +668,17 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("scalar_2d_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("scalar_2d_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = self.cols.div_ceil(16);
-            let workgroups_y = self.rows.div_ceil(16);
-            compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups_x = self.cols.div_ceil(16) as u32;
+        let workgroups_y = self.rows.div_ceil(16) as u32;
+        let command = ExecutableCommand::dispatch_2d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups_x,
+            workgroups_y,
+            Some("scalar_2d_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor2D {
             buffer: Arc::new(output_buffer),
@@ -770,25 +731,17 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("unary_2d_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("unary_2d_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = self.cols.div_ceil(16);
-            let workgroups_y = self.rows.div_ceil(16);
-            compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups_x = self.cols.div_ceil(16) as u32;
+        let workgroups_y = self.rows.div_ceil(16) as u32;
+        let command = ExecutableCommand::dispatch_2d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups_x,
+            workgroups_y,
+            Some("unary_2d_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor2D {
             buffer: Arc::new(output_buffer),
@@ -805,6 +758,9 @@ impl WgpuTensor2D {
             let data = self.read_to_vec(device).await;
             return data.iter().map(|&x| x as f64).sum();
         }
+
+        // Flush any pending operations first
+        device.flush();
 
         let registry = get_registry(&device.device);
         let pipeline = &registry.sum_2d;
@@ -936,24 +892,15 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("matvec_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("matvec_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = self.rows.div_ceil(16);
-            compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups = self.rows.div_ceil(16) as u32;
+        let command = ExecutableCommand::dispatch_1d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups,
+            Some("matvec_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
             buffer: Arc::new(output_buffer),
@@ -1007,24 +954,15 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("matvec_t_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("matvec_t_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = self.cols.div_ceil(16);
-            compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups = self.cols.div_ceil(16) as u32;
+        let command = ExecutableCommand::dispatch_1d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups,
+            Some("matvec_t_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
             buffer: Arc::new(output_buffer),
@@ -1082,25 +1020,17 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("matmul_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("matmul_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = n.div_ceil(8);
-            let workgroups_y = m.div_ceil(8);
-            compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups_x = n.div_ceil(8) as u32;
+        let workgroups_y = m.div_ceil(8) as u32;
+        let command = ExecutableCommand::dispatch_2d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups_x,
+            workgroups_y,
+            Some("matmul_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor2D {
             buffer: Arc::new(output_buffer),
@@ -1152,25 +1082,17 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("transpose_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("transpose_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = self.cols.div_ceil(16);
-            let workgroups_y = self.rows.div_ceil(16);
-            compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups_x = self.cols.div_ceil(16) as u32;
+        let workgroups_y = self.rows.div_ceil(16) as u32;
+        let command = ExecutableCommand::dispatch_2d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups_x,
+            workgroups_y,
+            Some("transpose_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor2D {
             buffer: Arc::new(output_buffer),
@@ -1230,24 +1152,15 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("col_sum_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("col_sum_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = self.cols.div_ceil(256);
-            compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups = self.cols.div_ceil(256) as u32;
+        let command = ExecutableCommand::dispatch_1d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups,
+            Some("col_sum_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
             buffer: Arc::new(output_buffer),
@@ -1297,24 +1210,15 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("row_sum_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("row_sum_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = self.rows.div_ceil(256);
-            compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups = self.rows.div_ceil(256) as u32;
+        let command = ExecutableCommand::dispatch_1d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups,
+            Some("row_sum_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
             buffer: Arc::new(output_buffer),
@@ -1387,24 +1291,15 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("col_min_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("col_min_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            // One workgroup per column
-            compute_pass.dispatch_workgroups(self.cols as u32, 1, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups = self.cols as u32;
+        let command = ExecutableCommand::dispatch_1d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups,
+            Some("col_min_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
             buffer: Arc::new(output_buffer),
@@ -1455,24 +1350,15 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("col_max_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("col_max_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            // One workgroup per column
-            compute_pass.dispatch_workgroups(self.cols as u32, 1, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups = self.cols as u32;
+        let command = ExecutableCommand::dispatch_1d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups,
+            Some("col_max_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor1D {
             buffer: Arc::new(output_buffer),
@@ -1528,25 +1414,17 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("broadcast_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("broadcast_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = self.cols.div_ceil(16);
-            let workgroups_y = self.rows.div_ceil(16);
-            compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups_x = self.cols.div_ceil(16) as u32;
+        let workgroups_y = self.rows.div_ceil(16) as u32;
+        let command = ExecutableCommand::dispatch_2d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups_x,
+            workgroups_y,
+            Some("broadcast_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor2D {
             buffer: Arc::new(output_buffer),
@@ -1660,26 +1538,18 @@ impl WgpuTensor2D {
                 ],
             });
 
-            let mut encoder =
-                device
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("hcat_encoder"),
-                    });
+            // Queue the command instead of submitting immediately
+            let workgroups_x = tensor.cols.div_ceil(16) as u32;
+            let workgroups_y = rows.div_ceil(16) as u32;
+            let command = ExecutableCommand::dispatch_2d(
+                pipeline.clone(),
+                Arc::new(bind_group),
+                workgroups_x,
+                workgroups_y,
+                Some("hcat_pass"),
+            );
+            device.with_accumulator(|acc| acc.add_command(command));
 
-            {
-                let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                    label: Some("hcat_pass"),
-                    timestamp_writes: None,
-                });
-                compute_pass.set_pipeline(&pipeline.pipeline);
-                compute_pass.set_bind_group(0, &bind_group, &[]);
-                let workgroups_x = tensor.cols.div_ceil(16);
-                let workgroups_y = rows.div_ceil(16);
-                compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
-            }
-
-            device.queue.submit(std::iter::once(encoder.finish()));
             col_offset += tensor.cols;
         }
 
@@ -1746,25 +1616,17 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("select_columns_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("select_columns_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups_x = out_cols.div_ceil(16);
-            let workgroups_y = rows.div_ceil(16);
-            compute_pass.dispatch_workgroups(workgroups_x as u32, workgroups_y as u32, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups_x = out_cols.div_ceil(16) as u32;
+        let workgroups_y = rows.div_ceil(16) as u32;
+        let command = ExecutableCommand::dispatch_2d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups_x,
+            workgroups_y,
+            Some("select_columns_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor2D {
             buffer: Arc::new(output_buffer),
@@ -1837,24 +1699,15 @@ impl WgpuTensor2D {
             ],
         });
 
-        let mut encoder = device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("one_hot_encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("one_hot_pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline.pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-            let workgroups = n.div_ceil(256);
-            compute_pass.dispatch_workgroups(workgroups as u32, 1, 1);
-        }
-
-        device.queue.submit(std::iter::once(encoder.finish()));
+        // Queue the command instead of submitting immediately
+        let workgroups = n.div_ceil(256) as u32;
+        let command = ExecutableCommand::dispatch_1d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups,
+            Some("one_hot_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
 
         WgpuTensor2D {
             buffer: Arc::new(output_buffer),
