@@ -36,6 +36,7 @@
 //! - **WebGPU**: Browsers (WASM)
 
 mod accumulator;
+mod bind_group_cache;
 mod buffer_pool;
 mod device;
 mod shaders;
