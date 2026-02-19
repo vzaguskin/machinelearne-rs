@@ -71,10 +71,16 @@
 ## Notes
 
 ### Current Performance State
-Benchmark results (2026-02-19):
-- WGPU is still ~170-227x slower than CPU
-- Root cause: Each Backend trait method wraps async ops with `pollster::block_on()`
-- Infrastructure is in place but not integrated into execution path
+Benchmark results (release mode, 2026-02-19):
+- CPU: Small 3ms, Medium 10ms, Large 62ms
+- WGPU: Small 7225ms, Medium 35934ms, Large 167823ms
+- WGPU is ~2400-3600x slower than CPU
+
+### Root Cause Analysis
+Removing `pollster::block_on()` didn't improve performance. The bottleneck is:
+1. **Per-operation overhead**: Each operation creates command encoders, bind groups, buffers
+2. **Individual queue submissions**: Each operation calls `queue.submit()` separately
+3. **Synchronization points**: Reading loss after each epoch requires GPU-CPU sync
 
 ### Architecture Challenge
 The `Backend` trait is synchronous, but GPU performance requires:
@@ -84,5 +90,6 @@ The `Backend` trait is synchronous, but GPU performance requires:
 
 ### Next Steps for Performance
 1. Implement true lazy execution in tensor operations
-2. Integrate accumulator into actual command submission
-3. Consider async Backend trait variant or internal async runtime
+2. Batch multiple compute passes into single command encoder
+3. Only call `queue.submit()` when results are needed
+4. Consider async Backend trait variant or internal async runtime

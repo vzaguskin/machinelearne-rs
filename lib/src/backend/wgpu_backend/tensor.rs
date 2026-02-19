@@ -130,7 +130,7 @@ pub struct WgpuTensor1D {
 
 impl WgpuTensor1D {
     /// Creates a 1D tensor filled with zeros.
-    pub async fn zeros(device: &WgpuDevice, len: usize) -> Self {
+    pub fn zeros(device: &WgpuDevice, len: usize) -> Self {
         let buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("WgpuTensor1D::zeros"),
             size: (len * std::mem::size_of::<f32>()) as u64,
@@ -151,7 +151,7 @@ impl WgpuTensor1D {
     }
 
     /// Creates a 1D tensor from a vector of f32 values.
-    pub async fn from_vec(device: &WgpuDevice, data: Vec<f32>) -> Self {
+    pub fn from_vec(device: &WgpuDevice, data: Vec<f32>) -> Self {
         let len = data.len();
         let buffer = device.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("WgpuTensor1D::from_vec"),
@@ -229,7 +229,7 @@ impl WgpuTensor1D {
     }
 
     /// Performs a binary operation with another tensor.
-    pub async fn binary_op(&self, device: &WgpuDevice, other: &Self, op: BinaryOp) -> Self {
+    pub fn binary_op(&self, device: &WgpuDevice, other: &Self, op: BinaryOp) -> Self {
         let registry = get_registry(&device.device);
         let pipeline = &registry.binary_1d;
 
@@ -300,7 +300,7 @@ impl WgpuTensor1D {
     }
 
     /// Performs a scalar operation.
-    pub async fn scalar_op(&self, device: &WgpuDevice, scalar: f64, op: ScalarOp) -> Self {
+    pub fn scalar_op(&self, device: &WgpuDevice, scalar: f64, op: ScalarOp) -> Self {
         let registry = get_registry(&device.device);
         let pipeline = &registry.scalar_1d;
 
@@ -368,7 +368,7 @@ impl WgpuTensor1D {
     }
 
     /// Performs a unary operation.
-    pub async fn unary_op(&self, device: &WgpuDevice, op: UnaryOp) -> Self {
+    pub fn unary_op(&self, device: &WgpuDevice, op: UnaryOp) -> Self {
         let registry = get_registry(&device.device);
         let pipeline = &registry.unary_1d;
 
@@ -539,7 +539,7 @@ pub struct WgpuTensor2D {
 
 impl WgpuTensor2D {
     /// Creates a 2D tensor filled with zeros.
-    pub async fn zeros(device: &WgpuDevice, rows: usize, cols: usize) -> Self {
+    pub fn zeros(device: &WgpuDevice, rows: usize, cols: usize) -> Self {
         let total = rows * cols;
         let buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("WgpuTensor2D::zeros"),
@@ -561,7 +561,7 @@ impl WgpuTensor2D {
     }
 
     /// Creates a 2D tensor from row-major data.
-    pub async fn from_vec(device: &WgpuDevice, data: Vec<f32>, rows: usize, cols: usize) -> Self {
+    pub fn from_vec(device: &WgpuDevice, data: Vec<f32>, rows: usize, cols: usize) -> Self {
         let buffer = device.device.create_buffer_init(&BufferInitDescriptor {
             label: Some("WgpuTensor2D::from_vec"),
             contents: bytemuck::cast_slice(&data),
@@ -581,7 +581,7 @@ impl WgpuTensor2D {
     }
 
     /// Performs a binary operation with another tensor.
-    pub async fn binary_op(&self, device: &WgpuDevice, other: &Self, op: BinaryOp) -> Self {
+    pub fn binary_op(&self, device: &WgpuDevice, other: &Self, op: BinaryOp) -> Self {
         let registry = get_registry(&device.device);
         let pipeline = &registry.binary_2d;
 
@@ -656,7 +656,7 @@ impl WgpuTensor2D {
     }
 
     /// Performs a scalar operation.
-    pub async fn scalar_op(&self, device: &WgpuDevice, scalar: f64, op: ScalarOp) -> Self {
+    pub fn scalar_op(&self, device: &WgpuDevice, scalar: f64, op: ScalarOp) -> Self {
         let registry = get_registry(&device.device);
         let pipeline = &registry.scalar_2d;
 
@@ -727,7 +727,7 @@ impl WgpuTensor2D {
     }
 
     /// Performs a unary operation.
-    pub async fn unary_op(&self, device: &WgpuDevice, op: UnaryOp) -> Self {
+    pub fn unary_op(&self, device: &WgpuDevice, op: UnaryOp) -> Self {
         let registry = get_registry(&device.device);
         let pipeline = &registry.unary_2d;
 
@@ -891,7 +891,7 @@ impl WgpuTensor2D {
     }
 
     /// Matrix-vector multiplication.
-    pub async fn matvec(&self, device: &WgpuDevice, x: &WgpuTensor1D) -> WgpuTensor1D {
+    pub fn matvec(&self, device: &WgpuDevice, x: &WgpuTensor1D) -> WgpuTensor1D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.matvec;
 
@@ -962,7 +962,7 @@ impl WgpuTensor2D {
     }
 
     /// Transposed matrix-vector multiplication.
-    pub async fn matvec_transposed(&self, device: &WgpuDevice, x: &WgpuTensor1D) -> WgpuTensor1D {
+    pub fn matvec_transposed(&self, device: &WgpuDevice, x: &WgpuTensor1D) -> WgpuTensor1D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.matvec_transposed;
 
@@ -1033,7 +1033,7 @@ impl WgpuTensor2D {
     }
 
     /// Matrix multiplication.
-    pub async fn matmul(&self, device: &WgpuDevice, b: &Self) -> Self {
+    pub fn matmul(&self, device: &WgpuDevice, b: &Self) -> Self {
         let registry = get_registry(&device.device);
         let pipeline = &registry.matmul;
 
@@ -1110,7 +1110,7 @@ impl WgpuTensor2D {
     }
 
     /// Matrix transpose.
-    pub async fn transpose(&self, device: &WgpuDevice) -> Self {
+    pub fn transpose(&self, device: &WgpuDevice) -> Self {
         let registry = get_registry(&device.device);
         let pipeline = &registry.transpose;
 
@@ -1180,7 +1180,7 @@ impl WgpuTensor2D {
     }
 
     /// Flattens to 1D tensor.
-    pub async fn ravel(&self, _device: &WgpuDevice) -> WgpuTensor1D {
+    pub fn ravel(&self, _device: &WgpuDevice) -> WgpuTensor1D {
         // Just wrap the buffer differently - no copy needed
         WgpuTensor1D {
             buffer: self.buffer.clone(),
@@ -1189,7 +1189,7 @@ impl WgpuTensor2D {
     }
 
     /// Column-wise sum.
-    pub async fn col_sum(&self, device: &WgpuDevice) -> WgpuTensor1D {
+    pub fn col_sum(&self, device: &WgpuDevice) -> WgpuTensor1D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.col_sum;
 
@@ -1256,7 +1256,7 @@ impl WgpuTensor2D {
     }
 
     /// Row-wise sum.
-    pub async fn row_sum(&self, device: &WgpuDevice) -> WgpuTensor1D {
+    pub fn row_sum(&self, device: &WgpuDevice) -> WgpuTensor1D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.row_sum;
 
@@ -1323,29 +1323,29 @@ impl WgpuTensor2D {
     }
 
     /// Column-wise mean.
-    pub async fn col_mean(&self, device: &WgpuDevice) -> WgpuTensor1D {
-        let sum = self.col_sum(device).await;
+    pub fn col_mean(&self, device: &WgpuDevice) -> WgpuTensor1D {
+        let sum = self.col_sum(device);
         let n = self.rows as f64;
-        sum.scalar_op(device, 1.0 / n, ScalarOp::Mul).await
+        sum.scalar_op(device, 1.0 / n, ScalarOp::Mul)
     }
 
     /// Column-wise standard deviation.
-    pub async fn col_std(&self, device: &WgpuDevice, ddof: usize) -> WgpuTensor1D {
-        let mean = self.col_mean(device).await;
+    pub fn col_std(&self, device: &WgpuDevice, ddof: usize) -> WgpuTensor1D {
+        let mean = self.col_mean(device);
 
         // Compute variance: E[(X - mean)^2]
-        let centered = self.broadcast_op(device, &mean, BinaryOp::Sub).await;
-        let squared = centered.binary_op(device, &centered, BinaryOp::Mul).await;
-        let variance = squared.col_sum(device).await;
+        let centered = self.broadcast_op(device, &mean, BinaryOp::Sub);
+        let squared = centered.binary_op(device, &centered, BinaryOp::Mul);
+        let variance = squared.col_sum(device);
 
         // std = sqrt(variance / (n - ddof))
         let n = self.rows as f64 - ddof as f64;
-        let scaled = variance.scalar_op(device, 1.0 / n, ScalarOp::Mul).await;
-        scaled.unary_op(device, UnaryOp::Sqrt).await
+        let scaled = variance.scalar_op(device, 1.0 / n, ScalarOp::Mul);
+        scaled.unary_op(device, UnaryOp::Sqrt)
     }
 
     /// Column-wise min.
-    pub async fn col_min(&self, device: &WgpuDevice) -> WgpuTensor1D {
+    pub fn col_min(&self, device: &WgpuDevice) -> WgpuTensor1D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.col_minmax;
 
@@ -1413,7 +1413,7 @@ impl WgpuTensor2D {
     }
 
     /// Column-wise max.
-    pub async fn col_max(&self, device: &WgpuDevice) -> WgpuTensor1D {
+    pub fn col_max(&self, device: &WgpuDevice) -> WgpuTensor1D {
         let registry = get_registry(&device.device);
         let pipeline = &registry.col_minmax;
 
@@ -1481,7 +1481,7 @@ impl WgpuTensor2D {
     }
 
     /// Broadcast operation with 1D tensor.
-    pub async fn broadcast_op(&self, device: &WgpuDevice, v: &WgpuTensor1D, op: BinaryOp) -> Self {
+    pub fn broadcast_op(&self, device: &WgpuDevice, v: &WgpuTensor1D, op: BinaryOp) -> Self {
         let registry = get_registry(&device.device);
         let pipeline = &registry.broadcast_2d;
 
@@ -1603,7 +1603,7 @@ impl WgpuTensor2D {
     }
 
     /// Horizontal concatenation.
-    pub async fn hcat(
+    pub fn hcat(
         device: &WgpuDevice,
         tensors: &[Self],
         rows: usize,
@@ -1691,12 +1691,7 @@ impl WgpuTensor2D {
     }
 
     /// Select columns by indices.
-    pub async fn select_columns(
-        &self,
-        device: &WgpuDevice,
-        columns: &[usize],
-        rows: usize,
-    ) -> Self {
+    pub fn select_columns(&self, device: &WgpuDevice, columns: &[usize], rows: usize) -> Self {
         let registry = get_registry(&device.device);
         let pipeline = &registry.select_columns;
 
