@@ -485,7 +485,8 @@ mod tests {
     use crate::preprocessing::scaling::{
         FittedMaxAbsScaler, FittedMinMaxScaler, FittedNormalizer, FittedRobustScaler,
         FittedStandardScaler, MaxAbsScalerParams, MinMaxScalerConfig, MinMaxScalerParams,
-        NormalizerParams, RobustScalerParams, StandardScalerParams,
+        NormalizerParams, RobustScalerConfig, RobustScalerParams, StandardScalerConfig,
+        StandardScalerParams,
     };
     use crate::preprocessing::traits::FittedTransformer;
 
@@ -523,6 +524,7 @@ mod tests {
 
         // Create a fitted standard scaler
         let params = StandardScalerParams {
+            config: StandardScalerConfig::default(),
             n_features: 3,
             mean: vec![0.0, 1.0, 2.0],
             std: vec![1.0, 1.0, 1.0],
@@ -556,6 +558,7 @@ mod tests {
         builder.add_input_float("input", 2);
 
         let params = RobustScalerParams {
+            config: RobustScalerConfig::default(),
             n_features: 2,
             center_: vec![0.0, 0.0],
             scale_: vec![1.0, 1.0],
