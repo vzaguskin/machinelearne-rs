@@ -17,6 +17,7 @@ use std::sync::Arc;
 use wgpu::{Buffer, BufferUsages, Device};
 
 /// Maximum number of buffers to keep per size category.
+#[allow(dead_code)]
 const MAX_BUFFERS_PER_SIZE: usize = 64;
 
 /// Size categories for uniform buffers (in bytes).
@@ -70,7 +71,8 @@ impl UniformBufferPool {
     }
 
     /// Returns a buffer to the pool.
-    pub fn release(&mut self, buffer: Arc<Buffer>) {
+    #[allow(dead_code)]
+    pub fn release(&mut self, _buffer: Arc<Buffer>) {
         // Get buffer size (we need to know this, but Arc<Buffer> doesn't expose it directly)
         // For now, we'll store buffers by their likely category based on common sizes
         // In practice, we know the sizes we use: 16 (BinaryParams, Scalar1DParams), 32 (Scalar2DParams)
@@ -88,7 +90,7 @@ impl UniformBufferPool {
             }
         }
         // For larger sizes, round up to nearest 128
-        ((size + 127) / 128) * 128
+        size.div_ceil(128) * 128
     }
 
     /// Returns statistics about the pool.
@@ -130,6 +132,7 @@ pub fn acquire_uniform_buffer(device: &Device, size: u64) -> Arc<Buffer> {
 }
 
 /// Returns statistics about the thread-local uniform buffer pool.
+#[allow(dead_code)]
 pub fn uniform_pool_stats() -> UniformPoolStats {
     UNIFORM_POOL.with(|pool| pool.borrow().stats())
 }
