@@ -480,7 +480,7 @@ fn export_polynomial_features<B: Backend>(
 mod tests {
     use super::*;
     use crate::backend::CpuBackend;
-    use crate::backend::{Scalar, Tensor1D, Tensor2D};
+    use crate::backend::{Scalar, Tensor1D};
     use crate::model::linear::{LinearModel, LinearParams};
     use crate::preprocessing::scaling::{
         FittedMaxAbsScaler, FittedMinMaxScaler, FittedNormalizer, FittedRobustScaler,
@@ -529,7 +529,7 @@ mod tests {
             mean: vec![0.0, 1.0, 2.0],
             std: vec![1.0, 1.0, 1.0],
         };
-        let scaler = FittedStandardScaler::<CpuBackend>::new(params);
+        let scaler = FittedStandardScaler::<CpuBackend>::from_params(params).unwrap();
 
         export_standard_scaler(&mut builder, &scaler, "input", "output").unwrap();
         assert!(!builder.graph.initializer.is_empty());
@@ -543,10 +543,11 @@ mod tests {
         let params = MinMaxScalerParams {
             n_features: 2,
             min_: vec![0.0, 0.0],
+            max_: vec![1.0, 2.0],
             scale_: vec![1.0, 0.5],
             config: MinMaxScalerConfig { min: 0.0, max: 1.0 },
         };
-        let scaler = FittedMinMaxScaler::<CpuBackend>::new(params);
+        let scaler = FittedMinMaxScaler::<CpuBackend>::from_params(params).unwrap();
 
         export_minmax_scaler(&mut builder, &scaler, "input", "output").unwrap();
         assert!(!builder.graph.initializer.is_empty());
@@ -563,7 +564,7 @@ mod tests {
             center_: vec![0.0, 0.0],
             scale_: vec![1.0, 1.0],
         };
-        let scaler = FittedRobustScaler::<CpuBackend>::new(params);
+        let scaler = FittedRobustScaler::<CpuBackend>::from_params(params).unwrap();
 
         export_robust_scaler(&mut builder, &scaler, "input", "output").unwrap();
         assert!(!builder.graph.initializer.is_empty());
@@ -576,9 +577,10 @@ mod tests {
 
         let params = MaxAbsScalerParams {
             n_features: 2,
+            max_abs_: vec![1.0, 0.5],
             scale_: vec![1.0, 2.0],
         };
-        let scaler = FittedMaxAbsScaler::<CpuBackend>::new(params);
+        let scaler = FittedMaxAbsScaler::<CpuBackend>::from_params(params).unwrap();
 
         export_maxabs_scaler(&mut builder, &scaler, "input", "output").unwrap();
         assert!(!builder.graph.initializer.is_empty());
@@ -590,9 +592,10 @@ mod tests {
         builder.add_input_float("input", 3);
 
         let params = NormalizerParams {
-            norm: "l2".to_string(),
+            norm: crate::preprocessing::scaling::NormType::L2,
+            n_features: 3,
         };
-        let normalizer = FittedNormalizer::<CpuBackend>::new(params);
+        let normalizer = FittedNormalizer::<CpuBackend>::from_params(params).unwrap();
 
         export_normalizer(&mut builder, &normalizer, "input", "output").unwrap();
         assert!(!builder.graph.node.is_empty());
@@ -606,9 +609,13 @@ mod tests {
         let params = crate::preprocessing::imputation::SimpleImputerParams {
             n_features: 2,
             statistics_: vec![0.0, 1.0],
+            strategy: crate::preprocessing::imputation::ImputeStrategy::Mean,
         };
         let imputer =
-            crate::preprocessing::imputation::FittedSimpleImputer::<CpuBackend>::new(params);
+            crate::preprocessing::imputation::FittedSimpleImputer::<CpuBackend>::from_params(
+                params,
+            )
+            .unwrap();
 
         export_simple_imputer(&mut builder, &imputer, "input", "output").unwrap();
         assert!(!builder.graph.initializer.is_empty());
@@ -625,11 +632,11 @@ mod tests {
             n_features_in: 3,
             n_features_out: 3,
             include_bias: false,
+            interaction_only: false,
+            output_combinations: vec![(1, vec![0]), (1, vec![1]), (1, vec![2])],
         };
         let poly =
-            crate::preprocessing::feature_engineering::FittedPolynomialFeatures::<CpuBackend>::new(
-                params,
-            );
+            crate::preprocessing::feature_engineering::FittedPolynomialFeatures::<CpuBackend>::from_params(params).unwrap();
 
         let output = export_polynomial_features(&mut builder, &poly, "input").unwrap();
         assert_eq!(output, "input");
