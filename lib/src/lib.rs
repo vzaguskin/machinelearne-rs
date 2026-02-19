@@ -95,10 +95,6 @@ pub mod trainer;
 /// Linear algebra utilities for closed-form solutions.
 pub mod linalg;
 
-/// ONNX export and inference support.
-#[cfg(feature = "onnx")]
-pub mod onnx;
-
 /// Re-export of core backend types for convenient usage.
 pub use backend::{Backend, CpuBackend, ScalarOps, Tensor1D, Tensor2D};
 
