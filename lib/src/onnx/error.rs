@@ -50,3 +50,42 @@ impl From<io::Error> for OnnxError {
         OnnxError::IoError(e)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_onnx_error_display() {
+        let err = OnnxError::ProtobufError("test error".to_string());
+        assert!(err.to_string().contains("Protobuf error"));
+
+        let err = OnnxError::ModelCreationError("failed".to_string());
+        assert!(err.to_string().contains("Model creation error"));
+
+        let err = OnnxError::InferenceError("runtime error".to_string());
+        assert!(err.to_string().contains("Inference error"));
+
+        let err = OnnxError::UnsupportedOperation("op".to_string());
+        assert!(err.to_string().contains("Unsupported operation"));
+
+        let err = OnnxError::InvalidParameters("bad params".to_string());
+        assert!(err.to_string().contains("Invalid parameters"));
+
+        let err = OnnxError::ShapeMismatch {
+            expected: vec![2, 3],
+            got: vec![1, 2],
+        };
+        assert!(err.to_string().contains("Shape mismatch"));
+
+        let err = OnnxError::MissingField("field".to_string());
+        assert!(err.to_string().contains("Missing required field"));
+    }
+
+    #[test]
+    fn test_onnx_error_from_io_error() {
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "file not found");
+        let onnx_err: OnnxError = io_err.into();
+        assert!(matches!(onnx_err, OnnxError::IoError(_)));
+    }
+}

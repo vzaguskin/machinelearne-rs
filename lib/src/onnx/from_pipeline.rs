@@ -480,8 +480,14 @@ fn export_polynomial_features<B: Backend>(
 mod tests {
     use super::*;
     use crate::backend::CpuBackend;
-    use crate::backend::{Scalar, Tensor1D};
+    use crate::backend::{Scalar, Tensor1D, Tensor2D};
     use crate::model::linear::{LinearModel, LinearParams};
+    use crate::preprocessing::scaling::{
+        FittedMaxAbsScaler, FittedMinMaxScaler, FittedNormalizer, FittedRobustScaler,
+        FittedStandardScaler, MaxAbsScalerParams, MinMaxScalerConfig, MinMaxScalerParams,
+        NormalizerParams, RobustScalerParams, StandardScalerParams,
+    };
+    use crate::preprocessing::traits::FittedTransformer;
 
     fn create_test_model() -> LinearModel<CpuBackend, Fitted> {
         let params = LinearParams {
@@ -508,5 +514,121 @@ mod tests {
         assert!(!bytes.is_empty());
 
         std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_export_standard_scaler() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 3);
+
+        // Create a fitted standard scaler
+        let params = StandardScalerParams {
+            n_features: 3,
+            mean: vec![0.0, 1.0, 2.0],
+            std: vec![1.0, 1.0, 1.0],
+        };
+        let scaler = FittedStandardScaler::<CpuBackend>::new(params);
+
+        export_standard_scaler(&mut builder, &scaler, "input", "output").unwrap();
+        assert!(!builder.graph.initializer.is_empty());
+    }
+
+    #[test]
+    fn test_export_minmax_scaler() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = MinMaxScalerParams {
+            n_features: 2,
+            min_: vec![0.0, 0.0],
+            scale_: vec![1.0, 0.5],
+            config: MinMaxScalerConfig { min: 0.0, max: 1.0 },
+        };
+        let scaler = FittedMinMaxScaler::<CpuBackend>::new(params);
+
+        export_minmax_scaler(&mut builder, &scaler, "input", "output").unwrap();
+        assert!(!builder.graph.initializer.is_empty());
+    }
+
+    #[test]
+    fn test_export_robust_scaler() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = RobustScalerParams {
+            n_features: 2,
+            center_: vec![0.0, 0.0],
+            scale_: vec![1.0, 1.0],
+        };
+        let scaler = FittedRobustScaler::<CpuBackend>::new(params);
+
+        export_robust_scaler(&mut builder, &scaler, "input", "output").unwrap();
+        assert!(!builder.graph.initializer.is_empty());
+    }
+
+    #[test]
+    fn test_export_maxabs_scaler() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = MaxAbsScalerParams {
+            n_features: 2,
+            scale_: vec![1.0, 2.0],
+        };
+        let scaler = FittedMaxAbsScaler::<CpuBackend>::new(params);
+
+        export_maxabs_scaler(&mut builder, &scaler, "input", "output").unwrap();
+        assert!(!builder.graph.initializer.is_empty());
+    }
+
+    #[test]
+    fn test_export_normalizer() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 3);
+
+        let params = NormalizerParams {
+            norm: "l2".to_string(),
+        };
+        let normalizer = FittedNormalizer::<CpuBackend>::new(params);
+
+        export_normalizer(&mut builder, &normalizer, "input", "output").unwrap();
+        assert!(!builder.graph.node.is_empty());
+    }
+
+    #[test]
+    fn test_export_simple_imputer() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = crate::preprocessing::imputation::SimpleImputerParams {
+            n_features: 2,
+            statistics_: vec![0.0, 1.0],
+        };
+        let imputer =
+            crate::preprocessing::imputation::FittedSimpleImputer::<CpuBackend>::new(params);
+
+        export_simple_imputer(&mut builder, &imputer, "input", "output").unwrap();
+        assert!(!builder.graph.initializer.is_empty());
+        assert!(!builder.graph.node.is_empty());
+    }
+
+    #[test]
+    fn test_export_polynomial_features_degree_1() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 3);
+
+        let params = crate::preprocessing::feature_engineering::PolynomialFeaturesParams {
+            degree: 1,
+            n_features_in: 3,
+            n_features_out: 3,
+            include_bias: false,
+        };
+        let poly =
+            crate::preprocessing::feature_engineering::FittedPolynomialFeatures::<CpuBackend>::new(
+                params,
+            );
+
+        let output = export_polynomial_features(&mut builder, &poly, "input").unwrap();
+        assert_eq!(output, "input");
     }
 }
