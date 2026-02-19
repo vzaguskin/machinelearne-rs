@@ -111,8 +111,21 @@ The `Backend` trait is synchronous, but GPU performance requires:
 3. Higher flush threshold or batch across epochs
 4. Consider async Backend trait variant or internal async runtime
 
+### Bind Group Caching Results (PR #93)
+- Added BindGroupCache with LRU eviction
+- Updated key operations to use buffer pool for outputs
+- Cache hit rate is near zero because output buffers are unique per operation
+- Performance unchanged (~3000-6000x slower than CPU)
+
+### Dynamic Offset Infrastructure (in progress)
+- Added DynamicUniformBuffer for managing large uniform buffer
+- Added dynamic offset support to ExecutableCommand
+- Full benefit requires pipeline layouts with has_dynamic_offset=true
+- This is a significant architectural change - not yet implemented
+
 ### Next Steps for Performance
 1. ~~Implement kernel fusion for forward/backward pass~~ (done - limited impact)
-2. Cache bind groups to reduce creation overhead
-3. Increase flush threshold or remove intermediate flushes
+2. ~~Cache bind groups to reduce creation overhead~~ (done - near zero hit rate)
+3. ~~Increase flush threshold~~ (tested - made performance worse)
 4. Consider GPU-native optimizer step to reduce operations
+5. Full dynamic offset implementation requires major refactoring
