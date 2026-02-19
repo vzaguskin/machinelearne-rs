@@ -178,7 +178,8 @@ impl<B: Backend> TrainableModel<B> for LinearModel<B, Unfitted> {
     type Output = LinearModel<B, Fitted>;
 
     fn forward(&self, x: &Self::Input) -> Self::Prediction {
-        x.dot(&self.params.weights).add_scalar(&self.params.bias)
+        // Use fused matvec + bias operation for better GPU performance
+        x.dot_add_scalar(&self.params.weights, &self.params.bias)
     }
 
     fn params(&self) -> &Self::Params {

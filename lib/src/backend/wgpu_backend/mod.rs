@@ -583,4 +583,22 @@ impl Backend for WgpuBackend {
         let device = Self::default_device();
         pollster::block_on(WgpuTensor2D::one_hot(&device, indices, num_classes, n))
     }
+
+    // --- Fused operations using optimized kernels ---
+
+    fn matvec_bias(a: &Self::Tensor2D, x: &Self::Tensor1D, bias: &Self::Scalar) -> Self::Tensor1D {
+        let device = Self::default_device();
+        a.matvec_bias(&device, x, *bias)
+    }
+
+    fn sgd_step(
+        param: &Self::Tensor1D,
+        gradient: &Self::Tensor1D,
+        learning_rate: &Self::Scalar,
+    ) -> Self::Tensor1D {
+        // For now, use the default implementation since sgd_step_inplace requires mutation
+        // The tensor's sgd_step_inplace is for in-place updates
+        let scaled_grad = Self::mul_scalar_1d(gradient, learning_rate);
+        Self::sub_1d(param, &scaled_grad)
+    }
 }

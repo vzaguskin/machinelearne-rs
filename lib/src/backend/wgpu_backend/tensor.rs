@@ -122,6 +122,13 @@ struct HcatParams {
     col_offset: u32,
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct SGDStepParams {
+    len: u32,
+    learning_rate: f32,
+}
+
 /// 1D tensor stored on GPU.
 #[derive(Clone)]
 pub struct WgpuTensor1D {
@@ -503,6 +510,60 @@ impl WgpuTensor1D {
         staging_buffer.unmap();
 
         partials.iter().map(|&x| x as f64).sum()
+    }
+
+    /// Fused SGD step: self = self - learning_rate * gradient
+    ///
+    /// This is an in-place operation that combines mul_scalar and sub
+    /// into a single kernel dispatch for better performance.
+    pub fn sgd_step_inplace(&mut self, device: &WgpuDevice, gradient: &Self, learning_rate: f64) {
+        assert_eq!(
+            self.len, gradient.len,
+            "sgd_step_inplace: tensor lengths mismatch {} vs {}",
+            self.len, gradient.len
+        );
+
+        let registry = get_registry(&device.device);
+        let pipeline = &registry.sgd_step;
+
+        let params = SGDStepParams {
+            len: self.len as u32,
+            learning_rate: learning_rate as f32,
+        };
+        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("sgd_step_params"),
+            contents: bytemuck::bytes_of(&params),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sgd_step_bind_group"),
+            layout: &pipeline.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: gradient.buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        // Queue the command instead of submitting immediately
+        let workgroups = self.len.div_ceil(256) as u32;
+        let command = ExecutableCommand::dispatch_1d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups,
+            Some("sgd_step_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
     }
 }
 
@@ -899,6 +960,88 @@ impl WgpuTensor2D {
             Arc::new(bind_group),
             workgroups,
             Some("matvec_pass"),
+        );
+        device.with_accumulator(|acc| acc.add_command(command));
+
+        WgpuTensor1D {
+            buffer: Arc::new(output_buffer),
+            len: self.rows,
+        }
+    }
+
+    /// Fused matrix-vector multiplication with scalar bias: y = W @ x + bias
+    ///
+    /// This combines matvec and scalar addition into a single kernel dispatch,
+    /// reducing GPU overhead from 2 operations to 1.
+    pub fn matvec_bias(&self, device: &WgpuDevice, x: &WgpuTensor1D, bias: f64) -> WgpuTensor1D {
+        assert_eq!(
+            self.cols, x.len,
+            "matvec_bias: matrix cols ({}) != vector len ({})",
+            self.cols, x.len
+        );
+
+        let registry = get_registry(&device.device);
+        let pipeline = &registry.matvec_bias;
+
+        let output_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("matvec_bias_output"),
+            size: (self.rows * std::mem::size_of::<f32>()) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        // Params now include the scalar bias
+        #[repr(C)]
+        #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        struct MatVecBiasParams {
+            rows: u32,
+            cols: u32,
+            bias: f32,
+            _padding: u32,
+        }
+
+        let params = MatVecBiasParams {
+            rows: self.rows as u32,
+            cols: self.cols as u32,
+            bias: bias as f32,
+            _padding: 0u32,
+        };
+        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("matvec_bias_params"),
+            contents: bytemuck::bytes_of(&params),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("matvec_bias_bind_group"),
+            layout: &pipeline.bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: x.buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: output_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        // Queue the command instead of submitting immediately
+        let workgroups = self.rows.div_ceil(16) as u32;
+        let command = ExecutableCommand::dispatch_1d(
+            pipeline.clone(),
+            Arc::new(bind_group),
+            workgroups,
+            Some("matvec_bias_pass"),
         );
         device.with_accumulator(|acc| acc.add_command(command));
 

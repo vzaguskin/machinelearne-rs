@@ -264,6 +264,24 @@ impl<B: Backend> Tensor2D<B> {
         }
     }
 
+    /// Fused matrix-vector multiplication with scalar addition: `self @ x + bias`
+    ///
+    /// This is an optimized version of `self.dot(x).add_scalar(bias)` that
+    /// backends can implement as a single fused kernel for better performance.
+    ///
+    /// # Arguments
+    /// * `x` - Vector of length n (where self is m × n)
+    /// * `bias` - Scalar to add to each output element
+    ///
+    /// # Returns
+    /// Vector of length m
+    pub fn dot_add_scalar(&self, x: &Tensor1D<B>, bias: &Scalar<B>) -> Tensor1D<B> {
+        Tensor1D {
+            data: B::matvec_bias(&self.data, &x.data, &bias.data),
+            backend: PhantomData,
+        }
+    }
+
     /// Computes matrix-matrix multiplication: `self @ other`.
     ///
     /// For an (m × k) matrix `self` and (k × n) matrix `other`,

@@ -43,6 +43,10 @@ pub struct ShaderRegistry {
     pub select_columns: Arc<ComputePipeline>,
     pub one_hot: Arc<ComputePipeline>,
     pub hcat: Arc<ComputePipeline>,
+
+    // Fused kernels for performance
+    pub matvec_bias: Arc<ComputePipeline>, // y = W @ x + b
+    pub sgd_step: Arc<ComputePipeline>,    // param = param - lr * grad
 }
 
 impl ShaderRegistry {
@@ -67,6 +71,9 @@ impl ShaderRegistry {
             select_columns: Arc::new(create_select_columns_pipeline(device)),
             one_hot: Arc::new(create_one_hot_pipeline(device)),
             hcat: Arc::new(create_hcat_pipeline(device)),
+            // Fused kernels
+            matvec_bias: Arc::new(create_matvec_bias_pipeline(device)),
+            sgd_step: Arc::new(create_sgd_step_pipeline(device)),
         }
     }
 }
@@ -1394,6 +1401,144 @@ fn create_hcat_pipeline(device: &Device) -> ComputePipeline {
     }
 }
 
+// --- Fused kernels for performance ---
+
+fn create_matvec_bias_pipeline(device: &Device) -> ComputePipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("matvec_bias"),
+        source: wgpu::ShaderSource::Wgsl(MATVEC_BIAS_SHADER.into()),
+    });
+
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("matvec_bias_layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ],
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("matvec_bias_layout"),
+        bind_group_layouts: &[&bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("matvec_bias_pipeline"),
+        layout: Some(&pipeline_layout),
+        module: &shader,
+        entry_point: Some("main"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+
+    ComputePipeline {
+        pipeline,
+        bind_group_layout,
+    }
+}
+
+fn create_sgd_step_pipeline(device: &Device) -> ComputePipeline {
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("sgd_step"),
+        source: wgpu::ShaderSource::Wgsl(SGD_STEP_SHADER.into()),
+    });
+
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("sgd_step_layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ],
+    });
+
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("sgd_step_layout"),
+        bind_group_layouts: &[&bind_group_layout],
+        push_constant_ranges: &[],
+    });
+
+    let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("sgd_step_pipeline"),
+        layout: Some(&pipeline_layout),
+        module: &shader,
+        entry_point: Some("main"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+
+    ComputePipeline {
+        pipeline,
+        bind_group_layout,
+    }
+}
+
 // --- WGSL Shader Source Code ---
 
 const BINARY_1D_SHADER: &str = r#"
@@ -1989,5 +2134,60 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let out_idx = row * params.out_cols + params.col_offset + col;
 
     output[out_idx] = input[in_idx];
+}
+"#;
+
+// --- Fused kernels ---
+
+/// Fused matrix-vector multiplication with bias addition: y = W @ x + b
+/// Reduces 2 operations (matvec + scalar_add) to 1 operation
+const MATVEC_BIAS_SHADER: &str = r#"
+struct Params {
+    rows: u32,
+    cols: u32,
+    bias: f32,
+    _padding: u32,
+}
+
+@group(0) @binding(0) var<storage, read> matrix: array<f32>;  // W: [rows x cols]
+@group(0) @binding(1) var<storage, read> vector: array<f32>;  // x: [cols]
+@group(0) @binding(2) var<storage, read_write> output: array<f32>;  // y: [rows]
+@group(0) @binding(3) var<uniform> params: Params;
+
+@compute @workgroup_size(16)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let row = global_id.x;
+    if (row >= params.rows) { return; }
+
+    // Compute W[row, :] @ x
+    var sum: f32 = 0.0;
+    for (var col = 0u; col < params.cols; col++) {
+        sum += matrix[row * params.cols + col] * vector[col];
+    }
+
+    // Add scalar bias and store result
+    output[row] = sum + params.bias;
+}
+"#;
+
+/// Fused SGD step: param = param - lr * grad
+/// Reduces 2 operations (mul_scalar + sub) to 1 operation
+const SGD_STEP_SHADER: &str = r#"
+struct Params {
+    len: u32,
+    learning_rate: f32,
+}
+
+@group(0) @binding(0) var<storage, read_write> param: array<f32>;
+@group(0) @binding(1) var<storage, read> grad: array<f32>;
+@group(0) @binding(2) var<uniform> params: Params;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let idx = global_id.x;
+    if (idx >= params.len) { return; }
+
+    // SGD update: param = param - lr * grad
+    param[idx] = param[idx] - params.learning_rate * grad[idx];
 }
 "#;
