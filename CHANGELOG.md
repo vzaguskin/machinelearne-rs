@@ -57,6 +57,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `Tensor1D::sub_scalar`, `Tensor1D::mul_scalar`, `Tensor1D::div_scalar`: Wrapper methods for scalar operations
 - `Tensor2D::sub_scalar`, `Tensor2D::mul_scalar`, `Tensor2D::div_scalar`: Wrapper methods for scalar operations
 
+#### WGPU Performance Optimizations
+- `UniformBufferPool`: Thread-local pool for reusing uniform buffers in GPU operations
+  - Reduces buffer allocation overhead for operation parameters
+  - Organized by size categories (16, 32, 64, 128 bytes)
+  - Replaces per-operation `create_buffer_init` with pooled buffers
+- Fused kernels: Combined operations to reduce GPU dispatch overhead
+  - `matvec_bias`: Single kernel for y = W @ x + b (combines matvec + add_scalar)
+  - `sgd_step_inplace`: Single kernel for param -= lr * grad (combines mul + sub)
+- `Tensor2D::dot_add_scalar()`: Fused matvec + bias operation
+- `Backend::matvec_bias()`: Backend trait method with fused implementation
+- `Backend::sgd_step()`: Backend trait method for optimizer step on GPU
+- Command batching: Operations queued to accumulator for lazy execution
+  - Single command encoder for batched operations
+  - Auto-flush on `to_vec()` and `sum()` calls
+
 ### Fixed
 - `len_2d` documentation now correctly states it returns number of rows (not total elements)
 
