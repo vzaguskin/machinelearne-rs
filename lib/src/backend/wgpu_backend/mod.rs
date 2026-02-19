@@ -7,6 +7,14 @@
 //!
 //! This backend requires the `wgpu` feature to be enabled.
 //!
+//! ## Performance Optimization
+//!
+//! This backend uses several optimizations to improve GPU performance:
+//!
+//! - **Buffer Pooling**: Reuses GPU buffers to reduce allocation overhead
+//! - **Command Batching**: Accumulates operations and submits in batches
+//! - **Lazy Execution**: Operations are deferred until results are needed
+//!
 //! ## Example
 //!
 //! ```ignore
@@ -27,10 +35,14 @@
 //! - **D3D12**: Windows
 //! - **WebGPU**: Browsers (WASM)
 
+mod accumulator;
+mod buffer_pool;
 mod device;
 mod shaders;
 mod tensor;
 
+pub use accumulator::{flush_accumulator, with_accumulator, AccumulatorStats, CommandAccumulator};
+pub use buffer_pool::{BufferPool, PoolStats};
 pub use device::WgpuDevice;
 pub use tensor::{WgpuTensor1D, WgpuTensor2D};
 

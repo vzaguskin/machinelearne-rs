@@ -1,11 +1,25 @@
 //! GPU device management for WGPU backend.
 
+use std::cell::RefCell;
 use std::sync::{Arc, OnceLock};
 use wgpu::{Device, Features, Instance, Limits, Queue};
+
+use super::accumulator::CommandAccumulator;
+use super::buffer_pool::BufferPool;
 
 /// Global device singleton for WGPU backend.
 /// Using a single device ensures all buffers are compatible.
 static GLOBAL_DEVICE: OnceLock<WgpuDevice> = OnceLock::new();
+
+// Thread-local buffer pool for reusing GPU memory.
+thread_local! {
+    static BUFFER_POOL: RefCell<BufferPool> = RefCell::new(BufferPool::new());
+}
+
+// Thread-local command accumulator for batching operations.
+thread_local! {
+    static COMMAND_ACCUMULATOR: RefCell<CommandAccumulator> = RefCell::new(CommandAccumulator::new());
+}
 
 /// GPU device handle for WGPU backend.
 ///
@@ -131,6 +145,51 @@ impl std::fmt::Debug for WgpuDevice {
             .field("device", &"Arc<wgpu::Device>")
             .field("queue", &"Arc<wgpu::Queue>")
             .finish()
+    }
+}
+
+impl WgpuDevice {
+    /// Executes a function with access to the thread-local buffer pool.
+    pub fn with_pool<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut BufferPool) -> R,
+    {
+        BUFFER_POOL.with(|pool| f(&mut pool.borrow_mut()))
+    }
+
+    /// Executes a function with access to the thread-local command accumulator.
+    pub fn with_accumulator<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut CommandAccumulator) -> R,
+    {
+        COMMAND_ACCUMULATOR.with(|acc| f(&mut acc.borrow_mut()))
+    }
+
+    /// Flushes any pending operations to the GPU.
+    ///
+    /// This submits all accumulated operations to the GPU for execution.
+    /// Called automatically when tensor data is read back.
+    pub fn flush(&self) {
+        COMMAND_ACCUMULATOR.with(|acc| {
+            acc.borrow_mut().flush(&self.device, &self.queue);
+        });
+    }
+
+    /// Returns the number of pending operations waiting to be executed.
+    pub fn pending_ops(&self) -> usize {
+        COMMAND_ACCUMULATOR.with(|acc| acc.borrow().pending_count())
+    }
+
+    /// Checks if the accumulator should be flushed based on threshold.
+    pub fn should_flush(&self) -> bool {
+        COMMAND_ACCUMULATOR.with(|acc| acc.borrow().should_flush())
+    }
+
+    /// Flushes if the pending operation count exceeds the threshold.
+    pub fn flush_if_needed(&self) {
+        if self.should_flush() {
+            self.flush();
+        }
     }
 }
 

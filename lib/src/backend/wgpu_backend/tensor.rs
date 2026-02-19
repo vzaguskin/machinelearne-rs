@@ -176,9 +176,14 @@ impl WgpuTensor1D {
     }
 
     /// Copies the tensor data to CPU as a Vec<f64>.
+    ///
+    /// This triggers a flush of any pending operations before reading.
     pub async fn to_vec(&self) -> Vec<f64> {
         // Use global device for buffer compatibility
         let device = WgpuDevice::global();
+
+        // Flush any pending operations before reading data
+        device.flush();
 
         let staging_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("staging_buffer_1d"),
@@ -1551,7 +1556,12 @@ impl WgpuTensor2D {
     }
 
     /// Read tensor data to CPU as Vec<f32>.
+    ///
+    /// This triggers a flush of any pending operations before reading.
     async fn read_to_vec(&self, device: &WgpuDevice) -> Vec<f32> {
+        // Flush any pending operations before reading data
+        device.flush();
+
         let total = self.rows * self.cols;
         let staging_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("staging_2d"),
