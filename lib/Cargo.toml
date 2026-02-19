@@ -20,25 +20,9 @@ futures = { version = "0.3", optional = true }
 # BLAS backend dependencies (optional)
 blas-src = { version = "0.10", optional = true }
 
-# ONNX export dependencies (optional)
-prost = { version = "0.13", optional = true }
-prost-types = { version = "0.13", optional = true }
-
-# ONNX inference dependencies (optional)
-ort = { version = "2.0.0-rc.11", optional = true }
-
 [dev-dependencies]
 tempfile = "3.10"
 serde_json = "1.0"
-criterion = "0.5"
-
-[[bench]]
-name = "onnx_inference"
-harness = false
-required-features = ["onnx"]
-
-[build-dependencies]
-prost-build = { version = "0.13", optional = true }
 
 [features]
 default = ["cpu", "serde"]
@@ -60,7 +44,3 @@ blas = ["dep:blas-src", "dep:ndarray"]
 blas-openblas = ["blas", "blas-src/openblas"]
 blas-netlib = ["blas", "blas-src/netlib"]
 blas-accelerate = ["blas", "blas-src/accelerate"]
-
-# ONNX export and inference
-onnx = ["dep:prost", "dep:prost-types", "dep:prost-build"]
-onnx-inference = ["onnx", "dep:ort", "dep:ndarray"]
