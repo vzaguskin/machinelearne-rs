@@ -268,4 +268,54 @@ mod tests {
         assert_eq!(builder.model.opset_import.len(), 2);
         assert_eq!(builder.model.opset_import[1].domain, "ai.onnx.ml");
     }
+
+    #[test]
+    fn test_add_double_initializer() {
+        let mut builder = OnnxGraphBuilder::new("test_model");
+        builder.add_input_float("input", 2);
+        builder.add_double_initializer("weights", &[2], &[1.0, 2.0]);
+        builder.add_output_float("output", 1);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_add_int64_initializer() {
+        let mut builder = OnnxGraphBuilder::new("test_model");
+        builder.add_input_float("input", 2);
+        builder.add_int64_initializer("indices", &[2], &[0, 1]);
+        builder.add_output_float("output", 1);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_input_output_names() {
+        let mut builder = OnnxGraphBuilder::new("test_model");
+        builder.add_input_float("input_a", 10);
+        builder.add_input_float("input_b", 5);
+        builder.add_output_float("output_a", 1);
+        builder.add_output_float("output_b", 2);
+
+        assert_eq!(builder.input_names(), &["input_a", "input_b"]);
+        assert_eq!(builder.output_names(), &["output_a", "output_b"]);
+    }
+
+    #[test]
+    fn test_build_to_file() {
+        let mut builder = OnnxGraphBuilder::new("test_model");
+        builder.add_input_float("input", 2);
+        builder.add_float_initializer("weights", &[2], &[1.0, 2.0]);
+        builder.add_output_float("output", 1);
+
+        let temp_file = std::env::temp_dir().join("test_graph_build.onnx");
+        builder.build_to_file(&temp_file).unwrap();
+
+        let bytes = std::fs::read(&temp_file).unwrap();
+        assert!(!bytes.is_empty());
+
+        std::fs::remove_file(temp_file).ok();
+    }
 }

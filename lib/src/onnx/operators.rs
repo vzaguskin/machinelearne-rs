@@ -501,4 +501,73 @@ mod tests {
         let bytes = builder.build().unwrap();
         assert!(!bytes.is_empty());
     }
+
+    #[test]
+    fn test_matmul_operator() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input_a", 3);
+        builder.add_float_initializer("input_b", &[3, 2], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        matmul(&mut builder, "input_a", "input_b", "output");
+        builder.add_output_float("output", 2);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_flatten_operator() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 6);
+        flatten(&mut builder, "input", 1, "flattened");
+        builder.add_output_float("output", 6);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_concat_operator() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input_a", 3);
+        builder.add_input_float("input_b", 3);
+        concat(&mut builder, vec!["input_a", "input_b"], 1, "concatenated");
+        builder.add_output_float("output", 6);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_pow_operator() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 3);
+        builder.add_float_initializer("exponent", &[1], &[2.0]);
+        pow(&mut builder, "input", "exponent", "output");
+        builder.add_output_float("output", 3);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_reciprocal_operator() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 3);
+        reciprocal(&mut builder, "input", "output");
+        builder.add_output_float("output", 3);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_abs_operator() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 3);
+        abs(&mut builder, "input", "output");
+        builder.add_output_float("output", 3);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
 }

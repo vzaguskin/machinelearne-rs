@@ -57,6 +57,9 @@ mod tests {
 
     #[test]
     fn test_onnx_error_display() {
+        let err = OnnxError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "test"));
+        assert!(err.to_string().contains("IO error"));
+
         let err = OnnxError::ProtobufError("test error".to_string());
         assert!(err.to_string().contains("Protobuf error"));
 

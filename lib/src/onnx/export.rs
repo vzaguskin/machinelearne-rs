@@ -102,4 +102,35 @@ mod tests {
 
         std::fs::remove_file(temp_file).ok();
     }
+
+    #[test]
+    fn test_save_onnx_with_version() {
+        let model = SimpleModel {
+            weights: vec![1.0, 2.0],
+            bias: 1.0,
+        };
+
+        let temp_file = std::env::temp_dir().join("test_simple_model_v15.onnx");
+        model.save_onnx_with_version(&temp_file, 15).unwrap();
+
+        let bytes = std::fs::read(&temp_file).unwrap();
+        assert!(!bytes.is_empty());
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_to_onnx_custom_version() {
+        let model = SimpleModel {
+            weights: vec![1.0, 2.0, 3.0],
+            bias: 0.5,
+        };
+
+        // Test with different opset versions - both should produce valid output
+        let bytes_v13 = model.to_onnx(13).unwrap();
+        let bytes_v17 = model.to_onnx(17).unwrap();
+
+        assert!(!bytes_v13.is_empty());
+        assert!(!bytes_v17.is_empty());
+    }
 }

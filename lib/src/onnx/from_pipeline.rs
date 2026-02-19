@@ -641,4 +641,235 @@ mod tests {
         let output = export_polynomial_features(&mut builder, &poly, "input").unwrap();
         assert_eq!(output, "input");
     }
+
+    #[test]
+    fn test_export_polynomial_features_degree_2() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = crate::preprocessing::feature_engineering::PolynomialFeaturesParams {
+            degree: 2,
+            n_features_in: 2,
+            n_features_out: 6,
+            include_bias: false,
+            interaction_only: false,
+            output_combinations: vec![
+                (1, vec![0]),
+                (1, vec![1]),
+                (2, vec![0, 0]),
+                (2, vec![0, 1]),
+                (2, vec![1, 1]),
+            ],
+        };
+        let poly =
+            crate::preprocessing::feature_engineering::FittedPolynomialFeatures::<CpuBackend>::from_params(params).unwrap();
+
+        let output = export_polynomial_features(&mut builder, &poly, "input").unwrap();
+        // Currently returns input for degree > 1 as well (placeholder)
+        assert_eq!(output, "input");
+    }
+
+    #[test]
+    fn test_export_one_hot_encoder() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = crate::preprocessing::encoding::OneHotEncoderParams {
+            n_features_in: 2,
+            n_features_out: 3,
+            n_values_: vec![2, 1],
+            categories_: vec![vec![0.0, 1.0], vec![0.0]],
+            handle_unknown: crate::preprocessing::encoding::HandleUnknown::Error,
+        };
+        let encoder =
+            crate::preprocessing::encoding::FittedOneHotEncoder::<CpuBackend>::from_params(params)
+                .unwrap();
+
+        export_one_hot_encoder(&mut builder, &encoder, "input", "output").unwrap();
+        assert!(!builder.graph.initializer.is_empty());
+        assert!(!builder.graph.node.is_empty());
+    }
+
+    #[test]
+    fn test_export_ordinal_encoder() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = crate::preprocessing::encoding::OrdinalEncoderParams {
+            n_features_in: 2,
+            categories_: vec![vec![0.0, 1.0]],
+            mappings_: vec![vec![(0.0, 0), (1.0, 1)]],
+            handle_unknown: crate::preprocessing::encoding::HandleUnknown::Error,
+        };
+        let encoder =
+            crate::preprocessing::encoding::FittedOrdinalEncoder::<CpuBackend>::from_params(params)
+                .unwrap();
+
+        export_ordinal_encoder(&mut builder, &encoder, "input", "output").unwrap();
+        assert!(!builder.graph.node.is_empty());
+    }
+
+    #[test]
+    fn test_linear_model_to_onnx_custom_opset() {
+        let model = create_test_model();
+
+        // Test with custom opset version
+        let bytes_v13 = model.to_onnx(13).unwrap();
+        let bytes_v17 = model.to_onnx(17).unwrap();
+
+        assert!(!bytes_v13.is_empty());
+        assert!(!bytes_v17.is_empty());
+        // Different versions should produce different outputs
+        assert_ne!(bytes_v13, bytes_v17);
+    }
+
+    #[test]
+    fn test_export_preproc_step_standard_scaler() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 3);
+
+        let params = StandardScalerParams {
+            config: StandardScalerConfig::default(),
+            n_features: 3,
+            mean: vec![0.0, 1.0, 2.0],
+            std: vec![1.0, 1.0, 1.0],
+        };
+        let scaler = FittedStandardScaler::<CpuBackend>::from_params(params).unwrap();
+
+        let step = crate::preprocessing::pipeline::PipelineStepEnum::StandardScaler(scaler);
+        let output = export_preproc_step(&mut builder, &step, "input").unwrap();
+        assert!(output.starts_with("StandardScaler"));
+    }
+
+    #[test]
+    fn test_export_preproc_step_minmax_scaler() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = MinMaxScalerParams {
+            n_features: 2,
+            min_: vec![0.0, 0.0],
+            max_: vec![1.0, 2.0],
+            scale_: vec![1.0, 0.5],
+            config: MinMaxScalerConfig { min: 0.0, max: 1.0 },
+        };
+        let scaler = FittedMinMaxScaler::<CpuBackend>::from_params(params).unwrap();
+
+        let step = crate::preprocessing::pipeline::PipelineStepEnum::MinMaxScaler(scaler);
+        let output = export_preproc_step(&mut builder, &step, "input").unwrap();
+        assert!(output.starts_with("MinMaxScaler"));
+    }
+
+    #[test]
+    fn test_export_preproc_step_robust_scaler() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = RobustScalerParams {
+            config: RobustScalerConfig::default(),
+            n_features: 2,
+            center_: vec![0.0, 0.0],
+            scale_: vec![1.0, 1.0],
+        };
+        let scaler = FittedRobustScaler::<CpuBackend>::from_params(params).unwrap();
+
+        let step = crate::preprocessing::pipeline::PipelineStepEnum::RobustScaler(scaler);
+        let output = export_preproc_step(&mut builder, &step, "input").unwrap();
+        assert!(output.starts_with("RobustScaler"));
+    }
+
+    #[test]
+    fn test_export_preproc_step_maxabs_scaler() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = MaxAbsScalerParams {
+            n_features: 2,
+            max_abs_: vec![1.0, 0.5],
+            scale_: vec![1.0, 2.0],
+        };
+        let scaler = FittedMaxAbsScaler::<CpuBackend>::from_params(params).unwrap();
+
+        let step = crate::preprocessing::pipeline::PipelineStepEnum::MaxAbsScaler(scaler);
+        let output = export_preproc_step(&mut builder, &step, "input").unwrap();
+        assert!(output.starts_with("MaxAbsScaler"));
+    }
+
+    #[test]
+    fn test_export_preproc_step_normalizer() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 3);
+
+        let params = NormalizerParams {
+            norm: crate::preprocessing::scaling::NormType::L2,
+            n_features: 3,
+        };
+        let normalizer = FittedNormalizer::<CpuBackend>::from_params(params).unwrap();
+
+        let step = crate::preprocessing::pipeline::PipelineStepEnum::Normalizer(normalizer);
+        let output = export_preproc_step(&mut builder, &step, "input").unwrap();
+        assert!(output.starts_with("Normalizer"));
+    }
+
+    #[test]
+    fn test_export_preproc_step_simple_imputer() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = crate::preprocessing::imputation::SimpleImputerParams {
+            n_features: 2,
+            statistics_: vec![0.0, 1.0],
+            strategy: crate::preprocessing::imputation::ImputeStrategy::Mean,
+        };
+        let imputer =
+            crate::preprocessing::imputation::FittedSimpleImputer::<CpuBackend>::from_params(
+                params,
+            )
+            .unwrap();
+
+        let step = crate::preprocessing::pipeline::PipelineStepEnum::SimpleImputer(imputer);
+        let output = export_preproc_step(&mut builder, &step, "input").unwrap();
+        assert!(output.starts_with("SimpleImputer"));
+    }
+
+    #[test]
+    fn test_export_preproc_step_one_hot_encoder() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = crate::preprocessing::encoding::OneHotEncoderParams {
+            n_features_in: 2,
+            n_features_out: 2,
+            n_values_: vec![2],
+            categories_: vec![vec![0.0, 1.0]],
+            handle_unknown: crate::preprocessing::encoding::HandleUnknown::Error,
+        };
+        let encoder =
+            crate::preprocessing::encoding::FittedOneHotEncoder::<CpuBackend>::from_params(params)
+                .unwrap();
+
+        let step = crate::preprocessing::pipeline::PipelineStepEnum::OneHotEncoder(encoder);
+        let output = export_preproc_step(&mut builder, &step, "input").unwrap();
+        assert!(output.starts_with("OneHotEncoder"));
+    }
+
+    #[test]
+    fn test_export_preproc_step_ordinal_encoder() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+
+        let params = crate::preprocessing::encoding::OrdinalEncoderParams {
+            n_features_in: 2,
+            categories_: vec![vec![0.0, 1.0]],
+            mappings_: vec![vec![(0.0, 0), (1.0, 1)]],
+            handle_unknown: crate::preprocessing::encoding::HandleUnknown::Error,
+        };
+        let encoder =
+            crate::preprocessing::encoding::FittedOrdinalEncoder::<CpuBackend>::from_params(params)
+                .unwrap();
+
+        let step = crate::preprocessing::pipeline::PipelineStepEnum::OrdinalEncoder(encoder);
+        let output = export_preproc_step(&mut builder, &step, "input").unwrap();
+        assert!(output.starts_with("OrdinalEncoder"));
+    }
 }

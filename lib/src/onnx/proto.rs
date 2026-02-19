@@ -474,10 +474,31 @@ mod tests {
 
     #[test]
     fn test_attribute_type_conversion() {
+        // Test From<AttributeType> for i32
+        assert_eq!(i32::from(AttributeType::Undefined), 0);
         assert_eq!(i32::from(AttributeType::Float), 1);
         assert_eq!(i32::from(AttributeType::Int), 2);
+        assert_eq!(i32::from(AttributeType::String), 3);
+        assert_eq!(i32::from(AttributeType::Tensor), 4);
+        assert_eq!(i32::from(AttributeType::Graph), 5);
+        assert_eq!(i32::from(AttributeType::Floats), 6);
+        assert_eq!(i32::from(AttributeType::Ints), 7);
+        assert_eq!(i32::from(AttributeType::Strings), 8);
+        assert_eq!(i32::from(AttributeType::Tensors), 9);
+        assert_eq!(i32::from(AttributeType::Graphs), 10);
+
+        // Test TryFrom<i32> for AttributeType
+        assert_eq!(AttributeType::try_from(0), Ok(AttributeType::Undefined));
         assert_eq!(AttributeType::try_from(1), Ok(AttributeType::Float));
         assert_eq!(AttributeType::try_from(2), Ok(AttributeType::Int));
+        assert_eq!(AttributeType::try_from(3), Ok(AttributeType::String));
+        assert_eq!(AttributeType::try_from(4), Ok(AttributeType::Tensor));
+        assert_eq!(AttributeType::try_from(5), Ok(AttributeType::Graph));
+        assert_eq!(AttributeType::try_from(6), Ok(AttributeType::Floats));
+        assert_eq!(AttributeType::try_from(7), Ok(AttributeType::Ints));
+        assert_eq!(AttributeType::try_from(8), Ok(AttributeType::Strings));
+        assert_eq!(AttributeType::try_from(9), Ok(AttributeType::Tensors));
+        assert_eq!(AttributeType::try_from(10), Ok(AttributeType::Graphs));
         assert_eq!(AttributeType::try_from(99), Err(()));
     }
 
