@@ -400,3 +400,101 @@ impl AttributeProto {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tensor_proto_new_float() {
+        let tensor = TensorProto::new_float("test", &[2, 3], &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        assert_eq!(tensor.name, "test");
+        assert_eq!(tensor.dims, vec![2, 3]);
+        assert_eq!(tensor.data_type, tensor_data_type::FLOAT);
+        assert!(!tensor.raw_data.is_empty());
+    }
+
+    #[test]
+    fn test_tensor_proto_new_int64() {
+        let tensor = TensorProto::new_int64("test_int", &[3], &[1, 2, 3]);
+        assert_eq!(tensor.name, "test_int");
+        assert_eq!(tensor.dims, vec![3]);
+        assert_eq!(tensor.data_type, tensor_data_type::INT64);
+        assert!(!tensor.raw_data.is_empty());
+    }
+
+    #[test]
+    fn test_tensor_proto_new_double() {
+        let tensor = TensorProto::new_double("test_double", &[2], &[1.5, 2.5]);
+        assert_eq!(tensor.name, "test_double");
+        assert_eq!(tensor.dims, vec![2]);
+        assert_eq!(tensor.data_type, tensor_data_type::DOUBLE);
+        assert!(!tensor.raw_data.is_empty());
+    }
+
+    #[test]
+    fn test_attribute_proto_float() {
+        let attr = AttributeProto::float("alpha", 0.5);
+        assert_eq!(attr.name, "alpha");
+        assert_eq!(attr.f, 0.5);
+        assert_eq!(attr.r#type, AttributeType::Float as i32);
+    }
+
+    #[test]
+    fn test_attribute_proto_int() {
+        let attr = AttributeProto::int("axis", 1);
+        assert_eq!(attr.name, "axis");
+        assert_eq!(attr.i, 1);
+        assert_eq!(attr.r#type, AttributeType::Int as i32);
+    }
+
+    #[test]
+    fn test_attribute_proto_string() {
+        let attr = AttributeProto::string("norm", b"L2");
+        assert_eq!(attr.name, "norm");
+        assert_eq!(attr.s, b"L2");
+        assert_eq!(attr.r#type, AttributeType::String as i32);
+    }
+
+    #[test]
+    fn test_attribute_proto_ints() {
+        let attr = AttributeProto::ints("axes", vec![0, 1]);
+        assert_eq!(attr.name, "axes");
+        assert_eq!(attr.ints, vec![0, 1]);
+        assert_eq!(attr.r#type, AttributeType::Ints as i32);
+    }
+
+    #[test]
+    fn test_attribute_proto_floats() {
+        let attr = AttributeProto::floats("coefficients", vec![1.0, 2.0]);
+        assert_eq!(attr.name, "coefficients");
+        assert_eq!(attr.floats, vec![1.0, 2.0]);
+        assert_eq!(attr.r#type, AttributeType::Floats as i32);
+    }
+
+    #[test]
+    fn test_attribute_type_conversion() {
+        assert_eq!(i32::from(AttributeType::Float), 1);
+        assert_eq!(i32::from(AttributeType::Int), 2);
+        assert_eq!(AttributeType::try_from(1), Ok(AttributeType::Float));
+        assert_eq!(AttributeType::try_from(2), Ok(AttributeType::Int));
+        assert_eq!(AttributeType::try_from(99), Err(()));
+    }
+
+    #[test]
+    fn test_model_proto_default() {
+        let model = ModelProto::default();
+        assert_eq!(model.ir_version, 0);
+        assert!(model.opset_import.is_empty());
+        assert!(model.graph.is_none());
+    }
+
+    #[test]
+    fn test_graph_proto_default() {
+        let graph = GraphProto::default();
+        assert!(graph.name.is_empty());
+        assert!(graph.input.is_empty());
+        assert!(graph.output.is_empty());
+        assert!(graph.node.is_empty());
+    }
+}

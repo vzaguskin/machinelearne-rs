@@ -387,3 +387,118 @@ pub fn linear_regressor(
         ],
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gemm_operator() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 3);
+        builder.add_float_initializer("weights", &[1, 3], &[1.0, 2.0, 3.0]);
+        builder.add_float_initializer("bias", &[1], &[0.5]);
+        gemm(
+            &mut builder,
+            "input",
+            "weights",
+            Some("bias"),
+            false,
+            true,
+            1.0,
+            1.0,
+            "output",
+        );
+        builder.add_output_float("output", 1);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_basic_operators() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 2);
+        builder.add_float_initializer("const", &[1, 2], &[1.0, 1.0]);
+
+        add(&mut builder, "input", "const", "add_out");
+        sub(&mut builder, "input", "const", "sub_out");
+        mul(&mut builder, "input", "const", "mul_out");
+        div(&mut builder, "input", "const", "div_out");
+
+        builder.add_output_float("output", 1);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_reshape_operator() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 6);
+        reshape(&mut builder, "input", &[2, 3], "reshaped");
+        builder.add_output_float("output", 3);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_reduce_operators() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 4);
+        reduce_mean(&mut builder, "input", &[1], true, "mean_out");
+        reduce_sum(&mut builder, "input", &[1], false, "sum_out");
+        builder.add_output_float("output", 1);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_clip_operator() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 3);
+        clip(&mut builder, "input", Some(0.0), Some(1.0), "clipped");
+        builder.add_output_float("output", 3);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_squeeze_unsqueeze() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 3);
+        unsqueeze(&mut builder, "input", &[0], "expanded");
+        squeeze(&mut builder, "expanded", &[0], "squeezed");
+        squeeze(&mut builder, "input", &[], "empty_squeeze");
+        builder.add_output_float("output", 3);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_ml_operators() {
+        let mut builder = OnnxGraphBuilder::new("test");
+        builder.add_input_float("input", 3);
+
+        scaler(
+            &mut builder,
+            "input",
+            &[0.0, 0.0, 0.0],
+            &[1.0, 1.0, 1.0],
+            "scaled",
+        );
+        imputer(&mut builder, "input", 0.0, &[1.0, 2.0, 3.0], "imputed");
+        normalizer(&mut builder, "input", "L2", "normalized");
+        linear_regressor(&mut builder, "input", &[1.0, 2.0, 3.0], &[0.5], "regressed");
+        one_hot_encoder(&mut builder, "input", &[0, 1, 2], "encoded");
+
+        builder.add_output_float("output", 1);
+
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+}
