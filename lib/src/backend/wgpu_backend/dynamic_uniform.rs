@@ -91,7 +91,7 @@ impl DynamicUniformBuffer {
 
     /// Aligns size to uniform buffer alignment requirement.
     fn align_size(size: u64) -> u64 {
-        ((size + UNIFORM_ALIGNMENT - 1) / UNIFORM_ALIGNMENT) * UNIFORM_ALIGNMENT
+        size.div_ceil(UNIFORM_ALIGNMENT) * UNIFORM_ALIGNMENT
     }
 
     /// Resets the buffer for reuse (call after GPU operations complete).

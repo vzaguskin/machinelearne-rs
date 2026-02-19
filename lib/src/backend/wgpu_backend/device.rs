@@ -31,7 +31,7 @@ thread_local! {
 // Thread-local dynamic uniform buffer for params.
 // This is lazily initialized when first accessed.
 thread_local! {
-    static DYNAMIC_UNIFORM: RefCell<Option<DynamicUniformBuffer>> = RefCell::new(None);
+    static DYNAMIC_UNIFORM: RefCell<Option<DynamicUniformBuffer>> = const { RefCell::new(None) };
 }
 
 /// GPU device handle for WGPU backend.
