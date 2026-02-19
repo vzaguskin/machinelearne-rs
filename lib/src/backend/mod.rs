@@ -544,4 +544,50 @@ pub trait Backend: Clone + Copy + 'static {
     /// # Panics
     /// Panics if any index >= num_classes.
     fn one_hot_from_indices(indices: &Self::Tensor1D, num_classes: usize) -> Self::Tensor2D;
+
+    // --- Fused operations for performance ---
+
+    /// Fused matrix-vector multiplication with bias: `y = A @ x + bias`
+    ///
+    /// This combines `matvec` and `add_scalar` into a single operation.
+    /// Backends can override this with a fused kernel for better performance.
+    ///
+    /// # Default implementation
+    /// Falls back to `matvec` followed by `add_scalar_1d`.
+    ///
+    /// # Arguments
+    /// * `a` - Matrix of shape (m, n)
+    /// * `x` - Vector of length n
+    /// * `bias` - Bias vector of length m (scalar per row)
+    ///
+    /// # Returns
+    /// Vector of length m
+    fn matvec_bias(a: &Self::Tensor2D, x: &Self::Tensor1D, bias: &Self::Scalar) -> Self::Tensor1D {
+        let y = Self::matvec(a, x);
+        Self::add_scalar_1d(&y, bias)
+    }
+
+    /// Fused SGD step: `param = param - learning_rate * gradient`
+    ///
+    /// This combines `mul_scalar` and `sub` into a single operation.
+    /// Backends can override this with a fused kernel for better performance.
+    ///
+    /// # Default implementation
+    /// Falls back to `mul_scalar_1d` followed by `sub_1d`.
+    ///
+    /// # Arguments
+    /// * `param` - Parameter vector to update (modified in concept, returns new tensor)
+    /// * `gradient` - Gradient vector
+    /// * `learning_rate` - Learning rate (scalar)
+    ///
+    /// # Returns
+    /// Updated parameter vector
+    fn sgd_step(
+        param: &Self::Tensor1D,
+        gradient: &Self::Tensor1D,
+        learning_rate: &Self::Scalar,
+    ) -> Self::Tensor1D {
+        let scaled_grad = Self::mul_scalar_1d(gradient, learning_rate);
+        Self::sub_1d(param, &scaled_grad)
+    }
 }
