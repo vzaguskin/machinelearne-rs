@@ -71,17 +71,17 @@ impl Backend for WgpuBackend {
 
     fn zeros_1d(len: usize) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(WgpuTensor1D::zeros(&device, len))
+        WgpuTensor1D::zeros(&device, len)
     }
 
     fn zeros_2d(rows: usize, cols: usize) -> Self::Tensor2D {
         let device = Self::default_device();
-        pollster::block_on(WgpuTensor2D::zeros(&device, rows, cols))
+        WgpuTensor2D::zeros(&device, rows, cols)
     }
 
     fn from_vec_1d(data: Vec<f32>) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(WgpuTensor1D::from_vec(&device, data))
+        WgpuTensor1D::from_vec(&device, data)
     }
 
     fn from_vec_2d(data: Vec<f32>, rows: usize, cols: usize) -> Self::Tensor2D {
@@ -94,7 +94,7 @@ impl Backend for WgpuBackend {
             cols
         );
         let device = Self::default_device();
-        pollster::block_on(WgpuTensor2D::from_vec(&device, data, rows, cols))
+        WgpuTensor2D::from_vec(&device, data, rows, cols)
     }
 
     // --- Element-wise operations (1D) ---
@@ -108,7 +108,7 @@ impl Backend for WgpuBackend {
             b.len()
         );
         let device = Self::default_device();
-        pollster::block_on(a.binary_op(&device, b, shaders::BinaryOp::Add))
+        a.binary_op(&device, b, shaders::BinaryOp::Add)
     }
 
     fn sub_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
@@ -120,7 +120,7 @@ impl Backend for WgpuBackend {
             b.len()
         );
         let device = Self::default_device();
-        pollster::block_on(a.binary_op(&device, b, shaders::BinaryOp::Sub))
+        a.binary_op(&device, b, shaders::BinaryOp::Sub)
     }
 
     fn mul_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
@@ -132,7 +132,7 @@ impl Backend for WgpuBackend {
             b.len()
         );
         let device = Self::default_device();
-        pollster::block_on(a.binary_op(&device, b, shaders::BinaryOp::Mul))
+        a.binary_op(&device, b, shaders::BinaryOp::Mul)
     }
 
     fn div_1d(a: &Self::Tensor1D, b: &Self::Tensor1D) -> Self::Tensor1D {
@@ -144,49 +144,49 @@ impl Backend for WgpuBackend {
             b.len()
         );
         let device = Self::default_device();
-        pollster::block_on(a.binary_op(&device, b, shaders::BinaryOp::Div))
+        a.binary_op(&device, b, shaders::BinaryOp::Div)
     }
 
     fn mul_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(t.scalar_op(&device, *s, shaders::ScalarOp::Mul))
+        t.scalar_op(&device, *s, shaders::ScalarOp::Mul)
     }
 
     fn add_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(t.scalar_op(&device, *s, shaders::ScalarOp::Add))
+        t.scalar_op(&device, *s, shaders::ScalarOp::Add)
     }
 
     fn sub_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(t.scalar_op(&device, *s, shaders::ScalarOp::Sub))
+        t.scalar_op(&device, *s, shaders::ScalarOp::Sub)
     }
 
     fn div_scalar_1d(t: &Self::Tensor1D, s: &Self::Scalar) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(t.scalar_op(&device, *s, shaders::ScalarOp::Div))
+        t.scalar_op(&device, *s, shaders::ScalarOp::Div)
     }
 
     // --- Element-wise operations (2D) ---
 
     fn mul_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
         let device = Self::default_device();
-        pollster::block_on(t.scalar_op(&device, *s, shaders::ScalarOp::Mul))
+        t.scalar_op(&device, *s, shaders::ScalarOp::Mul)
     }
 
     fn add_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
         let device = Self::default_device();
-        pollster::block_on(t.scalar_op(&device, *s, shaders::ScalarOp::Add))
+        t.scalar_op(&device, *s, shaders::ScalarOp::Add)
     }
 
     fn sub_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
         let device = Self::default_device();
-        pollster::block_on(t.scalar_op(&device, *s, shaders::ScalarOp::Sub))
+        t.scalar_op(&device, *s, shaders::ScalarOp::Sub)
     }
 
     fn div_scalar_2d(t: &Self::Tensor2D, s: &Self::Scalar) -> Self::Tensor2D {
         let device = Self::default_device();
-        pollster::block_on(t.scalar_op(&device, *s, shaders::ScalarOp::Div))
+        t.scalar_op(&device, *s, shaders::ScalarOp::Div)
     }
 
     fn add_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
@@ -202,7 +202,7 @@ impl Backend for WgpuBackend {
             cb
         );
         let device = Self::default_device();
-        pollster::block_on(a.binary_op(&device, b, shaders::BinaryOp::Add))
+        a.binary_op(&device, b, shaders::BinaryOp::Add)
     }
 
     fn sub_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
@@ -218,7 +218,7 @@ impl Backend for WgpuBackend {
             cb
         );
         let device = Self::default_device();
-        pollster::block_on(a.binary_op(&device, b, shaders::BinaryOp::Sub))
+        a.binary_op(&device, b, shaders::BinaryOp::Sub)
     }
 
     fn mul_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
@@ -234,7 +234,7 @@ impl Backend for WgpuBackend {
             cb
         );
         let device = Self::default_device();
-        pollster::block_on(a.binary_op(&device, b, shaders::BinaryOp::Mul))
+        a.binary_op(&device, b, shaders::BinaryOp::Mul)
     }
 
     fn div_2d(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
@@ -250,7 +250,7 @@ impl Backend for WgpuBackend {
             cb
         );
         let device = Self::default_device();
-        pollster::block_on(a.binary_op(&device, b, shaders::BinaryOp::Div))
+        a.binary_op(&device, b, shaders::BinaryOp::Div)
     }
 
     // --- Reduction operations ---
@@ -300,12 +300,12 @@ impl Backend for WgpuBackend {
 
     fn abs_1d(t: &Self::Tensor1D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(t.unary_op(&device, shaders::UnaryOp::Abs))
+        t.unary_op(&device, shaders::UnaryOp::Abs)
     }
 
     fn sign_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(x.unary_op(&device, shaders::UnaryOp::Sign))
+        x.unary_op(&device, shaders::UnaryOp::Sign)
     }
 
     fn maximum_1d(x: &Self::Tensor1D, other: &Self::Tensor1D) -> Self::Tensor1D {
@@ -317,34 +317,34 @@ impl Backend for WgpuBackend {
             other.len()
         );
         let device = Self::default_device();
-        pollster::block_on(x.binary_op(&device, other, shaders::BinaryOp::Max))
+        x.binary_op(&device, other, shaders::BinaryOp::Max)
     }
 
     fn exp_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(x.unary_op(&device, shaders::UnaryOp::Exp))
+        x.unary_op(&device, shaders::UnaryOp::Exp)
     }
 
     fn log_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(x.unary_op(&device, shaders::UnaryOp::Log))
+        x.unary_op(&device, shaders::UnaryOp::Log)
     }
 
     fn sigmoid_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(x.unary_op(&device, shaders::UnaryOp::Sigmoid))
+        x.unary_op(&device, shaders::UnaryOp::Sigmoid)
     }
 
     // --- Mathematical functions (2D) ---
 
     fn abs_2d(t: &Self::Tensor2D) -> Self::Tensor2D {
         let device = Self::default_device();
-        pollster::block_on(t.unary_op(&device, shaders::UnaryOp::Abs))
+        t.unary_op(&device, shaders::UnaryOp::Abs)
     }
 
     fn sign_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
         let device = Self::default_device();
-        pollster::block_on(x.unary_op(&device, shaders::UnaryOp::Sign))
+        x.unary_op(&device, shaders::UnaryOp::Sign)
     }
 
     fn maximum_2d(x: &Self::Tensor2D, other: &Self::Tensor2D) -> Self::Tensor2D {
@@ -360,22 +360,22 @@ impl Backend for WgpuBackend {
             cb
         );
         let device = Self::default_device();
-        pollster::block_on(x.binary_op(&device, other, shaders::BinaryOp::Max))
+        x.binary_op(&device, other, shaders::BinaryOp::Max)
     }
 
     fn exp_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
         let device = Self::default_device();
-        pollster::block_on(x.unary_op(&device, shaders::UnaryOp::Exp))
+        x.unary_op(&device, shaders::UnaryOp::Exp)
     }
 
     fn log_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
         let device = Self::default_device();
-        pollster::block_on(x.unary_op(&device, shaders::UnaryOp::Log))
+        x.unary_op(&device, shaders::UnaryOp::Log)
     }
 
     fn sigmoid_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
         let device = Self::default_device();
-        pollster::block_on(x.unary_op(&device, shaders::UnaryOp::Sigmoid))
+        x.unary_op(&device, shaders::UnaryOp::Sigmoid)
     }
 
     // --- Linear algebra ---
@@ -390,12 +390,12 @@ impl Backend for WgpuBackend {
             x.len()
         );
         let device = Self::default_device();
-        pollster::block_on(a.matvec(&device, x))
+        a.matvec(&device, x)
     }
 
     fn _matvec_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(a.matvec(&device, x))
+        a.matvec(&device, x)
     }
 
     fn matvec_transposed(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D {
@@ -408,17 +408,17 @@ impl Backend for WgpuBackend {
             x.len()
         );
         let device = Self::default_device();
-        pollster::block_on(a.matvec_transposed(&device, x))
+        a.matvec_transposed(&device, x)
     }
 
     fn _matvec_transposed_unchecked(a: &Self::Tensor2D, x: &Self::Tensor1D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(a.matvec_transposed(&device, x))
+        a.matvec_transposed(&device, x)
     }
 
     fn transpose(t: &Self::Tensor2D) -> Self::Tensor2D {
         let device = Self::default_device();
-        pollster::block_on(t.transpose(&device))
+        t.transpose(&device)
     }
 
     fn matmul(a: &Self::Tensor2D, b: &Self::Tensor2D) -> Self::Tensor2D {
@@ -426,7 +426,7 @@ impl Backend for WgpuBackend {
         let (k2, _n) = b.shape();
         assert_eq!(k1, k2, "matmul: a.cols ({}) != b.rows ({})", k1, k2);
         let device = Self::default_device();
-        pollster::block_on(a.matmul(&device, b))
+        a.matmul(&device, b)
     }
 
     fn shape(t: &Self::Tensor2D) -> (usize, usize) {
@@ -435,41 +435,41 @@ impl Backend for WgpuBackend {
 
     fn ravel_2d(x: &Self::Tensor2D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(x.ravel(&device))
+        x.ravel(&device)
     }
 
     // --- Column-wise operations ---
 
     fn col_mean_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(t.col_mean(&device))
+        t.col_mean(&device)
     }
 
     fn col_std_2d(t: &Self::Tensor2D, ddof: usize) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(t.col_std(&device, ddof))
+        t.col_std(&device, ddof)
     }
 
     fn col_min_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(t.col_min(&device))
+        t.col_min(&device)
     }
 
     fn col_max_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(t.col_max(&device))
+        t.col_max(&device)
     }
 
     fn col_sum_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(t.col_sum(&device))
+        t.col_sum(&device)
     }
 
     // --- Row-wise operations ---
 
     fn row_sum_2d(t: &Self::Tensor2D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(t.row_sum(&device))
+        t.row_sum(&device)
     }
 
     // --- Broadcasting operations ---
@@ -484,7 +484,7 @@ impl Backend for WgpuBackend {
             v.len()
         );
         let device = Self::default_device();
-        pollster::block_on(t.broadcast_op(&device, v, shaders::BinaryOp::Sub))
+        t.broadcast_op(&device, v, shaders::BinaryOp::Sub)
     }
 
     fn broadcast_div_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
@@ -497,7 +497,7 @@ impl Backend for WgpuBackend {
             v.len()
         );
         let device = Self::default_device();
-        pollster::block_on(t.broadcast_op(&device, v, shaders::BinaryOp::Div))
+        t.broadcast_op(&device, v, shaders::BinaryOp::Div)
     }
 
     fn broadcast_mul_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
@@ -510,7 +510,7 @@ impl Backend for WgpuBackend {
             v.len()
         );
         let device = Self::default_device();
-        pollster::block_on(t.broadcast_op(&device, v, shaders::BinaryOp::Mul))
+        t.broadcast_op(&device, v, shaders::BinaryOp::Mul)
     }
 
     fn broadcast_add_1d_to_2d_rows(t: &Self::Tensor2D, v: &Self::Tensor1D) -> Self::Tensor2D {
@@ -523,17 +523,17 @@ impl Backend for WgpuBackend {
             v.len()
         );
         let device = Self::default_device();
-        pollster::block_on(t.broadcast_op(&device, v, shaders::BinaryOp::Add))
+        t.broadcast_op(&device, v, shaders::BinaryOp::Add)
     }
 
     fn sqrt_1d(t: &Self::Tensor1D) -> Self::Tensor1D {
         let device = Self::default_device();
-        pollster::block_on(t.unary_op(&device, shaders::UnaryOp::Sqrt))
+        t.unary_op(&device, shaders::UnaryOp::Sqrt)
     }
 
     fn sqrt_2d(t: &Self::Tensor2D) -> Self::Tensor2D {
         let device = Self::default_device();
-        pollster::block_on(t.unary_op(&device, shaders::UnaryOp::Sqrt))
+        t.unary_op(&device, shaders::UnaryOp::Sqrt)
     }
 
     // --- Column manipulation operations ---
@@ -558,7 +558,7 @@ impl Backend for WgpuBackend {
         // For now, use CPU fallback for hcat (less common operation)
         let total_cols: usize = tensors.iter().map(|t| t.shape().1).sum();
         let device = Self::default_device();
-        pollster::block_on(WgpuTensor2D::hcat(&device, tensors, rows, total_cols))
+        WgpuTensor2D::hcat(&device, tensors, rows, total_cols)
     }
 
     fn select_columns_2d(t: &Self::Tensor2D, columns: &[usize]) -> Self::Tensor2D {
@@ -573,7 +573,7 @@ impl Backend for WgpuBackend {
         }
 
         let device = Self::default_device();
-        pollster::block_on(t.select_columns(&device, columns, rows))
+        t.select_columns(&device, columns, rows)
     }
 
     fn one_hot_from_indices(indices: &Self::Tensor1D, num_classes: usize) -> Self::Tensor2D {
