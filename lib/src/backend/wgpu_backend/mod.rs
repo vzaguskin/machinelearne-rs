@@ -41,7 +41,9 @@ mod device;
 mod shaders;
 mod tensor;
 
-pub use accumulator::{flush_accumulator, with_accumulator, AccumulatorStats, CommandAccumulator};
+pub use accumulator::{
+    flush_accumulator, with_accumulator, AccumulatorStats, CommandAccumulator, ExecutableCommand,
+};
 pub use buffer_pool::{BufferPool, PoolStats};
 pub use device::WgpuDevice;
 pub use tensor::{WgpuTensor1D, WgpuTensor2D};
