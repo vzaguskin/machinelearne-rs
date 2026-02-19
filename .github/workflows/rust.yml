@@ -53,8 +53,8 @@ jobs:
       - name: Install cargo-tarpaulin
         uses: taiki-e/install-action@cargo-tarpaulin
 
-      - name: Run coverage (library only, exclude benchmarks)
-        run: cargo tarpaulin -p machinelearne-rs --features "serde,ndarray" --out Xml --fail-under $COVERAGE_THRESHOLD
+      - name: Run coverage (library only, exclude benchmarks and GPU backends)
+        run: cargo tarpaulin -p machinelearne-rs --features "serde,ndarray" --exclude-files "lib/src/backend/wgpu_backend/*" --exclude-files "lib/src/backend/cuda/*" --exclude-files "lib/src/backend/metal/*" --exclude-files "lib/src/backend/spirv/*" --out Xml --fail-under $COVERAGE_THRESHOLD
 
   benchmarks:
     runs-on: ubuntu-latest

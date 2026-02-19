@@ -212,4 +212,96 @@ mod tests {
         };
         assert!((stats.hit_rate() - 0.75).abs() < 0.001);
     }
+
+    #[test]
+    fn test_cache_stats_zero() {
+        let stats = BindGroupCacheStats {
+            hits: 0,
+            misses: 0,
+            entries: 0,
+        };
+        assert_eq!(stats.hit_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_cache_new() {
+        let cache = BindGroupCache::new();
+        let stats = cache.stats();
+        assert_eq!(stats.hits, 0);
+        assert_eq!(stats.misses, 0);
+        assert_eq!(stats.entries, 0);
+    }
+
+    #[test]
+    fn test_cache_clear() {
+        let cache = BindGroupCache::new();
+        // Clear on empty cache should work
+        let mut cache = cache;
+        cache.clear();
+        let stats = cache.stats();
+        assert_eq!(stats.entries, 0);
+    }
+
+    #[test]
+    fn test_cache_default() {
+        let cache = BindGroupCache::default();
+        let stats = cache.stats();
+        assert_eq!(stats.hits, 0);
+        assert_eq!(stats.misses, 0);
+    }
+
+    #[test]
+    fn test_bind_group_key_equality() {
+        let key1 = BindGroupKey {
+            layout_ptr: 0x1000,
+            buffer_hash: BufferPtrHash(123),
+        };
+        let key2 = BindGroupKey {
+            layout_ptr: 0x1000,
+            buffer_hash: BufferPtrHash(123),
+        };
+        let key3 = BindGroupKey {
+            layout_ptr: 0x2000,
+            buffer_hash: BufferPtrHash(123),
+        };
+        assert_eq!(key1, key2);
+        assert_ne!(key1, key3);
+    }
+
+    #[test]
+    fn test_buffer_ptr_hash_equality() {
+        let hash1 = BufferPtrHash(123);
+        let hash2 = BufferPtrHash(123);
+        let hash3 = BufferPtrHash(456);
+        assert_eq!(hash1, hash2);
+        assert_ne!(hash1, hash3);
+    }
+
+    #[test]
+    fn test_cache_stats_all_hits() {
+        let stats = BindGroupCacheStats {
+            hits: 100,
+            misses: 0,
+            entries: 5,
+        };
+        assert!((stats.hit_rate() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cache_stats_all_misses() {
+        let stats = BindGroupCacheStats {
+            hits: 0,
+            misses: 100,
+            entries: 5,
+        };
+        assert!((stats.hit_rate() - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_buffer_ptr_hash_from_empty() {
+        // Empty buffer slice should produce consistent hash
+        let hash1 = BufferPtrHash::from_buffers(&[]);
+        let hash2 = BufferPtrHash::from_buffers(&[]);
+        assert_eq!(hash1, hash2);
+    }
 }
