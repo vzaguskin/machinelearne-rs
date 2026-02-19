@@ -7,6 +7,7 @@ use wgpu::{Device, Features, Instance, Limits, Queue};
 use super::accumulator::CommandAccumulator;
 use super::bind_group_cache::BindGroupCache;
 use super::buffer_pool::BufferPool;
+use super::dynamic_uniform::DynamicUniformBuffer;
 
 /// Global device singleton for WGPU backend.
 /// Using a single device ensures all buffers are compatible.
@@ -25,6 +26,12 @@ thread_local! {
 // Thread-local bind group cache for reducing bind group creation overhead.
 thread_local! {
     static BIND_GROUP_CACHE: RefCell<BindGroupCache> = RefCell::new(BindGroupCache::new());
+}
+
+// Thread-local dynamic uniform buffer for params.
+// This is lazily initialized when first accessed.
+thread_local! {
+    static DYNAMIC_UNIFORM: RefCell<Option<DynamicUniformBuffer>> = const { RefCell::new(None) };
 }
 
 /// GPU device handle for WGPU backend.
@@ -204,6 +211,38 @@ impl WgpuDevice {
         F: FnOnce(&mut BindGroupCache) -> R,
     {
         BIND_GROUP_CACHE.with(|cache| f(&mut cache.borrow_mut()))
+    }
+
+    /// Executes a function with access to the dynamic uniform buffer.
+    ///
+    /// The buffer is lazily initialized on first access.
+    pub fn with_dynamic_uniform<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut DynamicUniformBuffer) -> R,
+    {
+        DYNAMIC_UNIFORM.with(|buf| {
+            let mut buf = buf.borrow_mut();
+            if buf.is_none() {
+                *buf = Some(DynamicUniformBuffer::new(&self.device));
+            }
+            f(buf.as_mut().unwrap())
+        })
+    }
+
+    /// Allocates space in the dynamic uniform buffer for params.
+    ///
+    /// Returns the offset to use as a dynamic offset, or None if buffer is full.
+    pub fn allocate_params(&self, data: &[u8]) -> Option<u32> {
+        self.with_dynamic_uniform(|buf| buf.allocate(data))
+    }
+
+    /// Resets the dynamic uniform buffer (call after flush).
+    pub fn reset_dynamic_uniform(&self) {
+        DYNAMIC_UNIFORM.with(|buf| {
+            if let Some(ref mut b) = *buf.borrow_mut() {
+                b.reset();
+            }
+        });
     }
 }
 

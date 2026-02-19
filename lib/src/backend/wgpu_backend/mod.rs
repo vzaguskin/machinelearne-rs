@@ -39,6 +39,7 @@ mod accumulator;
 mod bind_group_cache;
 mod buffer_pool;
 mod device;
+mod dynamic_uniform;
 mod shaders;
 mod tensor;
 mod uniform_pool;

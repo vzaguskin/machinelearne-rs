@@ -31,6 +31,8 @@ pub struct ExecutableCommand {
     pub pipeline: Arc<ComputePipeline>,
     /// The bind group containing resources.
     pub bind_group: Arc<BindGroup>,
+    /// Dynamic offsets for bind group (for uniform buffers with dynamic offsets).
+    pub dynamic_offsets: Vec<u32>,
     /// Number of workgroups in X dimension.
     pub workgroups_x: u32,
     /// Number of workgroups in Y dimension.
@@ -54,6 +56,28 @@ impl ExecutableCommand {
         Self {
             pipeline,
             bind_group,
+            dynamic_offsets: Vec::new(),
+            workgroups_x,
+            workgroups_y,
+            workgroups_z,
+            label: label.map(|s| s.to_string()),
+        }
+    }
+
+    /// Creates a new executable command with dynamic offsets.
+    pub fn with_dynamic_offsets(
+        pipeline: Arc<ComputePipeline>,
+        bind_group: Arc<BindGroup>,
+        dynamic_offsets: Vec<u32>,
+        workgroups_x: u32,
+        workgroups_y: u32,
+        workgroups_z: u32,
+        label: Option<&str>,
+    ) -> Self {
+        Self {
+            pipeline,
+            bind_group,
+            dynamic_offsets,
             workgroups_x,
             workgroups_y,
             workgroups_z,
@@ -69,6 +93,25 @@ impl ExecutableCommand {
         label: Option<&str>,
     ) -> Self {
         Self::new(pipeline, bind_group, workgroups, 1, 1, label)
+    }
+
+    /// Creates a 1D dispatch with dynamic offsets.
+    pub fn dispatch_1d_dynamic(
+        pipeline: Arc<ComputePipeline>,
+        bind_group: Arc<BindGroup>,
+        dynamic_offset: u32,
+        workgroups: u32,
+        label: Option<&str>,
+    ) -> Self {
+        Self::with_dynamic_offsets(
+            pipeline,
+            bind_group,
+            vec![dynamic_offset],
+            workgroups,
+            1,
+            1,
+            label,
+        )
     }
 
     /// Creates a 2D dispatch (two workgroup dimensions).
@@ -90,7 +133,7 @@ impl ExecutableCommand {
             timestamp_writes: None,
         });
         compute_pass.set_pipeline(&self.pipeline.pipeline);
-        compute_pass.set_bind_group(0, &*self.bind_group, &[]);
+        compute_pass.set_bind_group(0, &*self.bind_group, &self.dynamic_offsets);
         compute_pass.dispatch_workgroups(self.workgroups_x, self.workgroups_y, self.workgroups_z);
     }
 }
