@@ -40,6 +40,7 @@ mod buffer_pool;
 mod device;
 mod shaders;
 mod tensor;
+mod uniform_pool;
 
 pub use accumulator::{
     flush_accumulator, with_accumulator, AccumulatorStats, CommandAccumulator, ExecutableCommand,
@@ -47,6 +48,7 @@ pub use accumulator::{
 pub use buffer_pool::{BufferPool, PoolStats};
 pub use device::WgpuDevice;
 pub use tensor::{WgpuTensor1D, WgpuTensor2D};
+pub use uniform_pool::{UniformBufferPool, UniformPoolStats};
 
 use crate::backend::Backend;
 use crate::preprocessing::PreprocessingError;
