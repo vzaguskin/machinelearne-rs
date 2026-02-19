@@ -3,6 +3,7 @@
 use super::accumulator::ExecutableCommand;
 use super::device::WgpuDevice;
 use super::shaders::{get_registry, BinaryOp, ScalarOp, UnaryOp};
+use super::uniform_pool::acquire_uniform_buffer;
 use crate::preprocessing::PreprocessingError;
 use std::sync::Arc;
 use wgpu::util::{BufferInitDescriptor, DeviceExt};
@@ -253,11 +254,11 @@ impl WgpuTensor1D {
             len: self.len as u32,
             _padding: [0u32; 2],
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("params_buffer"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("binary_1d_bind_group"),
@@ -316,11 +317,11 @@ impl WgpuTensor1D {
             scalar: scalar as f32,
             _padding: 0u32,
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("params_buffer"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("scalar_1d_bind_group"),
@@ -375,11 +376,11 @@ impl WgpuTensor1D {
             cols_or_zero: 0u32,
             _padding: 0u32,
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("params_buffer"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("unary_1d_bind_group"),
@@ -530,11 +531,11 @@ impl WgpuTensor1D {
             len: self.len as u32,
             learning_rate: learning_rate as f32,
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("sgd_step_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("sgd_step_bind_group"),
@@ -637,11 +638,11 @@ impl WgpuTensor2D {
             cols: self.cols as u32,
             _padding: 0u32,
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("params_buffer"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("binary_2d_bind_group"),
@@ -704,11 +705,11 @@ impl WgpuTensor2D {
             cols: self.cols as u32,
             scalar: scalar as f32,
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("params_buffer"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("scalar_2d_bind_group"),
@@ -767,11 +768,11 @@ impl WgpuTensor2D {
             cols: self.cols as u32,
             _padding: 0u32,
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("params_buffer"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("unary_2d_bind_group"),
@@ -924,11 +925,11 @@ impl WgpuTensor2D {
             cols: self.cols as u32,
             _padding: [0u32; 2],
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("matvec_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("matvec_bind_group"),
@@ -1006,11 +1007,11 @@ impl WgpuTensor2D {
             bias: bias as f32,
             _padding: 0u32,
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("matvec_bias_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("matvec_bias_bind_group"),
@@ -1068,11 +1069,11 @@ impl WgpuTensor2D {
             cols: self.cols as u32,
             _padding: [0u32; 2],
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("matvec_t_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("matvec_t_bind_group"),
@@ -1134,11 +1135,11 @@ impl WgpuTensor2D {
             n: n as u32,
             _padding: 0u32,
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("matmul_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("matmul_bind_group"),
@@ -1200,11 +1201,11 @@ impl WgpuTensor2D {
             cols: self.cols as u32,
             _padding: [0u32; 2],
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("transpose_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("transpose_bind_group"),
@@ -1270,11 +1271,11 @@ impl WgpuTensor2D {
             cols: self.cols as u32,
             _padding: [0u32; 2],
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("col_sum_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("col_sum_bind_group"),
@@ -1328,11 +1329,11 @@ impl WgpuTensor2D {
             cols: self.cols as u32,
             _padding: [0u32; 2],
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("row_sum_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("row_sum_bind_group"),
@@ -1409,11 +1410,11 @@ impl WgpuTensor2D {
             cols: self.cols as u32,
             _padding: 0u32,
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("col_min_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("col_min_bind_group"),
@@ -1468,11 +1469,11 @@ impl WgpuTensor2D {
             cols: self.cols as u32,
             _padding: 0u32,
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("col_max_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("col_max_bind_group"),
@@ -1528,11 +1529,11 @@ impl WgpuTensor2D {
             cols: self.cols as u32,
             _padding: 0u32,
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("broadcast_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("broadcast_bind_group"),
@@ -1730,11 +1731,11 @@ impl WgpuTensor2D {
             out_cols: out_cols as u32,
             num_indices: out_cols as u32,
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("select_columns_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("select_columns_bind_group"),
@@ -1817,11 +1818,11 @@ impl WgpuTensor2D {
             num_classes: num_classes as u32,
             _padding: [0u32; 2],
         };
-        let params_buffer = device.device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("one_hot_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let params_buffer =
+            acquire_uniform_buffer(&device.device, std::mem::size_of_val(&params) as u64);
+        device
+            .queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
         let bind_group = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("one_hot_bind_group"),
