@@ -166,7 +166,7 @@ impl StagingBufferPool {
     /// Convert a size in bytes to a bucket size.
     /// Rounds up to the nearest bucket granularity.
     fn size_to_bucket(size: usize) -> usize {
-        ((size + SIZE_BUCKET_GRANULARITY - 1) / SIZE_BUCKET_GRANULARITY) * SIZE_BUCKET_GRANULARITY
+        size.div_ceil(SIZE_BUCKET_GRANULARITY) * SIZE_BUCKET_GRANULARITY
     }
 
     /// Create a new staging buffer of the given size.
@@ -200,10 +200,7 @@ impl StagingBufferPoolInner {
         }
 
         // Add to pool
-        self.buffers
-            .entry(bucket)
-            .or_insert_with(Vec::new)
-            .push(buffer);
+        self.buffers.entry(bucket).or_default().push(buffer);
         self.total_bytes += bucket;
         self.stats.buffers_pooled = self.count_buffers();
         self.stats.bytes_pooled = self.total_bytes;
