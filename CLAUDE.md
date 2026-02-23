@@ -50,10 +50,27 @@ cargo run --example train_logistic        # Binary classification with BCE
 
 1. **Always run `cargo fmt` before committing** to ensure consistent code formatting.
 2. **Always work in a feature branch**, never commit directly to `main`. Create a branch like `feature/your-feature-name`.
+3. **Pre-commit hook enforces branch protection**: The repository has a pre-commit hook that blocks direct commits to `main`. If you attempt to commit on `main`, you'll see an error directing you to create a feature branch first.
+
+### Initial Setup
+
+After cloning the repository, run the hook setup script:
+
+```bash
+./scripts/setup-hooks.sh
+```
+
+This installs the pre-commit hook that prevents direct commits to `main`.
 
 ## Feature Development Process
 
 **CRITICAL**: Follow this process for EVERY feature. No exceptions.
+
+**Important**: This workflow applies to ALL development, including when using OpenSpec commands like `/opsx:ff`, `/opsx:apply`, `/opsx:continue`, etc. These commands create artifacts and implement code, but you must still:
+1. Create a feature branch BEFORE running them
+2. Commit all changes to the feature branch
+3. Create a PR from the feature branch
+4. Merge via PR (not direct commit to main)
 
 ### 1. Planning Phase
 
@@ -136,9 +153,9 @@ gh issue close <issue-number> --comment "Implemented in #<pr-number>"
 ### Summary Checklist
 
 For every feature, ensure:
+- [ ] Feature branch created FIRST (`git checkout -b feature/name`) - enforced by pre-commit hook
 - [ ] OpenSpec change created (`openspec new change "name"`)
 - [ ] GitHub issue created (`gh issue create`)
-- [ ] Feature branch created (`git checkout -b feature/name`)
 - [ ] All OpenSpec artifacts complete (proposal, specs, design, tasks)
 - [ ] Implementation complete with tests
 - [ ] CHANGELOG.md updated
