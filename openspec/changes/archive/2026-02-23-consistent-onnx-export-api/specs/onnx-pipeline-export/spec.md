@@ -1,25 +1,4 @@
-# onnx-pipeline-export Specification
-
-## Purpose
-TBD - created by archiving change onnx-pipeline-server. Update Purpose after archive.
-## Requirements
-### Requirement: Export complete pipeline to ONNX
-The system SHALL allow exporting a complete ML pipeline (preprocessing + model) as a single ONNX file for end-to-end inference.
-
-#### Scenario: Export pipeline with scalers and linear model
-- **WHEN** user has a fitted pipeline with StandardScaler and LinearRegression
-- **THEN** system exports a single ONNX file that performs both preprocessing and prediction
-
-#### Scenario: Export pipeline with multiple preprocessing steps
-- **WHEN** user has a pipeline with SimpleImputer → StandardScaler → PolynomialFeatures → LinearRegression
-- **THEN** system exports a single ONNX file with all transformations chained correctly
-
-### Requirement: Pipeline export preserves transformation order
-The system SHALL preserve the exact order of preprocessing steps in the exported ONNX graph.
-
-#### Scenario: Verify step order in exported model
-- **WHEN** pipeline with steps A → B → C is exported
-- **THEN** the ONNX graph executes steps in order A → B → C
+## MODIFIED Requirements
 
 ### Requirement: Support all preprocessing transformers
 The system SHALL support exporting all fitted preprocessing transformers to ONNX format via the `OnnxNodeBuilder` trait.
@@ -47,12 +26,7 @@ The system SHALL validate that the pipeline can be exported by checking `OnnxNod
 - **WHEN** user attempts to export a pipeline with a transformer not implementing `OnnxNodeBuilder`
 - **THEN** system returns a descriptive error indicating which transformer lacks export support
 
-### Requirement: Export with metadata
-The system SHALL include metadata in the exported ONNX file for model identification.
-
-#### Scenario: Include model metadata
-- **WHEN** pipeline is exported
-- **THEN** ONNX file includes producer name, model version, and description
+## ADDED Requirements
 
 ### Requirement: Trait-based pipeline export
 The system SHALL use trait-based dispatch to compose pipeline export from individual `OnnxNodeBuilder` implementations.
@@ -64,4 +38,3 @@ The system SHALL use trait-based dispatch to compose pipeline export from indivi
 #### Scenario: Output tensor chaining
 - **WHEN** multiple preprocessing steps are in a pipeline
 - **THEN** each step's output tensor name becomes the next step's input
-
