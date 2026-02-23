@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Pre-commit hook with main branch protection
+# This file should be copied to .git/hooks/pre-commit
+# Run: ./scripts/setup-hooks.sh
+
+# Get current branch name
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+# Prevent commits to main branch
+if [ "$BRANCH" = "main" ]; then
+    echo "ERROR: Direct commits to 'main' branch are not allowed."
+    echo ""
+    echo "Please create a feature branch first:"
+    echo "  git checkout -b feature/your-feature-name"
+    echo ""
+    echo "See CLAUDE.md for the feature development process."
+    exit 1
+fi
+
+# Run pre-commit framework if available
+if [ -f "$(dirname "$0")/pre-commit-orig" ]; then
+    exec "$(dirname "$0")/pre-commit-orig" "$@"
+elif command -v pre-commit > /dev/null; then
+    exec pre-commit run --config=.pre-commit-config.yaml "$@"
+fi
+
+exit 0
