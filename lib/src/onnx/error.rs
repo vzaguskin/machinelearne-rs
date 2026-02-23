@@ -29,6 +29,8 @@ pub enum OnnxError {
         transformer_name: String,
         reason: String,
     },
+    /// Error during graph construction.
+    GraphConstruction(String),
 }
 
 impl std::fmt::Display for OnnxError {
@@ -53,6 +55,9 @@ impl std::fmt::Display for OnnxError {
                     "Unsupported transformer '{}': {}",
                     transformer_name, reason
                 )
+            }
+            OnnxError::GraphConstruction(msg) => {
+                write!(f, "Graph construction error: {}", msg)
             }
         }
     }
@@ -105,6 +110,10 @@ mod tests {
         };
         assert!(err.to_string().contains("Unsupported transformer"));
         assert!(err.to_string().contains("CustomTransformer"));
+
+        let err = OnnxError::GraphConstruction("failed to add node".to_string());
+        assert!(err.to_string().contains("Graph construction error"));
+        assert!(err.to_string().contains("failed to add node"));
     }
 
     #[test]

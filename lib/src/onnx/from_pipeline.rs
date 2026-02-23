@@ -6,7 +6,6 @@
 use super::error::OnnxError;
 use super::export::OnnxExportable;
 use super::graph::OnnxGraphBuilder;
-use super::operators;
 use super::proto::AttributeProto;
 use crate::backend::Backend;
 use crate::model::linear::{Fitted, LinearModel};
@@ -54,8 +53,7 @@ impl<B: Backend> OnnxExportable for LinearModel<B, Fitted> {
         // Add Gemm node: output = input @ weights^T + bias
         // input: [N, F], weights: [1, F], bias: [1]
         // transB=1 so that weights becomes [F, 1]
-        operators::gemm(
-            &mut builder,
+        builder.gemm(
             "input",
             "weights",
             Some("bias"),
@@ -134,8 +132,7 @@ pub fn export_pipeline_to_onnx<B: Backend>(
     builder.add_float_initializer("model_bias", &[1], &[bias]);
 
     // Add Gemm for linear model
-    operators::gemm(
-        &mut builder,
+    builder.gemm(
         &current,
         "model_weights",
         Some("model_bias"),
@@ -278,8 +275,8 @@ fn export_standard_scaler<B: Backend>(
 
     // output = (input - mean) / std
     let sub_out = builder.unique_name("sub");
-    operators::sub(builder, input, "scaler_mean", &sub_out);
-    operators::div(builder, &sub_out, "scaler_std", output);
+    builder.sub(input, "scaler_mean", &sub_out);
+    builder.div(&sub_out, "scaler_std", output);
 
     Ok(())
 }
@@ -306,14 +303,14 @@ fn export_minmax_scaler<B: Backend>(
 
     // output = (input - min) * scale + target_min
     let sub_out = builder.unique_name("sub");
-    operators::sub(builder, input, "minmax_min", &sub_out);
+    builder.sub(input, "minmax_min", &sub_out);
 
     let mul_out = builder.unique_name("mul");
-    operators::mul(builder, &sub_out, "minmax_scale", &mul_out);
+    builder.mul(&sub_out, "minmax_scale", &mul_out);
 
     // Add target_min as scalar
     builder.add_float_initializer("minmax_target_min", &[1], &[target_min]);
-    operators::add(builder, &mul_out, "minmax_target_min", output);
+    builder.add(&mul_out, "minmax_target_min", output);
 
     Ok(())
 }
@@ -338,8 +335,8 @@ fn export_robust_scaler<B: Backend>(
 
     // output = (input - center) / scale
     let sub_out = builder.unique_name("sub");
-    operators::sub(builder, input, "robust_center", &sub_out);
-    operators::div(builder, &sub_out, "robust_scale", output);
+    builder.sub(input, "robust_center", &sub_out);
+    builder.div(&sub_out, "robust_scale", output);
 
     Ok(())
 }
@@ -361,7 +358,7 @@ fn export_maxabs_scaler<B: Backend>(
     builder.add_float_initializer("maxabs_scale", &[1, n_features as i64], &scale);
 
     // output = input * scale
-    operators::mul(builder, input, "maxabs_scale", output);
+    builder.mul(input, "maxabs_scale", output);
 
     Ok(())
 }
@@ -379,18 +376,18 @@ fn export_normalizer<B: Backend>(
     // For L2 norm: output = input / sqrt(sum(input^2))
     // 1. Compute input^2
     let sq_out = builder.unique_name("sq");
-    operators::mul(builder, input, input, &sq_out);
+    builder.mul(input, input, &sq_out);
 
     // 2. Sum along axis 1 (features) -> [batch, 1]
     let sum_out = builder.unique_name("sum");
-    operators::reduce_sum(builder, &sq_out, &[1], true, &sum_out);
+    builder.reduce_sum(&sq_out, &[1], true, &sum_out);
 
     // 3. sqrt -> [batch, 1]
     let sqrt_out = builder.unique_name("sqrt");
-    operators::sqrt(builder, &sum_out, &sqrt_out);
+    builder.sqrt(&sum_out, &sqrt_out);
 
     // 4. input / sqrt -> normalized
-    operators::div(builder, input, &sqrt_out, output);
+    builder.div(input, &sqrt_out, output);
 
     Ok(())
 }
@@ -474,7 +471,7 @@ fn export_one_hot_encoder<B: Backend>(
 
     // Cast input to int64 for OneHot
     let cast_out = builder.unique_name("cast");
-    operators::cast(builder, input, 7, &cast_out); // 7 = int64
+    builder.cast(input, 7, &cast_out); // 7 = int64
 
     // OneHot(axis=-1)
     builder.add_node(

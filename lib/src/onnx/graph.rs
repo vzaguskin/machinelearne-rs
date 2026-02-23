@@ -239,6 +239,345 @@ impl OnnxGraphBuilder {
         std::fs::write(path, bytes)?;
         Ok(())
     }
+
+    // ========================================================================
+    // Operator Methods - Chainable ONNX operations
+    // ========================================================================
+
+    /// Add a Gemm (General Matrix Multiply) node.
+    ///
+    /// Computes Y = alpha * A' * B' + beta * C
+    pub fn gemm(
+        &mut self,
+        input_a: &str,
+        input_b: &str,
+        input_c: Option<&str>,
+        trans_a: bool,
+        trans_b: bool,
+        alpha: f32,
+        beta: f32,
+        output: &str,
+    ) -> &mut Self {
+        let attrs = vec![
+            AttributeProto::float("alpha", alpha),
+            AttributeProto::float("beta", beta),
+            AttributeProto::int("transA", if trans_a { 1 } else { 0 }),
+            AttributeProto::int("transB", if trans_b { 1 } else { 0 }),
+        ];
+
+        let mut inputs = vec![input_a.to_string(), input_b.to_string()];
+        if let Some(c) = input_c {
+            inputs.push(c.to_string());
+        }
+
+        self.add_node("Gemm", inputs, vec![output.to_string()], attrs)
+    }
+
+    /// Add a MatMul (Matrix Multiplication) node.
+    pub fn matmul(&mut self, input_a: &str, input_b: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "MatMul",
+            vec![input_a.to_string(), input_b.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add an Add node.
+    pub fn add(&mut self, input_a: &str, input_b: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "Add",
+            vec![input_a.to_string(), input_b.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add a Sub (Subtract) node.
+    pub fn sub(&mut self, input_a: &str, input_b: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "Sub",
+            vec![input_a.to_string(), input_b.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add a Mul (Multiply) node.
+    pub fn mul(&mut self, input_a: &str, input_b: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "Mul",
+            vec![input_a.to_string(), input_b.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add a Div (Divide) node.
+    pub fn div(&mut self, input_a: &str, input_b: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "Div",
+            vec![input_a.to_string(), input_b.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add a Reshape node.
+    pub fn reshape(&mut self, input: &str, shape: &[i64], output: &str) -> &mut Self {
+        let shape_name = format!("{}_shape", output);
+        self.add_int64_initializer(&shape_name, &[shape.len() as i64], shape);
+        self.add_node(
+            "Reshape",
+            vec![input.to_string(), shape_name],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add a Flatten node.
+    pub fn flatten(&mut self, input: &str, axis: i64, output: &str) -> &mut Self {
+        self.add_node(
+            "Flatten",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![AttributeProto::int("axis", axis)],
+        )
+    }
+
+    /// Add a Concat node.
+    pub fn concat(&mut self, inputs: Vec<&str>, axis: i64, output: &str) -> &mut Self {
+        let inputs: Vec<String> = inputs.iter().map(|s| s.to_string()).collect();
+        self.add_node(
+            "Concat",
+            inputs,
+            vec![output.to_string()],
+            vec![AttributeProto::int("axis", axis)],
+        )
+    }
+
+    /// Add a Cast node.
+    pub fn cast(&mut self, input: &str, to_type: i32, output: &str) -> &mut Self {
+        self.add_node(
+            "Cast",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![AttributeProto::int("to", to_type as i64)],
+        )
+    }
+
+    /// Add a Squeeze node.
+    pub fn squeeze(&mut self, input: &str, axes: &[i64], output: &str) -> &mut Self {
+        if axes.is_empty() {
+            self.add_node(
+                "Squeeze",
+                vec![input.to_string()],
+                vec![output.to_string()],
+                vec![],
+            )
+        } else {
+            let axes_name = format!("{}_axes", output);
+            self.add_int64_initializer(&axes_name, &[axes.len() as i64], axes);
+            self.add_node(
+                "Squeeze",
+                vec![input.to_string(), axes_name],
+                vec![output.to_string()],
+                vec![],
+            )
+        }
+    }
+
+    /// Add an Unsqueeze node.
+    pub fn unsqueeze(&mut self, input: &str, axes: &[i64], output: &str) -> &mut Self {
+        let axes_name = format!("{}_axes", output);
+        self.add_int64_initializer(&axes_name, &[axes.len() as i64], axes);
+        self.add_node(
+            "Unsqueeze",
+            vec![input.to_string(), axes_name],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add a ReduceMean node.
+    pub fn reduce_mean(
+        &mut self,
+        input: &str,
+        axes: &[i64],
+        keepdims: bool,
+        output: &str,
+    ) -> &mut Self {
+        self.add_node(
+            "ReduceMean",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![
+                AttributeProto::ints("axes", axes.to_vec()),
+                AttributeProto::int("keepdims", if keepdims { 1 } else { 0 }),
+            ],
+        )
+    }
+
+    /// Add a ReduceSum node.
+    pub fn reduce_sum(
+        &mut self,
+        input: &str,
+        axes: &[i64],
+        keepdims: bool,
+        output: &str,
+    ) -> &mut Self {
+        self.add_node(
+            "ReduceSum",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![
+                AttributeProto::ints("axes", axes.to_vec()),
+                AttributeProto::int("keepdims", if keepdims { 1 } else { 0 }),
+            ],
+        )
+    }
+
+    /// Add a Sqrt node.
+    pub fn sqrt(&mut self, input: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "Sqrt",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add a Pow (Power) node.
+    pub fn pow(&mut self, input: &str, exponent: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "Pow",
+            vec![input.to_string(), exponent.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add a Reciprocal (1/x) node.
+    pub fn reciprocal(&mut self, input: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "Reciprocal",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add an Abs (Absolute value) node.
+    pub fn abs(&mut self, input: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "Abs",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add a Clip node.
+    pub fn clip(
+        &mut self,
+        input: &str,
+        min: Option<f32>,
+        max: Option<f32>,
+        output: &str,
+    ) -> &mut Self {
+        let mut inputs = vec![input.to_string()];
+
+        if let Some(min_val) = min {
+            let min_name = format!("{}_min", output);
+            self.add_float_initializer(&min_name, &[], &[min_val]);
+            inputs.push(min_name);
+        }
+
+        if let Some(max_val) = max {
+            let max_name = format!("{}_max", output);
+            self.add_float_initializer(&max_name, &[], &[max_val]);
+            inputs.push(max_name);
+        }
+
+        self.add_node("Clip", inputs, vec![output.to_string()], vec![])
+    }
+
+    /// Add a Scaler node (from ai.onnx.ml domain).
+    pub fn scaler(
+        &mut self,
+        input: &str,
+        offset: &[f32],
+        scale: &[f32],
+        output: &str,
+    ) -> &mut Self {
+        self.add_node(
+            "Scaler",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![
+                AttributeProto::floats("scale", scale.to_vec()),
+                AttributeProto::floats("offset", offset.to_vec()),
+            ],
+        )
+    }
+
+    /// Add an Imputer node (from ai.onnx.ml domain).
+    pub fn imputer(
+        &mut self,
+        input: &str,
+        replaced_value: f32,
+        imputed_value: &[f32],
+        output: &str,
+    ) -> &mut Self {
+        self.add_node(
+            "Imputer",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![
+                AttributeProto::float("replaced_value", replaced_value),
+                AttributeProto::floats("imputed_value_float", imputed_value.to_vec()),
+            ],
+        )
+    }
+
+    /// Add a OneHotEncoder node (from ai.onnx.ml domain).
+    pub fn one_hot_encoder(&mut self, input: &str, categories: &[i64], output: &str) -> &mut Self {
+        self.add_node(
+            "OneHotEncoder",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![AttributeProto::ints("cats_int64s", categories.to_vec())],
+        )
+    }
+
+    /// Add a Normalizer node (from ai.onnx.ml domain).
+    pub fn normalizer(&mut self, input: &str, norm: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "Normalizer",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![AttributeProto::string("norm", norm.as_bytes().to_vec())],
+        )
+    }
+
+    /// Add a LinearRegressor node (from ai.onnx.ml domain).
+    pub fn linear_regressor(
+        &mut self,
+        input: &str,
+        coefficients: &[f32],
+        intercepts: &[f32],
+        output: &str,
+    ) -> &mut Self {
+        self.add_node(
+            "LinearRegressor",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![
+                AttributeProto::floats("coefficients", coefficients.to_vec()),
+                AttributeProto::floats("intercepts", intercepts.to_vec()),
+            ],
+        )
+    }
 }
 
 impl Default for OnnxGraphBuilder {

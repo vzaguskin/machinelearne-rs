@@ -62,12 +62,24 @@ mod from_pipeline;
 #[cfg(feature = "onnx")]
 mod graph;
 #[cfg(feature = "onnx")]
+mod model_impls;
+#[cfg(feature = "onnx")]
 mod operators;
 #[cfg(feature = "onnx")]
 mod proto;
-
 #[cfg(feature = "onnx")]
-pub use export::OnnxExportable;
+mod traits;
+#[cfg(feature = "onnx")]
+mod transformer_impls;
+
+// Export the new composable traits
+#[cfg(feature = "onnx")]
+pub use traits::{OnnxExportable, OnnxNodeBuilder};
+
+// Keep old export for internal use during migration
+// TODO: Remove in next major version after full migration
+#[cfg(feature = "onnx")]
+pub(crate) use export::OnnxExportable as LegacyOnnxExportable;
 #[cfg(feature = "onnx")]
 pub use from_pipeline::export_pipeline_to_onnx;
 #[cfg(feature = "onnx")]

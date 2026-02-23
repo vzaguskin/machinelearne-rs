@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 5. Export the model to ONNX
     println!("\n4. Exporting model to ONNX format...");
     let output_path = "linear_model.onnx";
-    fitted_model.save_onnx(output_path)?;
+    fitted_model.save_onnx_to_path(output_path)?;
     println!("   Model saved to: {}", output_path);
 
     // Verify the file was created
