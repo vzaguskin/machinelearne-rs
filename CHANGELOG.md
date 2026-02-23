@@ -47,6 +47,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 #### WGPU Backend Examples and Benchmarks
 - `train_linear_wgpu` example: Demonstrates GPU tensor operations using WGPU backend
 - `train_california_wgpu` example: Full ML training pipeline on GPU with California Housing dataset
+- Comprehensive test suite for WGPU backend operations
+  - 52 tests verifying all tensor operations match CPU backend results
+  - Tests cover: element-wise ops, scalar ops, linear algebra, reductions, unary math, broadcasting, column/row operations, tensor manipulation
+  - Tolerance-based comparisons for GPU floating-point precision
+  - Multiple tensor sizes tested (1, 4, 16, 64, 256, 1024 elements)
   - Displays GPU adapter information to verify GPU usage
   - Feature standardization using GPU compute shaders
   - Linear regression training on GPU

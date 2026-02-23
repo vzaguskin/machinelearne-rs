@@ -44,6 +44,9 @@ mod shaders;
 mod tensor;
 mod uniform_pool;
 
+#[cfg(test)]
+mod tests;
+
 pub use accumulator::{
     flush_accumulator, with_accumulator, AccumulatorStats, CommandAccumulator, ExecutableCommand,
 };

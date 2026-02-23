@@ -11,7 +11,8 @@ use super::dynamic_uniform::DynamicUniformBuffer;
 
 /// Global device singleton for WGPU backend.
 /// Using a single device ensures all buffers are compatible.
-static GLOBAL_DEVICE: OnceLock<WgpuDevice> = OnceLock::new();
+/// Stores Option to handle the case where no GPU is available.
+static GLOBAL_DEVICE: OnceLock<Option<WgpuDevice>> = OnceLock::new();
 
 // Thread-local buffer pool for reusing GPU memory.
 thread_local! {
@@ -46,7 +47,7 @@ pub struct WgpuDevice {
 
 impl WgpuDevice {
     /// Creates a new WgpuDevice by selecting the best available GPU.
-    async fn create() -> Self {
+    async fn create() -> Option<Self> {
         let instance = Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
@@ -58,8 +59,7 @@ impl WgpuDevice {
                 compatible_surface: None,
                 force_fallback_adapter: false,
             })
-            .await
-            .expect("No suitable GPU adapter found. Please ensure you have a GPU with Vulkan/Metal/D3D12 support.");
+            .await?;
 
         let (device, queue) = adapter
             .request_device(
@@ -72,17 +72,37 @@ impl WgpuDevice {
                 None, // trace path
             )
             .await
-            .expect("Failed to create GPU device");
+            .ok()?;
 
-        WgpuDevice {
+        Some(WgpuDevice {
             device: Arc::new(device),
             queue: Arc::new(queue),
-        }
+        })
+    }
+
+    /// Checks if a GPU adapter is available.
+    ///
+    /// This is useful for tests that should be skipped when no GPU is present.
+    pub fn is_available() -> bool {
+        Self::try_global().is_some()
     }
 
     /// Returns the global WgpuDevice, creating it if necessary.
     /// This ensures all tensors share the same device for buffer compatibility.
+    ///
+    /// # Panics
+    /// Panics if no suitable GPU adapter is found.
     pub fn global() -> Self {
+        GLOBAL_DEVICE
+            .get_or_init(|| pollster::block_on(Self::create()))
+            .clone()
+            .expect("No suitable GPU adapter found. Please ensure you have a GPU with Vulkan/Metal/D3D12 support.")
+    }
+
+    /// Tries to get the global WgpuDevice, returning None if no GPU is available.
+    ///
+    /// This is useful for tests that should be skipped when no GPU is present.
+    pub fn try_global() -> Option<Self> {
         GLOBAL_DEVICE
             .get_or_init(|| pollster::block_on(Self::create()))
             .clone()
@@ -90,8 +110,13 @@ impl WgpuDevice {
 
     /// Creates a new WgpuDevice (for advanced use cases).
     /// Note: Buffers created on different devices are not compatible.
+    ///
+    /// # Panics
+    /// Panics if no suitable GPU adapter is found.
     pub async fn new() -> Self {
-        Self::create().await
+        Self::create()
+            .await
+            .expect("No suitable GPU adapter found. Please ensure you have a GPU with Vulkan/Metal/D3D12 support.")
     }
 
     /// Enumerates all available GPU adapters.
