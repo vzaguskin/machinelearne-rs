@@ -8,6 +8,7 @@ use super::accumulator::CommandAccumulator;
 use super::bind_group_cache::BindGroupCache;
 use super::buffer_pool::BufferPool;
 use super::dynamic_uniform::DynamicUniformBuffer;
+use super::staging_pool::StagingBufferPool;
 
 /// Global device singleton for WGPU backend.
 /// Using a single device ensures all buffers are compatible.
@@ -33,6 +34,18 @@ thread_local! {
 // This is lazily initialized when first accessed.
 thread_local! {
     static DYNAMIC_UNIFORM: RefCell<Option<DynamicUniformBuffer>> = const { RefCell::new(None) };
+}
+
+// Thread-local staging buffer pool for efficient CPU readback.
+// Buffers are reused across to_vec() calls to reduce allocation overhead.
+thread_local! {
+    static STAGING_POOL: RefCell<StagingBufferPool> = RefCell::new(StagingBufferPool::default());
+}
+
+// Thread-local debug mode flag for eager flushing.
+// When enabled, operations flush immediately after each dispatch.
+thread_local! {
+    static DEBUG_MODE: RefCell<bool> = const { RefCell::new(false) };
 }
 
 /// GPU device handle for WGPU backend.
@@ -203,6 +216,17 @@ impl WgpuDevice {
         COMMAND_ACCUMULATOR.with(|acc| f(&mut acc.borrow_mut()))
     }
 
+    /// Adds a command to the accumulator and flushes if in debug mode.
+    /// This is the preferred way to add commands when debug mode is desired.
+    pub fn add_command(&self, command: super::accumulator::ExecutableCommand) {
+        self.with_accumulator(|acc| {
+            acc.add_command(command);
+            if acc.should_flush_after_add() {
+                acc.flush(&self.device, &self.queue);
+            }
+        });
+    }
+
     /// Flushes any pending operations to the GPU.
     ///
     /// This submits all accumulated operations to the GPU for execution.
@@ -228,6 +252,19 @@ impl WgpuDevice {
         if self.should_flush() {
             self.flush();
         }
+    }
+
+    /// Sets the flush threshold for the command accumulator.
+    ///
+    /// Operations will be auto-flushed when the pending count reaches this threshold.
+    /// Default is 500 operations.
+    pub fn set_flush_threshold(&self, threshold: usize) {
+        COMMAND_ACCUMULATOR.with(|acc| acc.borrow_mut().set_flush_threshold(threshold));
+    }
+
+    /// Returns the current flush threshold.
+    pub fn flush_threshold(&self) -> usize {
+        COMMAND_ACCUMULATOR.with(|acc| acc.borrow().stats().flush_threshold)
     }
 
     /// Executes a function with access to the thread-local bind group cache.
@@ -268,6 +305,37 @@ impl WgpuDevice {
                 b.reset();
             }
         });
+    }
+
+    /// Executes a function with access to the thread-local staging buffer pool.
+    pub fn with_staging_pool<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&StagingBufferPool) -> R,
+    {
+        STAGING_POOL.with(|pool| f(&pool.borrow()))
+    }
+
+    /// Enables or disables debug mode for eager flushing.
+    ///
+    /// When debug mode is enabled, every operation is immediately flushed to GPU,
+    /// making debugging easier at the cost of performance.
+    pub fn set_debug_mode(&self, enabled: bool) {
+        DEBUG_MODE.with(|mode| *mode.borrow_mut() = enabled);
+        // Also update accumulator's debug mode
+        COMMAND_ACCUMULATOR.with(|acc| acc.borrow_mut().set_debug_mode(enabled));
+    }
+
+    /// Returns whether debug mode is enabled.
+    pub fn is_debug_mode(&self) -> bool {
+        DEBUG_MODE.with(|mode| *mode.borrow())
+    }
+
+    /// Flushes immediately if debug mode is enabled.
+    /// Called after each operation dispatch when debug mode is on.
+    pub fn flush_if_debug(&self) {
+        if self.is_debug_mode() {
+            self.flush();
+        }
     }
 }
 

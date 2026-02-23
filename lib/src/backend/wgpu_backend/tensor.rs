@@ -194,12 +194,11 @@ impl WgpuTensor1D {
         // Flush any pending operations before reading data
         device.flush();
 
-        let staging_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("staging_buffer_1d"),
-            size: (self.len * std::mem::size_of::<f32>()) as u64,
-            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        // Acquire staging buffer from pool
+        let size_bytes = self.len * std::mem::size_of::<f32>();
+        let pooled_buffer =
+            device.with_staging_pool(|pool| pool.acquire(&device.device, size_bytes));
+        let staging_buffer = pooled_buffer.buffer();
 
         let mut encoder = device
             .device
@@ -207,16 +206,11 @@ impl WgpuTensor1D {
                 label: Some("to_vec_encoder"),
             });
 
-        encoder.copy_buffer_to_buffer(
-            &self.buffer,
-            0,
-            &staging_buffer,
-            0,
-            (self.len * std::mem::size_of::<f32>()) as u64,
-        );
+        encoder.copy_buffer_to_buffer(&self.buffer, 0, staging_buffer, 0, size_bytes as u64);
         device.queue.submit(std::iter::once(encoder.finish()));
 
-        let buffer_slice = staging_buffer.slice(..);
+        // Map only the portion we need, not the entire buffer
+        let buffer_slice = staging_buffer.slice(0..size_bytes as u64);
         let (tx, rx) = futures::channel::oneshot::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
             tx.send(result).ok();
@@ -233,6 +227,8 @@ impl WgpuTensor1D {
             .collect();
         drop(data);
         staging_buffer.unmap();
+
+        // Buffer returns to pool when pooled_buffer is dropped
 
         result
     }
@@ -483,29 +479,22 @@ impl WgpuTensor1D {
 
         device.queue.submit(std::iter::once(encoder.finish()));
 
-        // Read back partial sums and reduce on CPU
-        let staging_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("staging_sum"),
-            size: (workgroup_count * std::mem::size_of::<f32>()) as u64,
-            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        // Read back partial sums using pooled staging buffer
+        let staging_size = workgroup_count * std::mem::size_of::<f32>();
+        let pooled_buffer =
+            device.with_staging_pool(|pool| pool.acquire(&device.device, staging_size));
+        let staging_buffer = pooled_buffer.buffer();
 
         let mut encoder = device
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("sum_copy_encoder"),
             });
-        encoder.copy_buffer_to_buffer(
-            &partial_sums,
-            0,
-            &staging_buffer,
-            0,
-            (workgroup_count * std::mem::size_of::<f32>()) as u64,
-        );
+        encoder.copy_buffer_to_buffer(&partial_sums, 0, staging_buffer, 0, staging_size as u64);
         device.queue.submit(std::iter::once(encoder.finish()));
 
-        let buffer_slice = staging_buffer.slice(..);
+        // Map only the portion we need
+        let buffer_slice = staging_buffer.slice(0..staging_size as u64);
         let (tx, rx) = futures::channel::oneshot::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
             tx.send(result).ok();
@@ -519,6 +508,8 @@ impl WgpuTensor1D {
         let partials: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
         drop(data);
         staging_buffer.unmap();
+
+        // Buffer returns to pool when pooled_buffer is dropped
 
         partials.iter().map(|&x| x as f64).sum()
     }
@@ -887,29 +878,22 @@ impl WgpuTensor2D {
 
         device.queue.submit(std::iter::once(encoder.finish()));
 
-        // Read back and reduce
-        let staging_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("staging_sum_2d"),
-            size: (workgroup_count * std::mem::size_of::<f32>()) as u64,
-            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        // Read back using pooled staging buffer
+        let staging_size = workgroup_count * std::mem::size_of::<f32>();
+        let pooled_buffer =
+            device.with_staging_pool(|pool| pool.acquire(&device.device, staging_size));
+        let staging_buffer = pooled_buffer.buffer();
 
         let mut encoder = device
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("sum_copy_encoder_2d"),
             });
-        encoder.copy_buffer_to_buffer(
-            &partial_sums,
-            0,
-            &staging_buffer,
-            0,
-            (workgroup_count * std::mem::size_of::<f32>()) as u64,
-        );
+        encoder.copy_buffer_to_buffer(&partial_sums, 0, staging_buffer, 0, staging_size as u64);
         device.queue.submit(std::iter::once(encoder.finish()));
 
-        let buffer_slice = staging_buffer.slice(..);
+        // Map only the portion we need
+        let buffer_slice = staging_buffer.slice(0..staging_size as u64);
         let (tx, rx) = futures::channel::oneshot::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
             tx.send(result).ok();
@@ -923,6 +907,8 @@ impl WgpuTensor2D {
         let partials: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
         drop(data);
         staging_buffer.unmap();
+
+        // Buffer returns to pool when pooled_buffer is dropped
 
         partials.iter().map(|&x| x as f64).sum()
     }
@@ -1619,28 +1605,23 @@ impl WgpuTensor2D {
         device.flush();
 
         let total = self.rows * self.cols;
-        let staging_buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("staging_2d"),
-            size: (total * std::mem::size_of::<f32>()) as u64,
-            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let size_bytes = total * std::mem::size_of::<f32>();
+
+        // Acquire staging buffer from pool
+        let pooled_buffer =
+            device.with_staging_pool(|pool| pool.acquire(&device.device, size_bytes));
+        let staging_buffer = pooled_buffer.buffer();
 
         let mut encoder = device
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("read_encoder"),
             });
-        encoder.copy_buffer_to_buffer(
-            &self.buffer,
-            0,
-            &staging_buffer,
-            0,
-            (total * std::mem::size_of::<f32>()) as u64,
-        );
+        encoder.copy_buffer_to_buffer(&self.buffer, 0, staging_buffer, 0, size_bytes as u64);
         device.queue.submit(std::iter::once(encoder.finish()));
 
-        let buffer_slice = staging_buffer.slice(..);
+        // Map only the portion we need
+        let buffer_slice = staging_buffer.slice(0..size_bytes as u64);
         let (tx, rx) = futures::channel::oneshot::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
             tx.send(result).ok();
@@ -1654,6 +1635,8 @@ impl WgpuTensor2D {
         let result: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
         drop(data);
         staging_buffer.unmap();
+
+        // Buffer returns to pool when pooled_buffer is dropped
 
         result
     }
