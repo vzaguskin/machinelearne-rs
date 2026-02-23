@@ -38,6 +38,39 @@
 //! // let prediction = fitted.predict(&input_tensor);
 //! ```
 //!
+//! ## ONNX Export and Deployment
+//!
+//! Export trained models (including preprocessing pipelines) to ONNX format for
+//! portable deployment across platforms:
+//!
+//! ```rust,ignore
+//! // Train a model with preprocessing
+//! let pipeline = FittedPipeline::new(some_preprocessor, None, fitted_model);
+//!
+//! // Export to ONNX - includes all preprocessing steps!
+//! pipeline.save_onnx("model.onnx")?;
+//!
+//! // Load and run inference in any language with ONNX Runtime
+//! // Python, C++, JavaScript, Java, etc.
+//! ```
+//!
+//! ### ONNX HTTP Inference Server
+//!
+//! Deploy models as HTTP services with the `onnx-server` feature:
+//!
+//! ```bash
+//! # Build and run the standalone server
+//! cargo run --bin onnx-server --features onnx-server -- --model model.onnx --port 8080
+//!
+//! # Make predictions via HTTP
+//! curl -X POST http://localhost:8080/predict \
+//!   -H "Content-Type: application/json" \
+//!   -d '{"features": [1.0, 2.0, 3.0], "shape": [1, 3]}'
+//! ```
+//!
+//! The server accepts raw (unscaled) input - the ONNX model handles preprocessing
+//! internally when you export a full pipeline with `FittedPipeline`.
+//!
 //! ## Module Structure
 //!
 //! - `backend` — Tensor abstractions and computation primitives (`Tensor1D`, `Tensor2D`)
@@ -48,6 +81,19 @@
 //! - `regularizers` — Weight regularization strategies (L1, L2)
 //! - `dataset` — Data loading and preprocessing utilities
 //! - `serialization` — Model persistence formats
+//! - `preprocessing` — Data transformers (scalers, imputers, encoders)
+//! - `pipeline` — End-to-end ML pipelines
+//! - `onnx` — ONNX export and inference (optional, requires `onnx` feature)
+//!
+//! ## Feature Flags
+//!
+//! - `cpu` (default) — Pure-Rust CPU backend
+//! - `ndarray` — ndarray-based backend for ecosystem compatibility
+//! - `serde` (default) — Serialization support
+//! - `onnx` — ONNX model export
+//! - `onnx-inference` — ONNX Runtime inference (requires ONNX Runtime installed)
+//! - `onnx-server` — HTTP inference server
+//! - `onnx-cuda` — CUDA execution provider for GPU acceleration
 //!
 //! ## Example Projects
 //!
@@ -56,6 +102,7 @@
 //! - Regularization techniques
 //! - Custom backend integration
 //! - Model serialization workflows
+//! - ONNX export and deployment
 
 pub mod backend;
 

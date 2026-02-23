@@ -29,6 +29,8 @@ impl OnnxGraphBuilder {
     /// Create a new graph builder.
     pub fn new(model_name: &str) -> Self {
         let mut model = ModelProto::default();
+        model.ir_version = 8; // ONNX IR version 8
+
         let mut graph = GraphProto::default();
         graph.name = model_name.to_string();
 
@@ -53,6 +55,26 @@ impl OnnxGraphBuilder {
             domain: "ai.onnx.ml".to_string(),
             version: ML_OPSET_VERSION,
         });
+        self
+    }
+
+    /// Set model metadata.
+    ///
+    /// # Arguments
+    /// * `producer_name` - Name of the tool that produced the model
+    /// * `version` - Version of the tool
+    /// * `model_version` - Version of the model itself (optional)
+    pub fn set_metadata(
+        &mut self,
+        producer_name: &str,
+        version: &str,
+        model_version: Option<i64>,
+    ) -> &mut Self {
+        self.model.producer_name = producer_name.to_string();
+        self.model.producer_version = version.to_string();
+        if let Some(v) = model_version {
+            self.model.model_version = v;
+        }
         self
     }
 

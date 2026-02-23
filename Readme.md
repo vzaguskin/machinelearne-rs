@@ -42,6 +42,9 @@ No hidden state. No dynamic dispatch. No runtime surprises. Just pure, generic R
 ### Deployment
 - **Serialization**: Save/load models and pipelines with bincode
 - **FittedPipeline**: Combined preprocessing + model for inference
+- **ONNX Export**: Export models and pipelines to ONNX format for cross-platform deployment
+- **ONNX Inference**: Load and run ONNX models with ONNX Runtime
+- **HTTP Server**: Deploy models as REST API services
 
 ---
 
@@ -167,6 +170,53 @@ let predictions = pipeline.predict(&raw_data)?;
 // Save predictions or use in production
 ```
 
+### ONNX Export and Deployment
+
+Export trained pipelines (including preprocessing!) to ONNX format for deployment in any language:
+
+```rust
+use machinelearne_rs::{
+    backend::CpuBackend,
+    pipeline::FittedPipeline,
+    onnx::OnnxExportable,
+};
+
+// Train a pipeline with preprocessing
+let pipeline = FittedPipeline::new(some_preprocessor, None, fitted_model);
+
+// Export to ONNX - includes all preprocessing steps!
+pipeline.save_onnx("model.onnx")?;
+```
+
+Load and run inference in Python:
+
+```python
+import onnxruntime as ort
+import numpy as np
+
+session = ort.InferenceSession("model.onnx")
+input_data = np.array([[1.0, 2.0, 3.0]], dtype=np.float32)
+output = session.run(None, {"input": input_data})
+print(output)  # Preprocessing handled automatically!
+```
+
+### HTTP Inference Server
+
+Deploy as a REST API service:
+
+```bash
+# Start the server (requires onnx-server feature)
+cargo run --bin onnx-server --features onnx-server -- \
+    --model model.onnx --port 8080
+
+# Make predictions
+curl -X POST http://localhost:8080/predict \
+    -H "Content-Type: application/json" \
+    -d '{"features": [1.0, 2.0, 3.0], "shape": [1, 3]}'
+```
+
+The server accepts raw (unscaled) input - the ONNX model handles preprocessing internally.
+
 ---
 
 ## Examples
@@ -188,6 +238,12 @@ cargo run --example titanic_pipeline
 
 # California Housing with GridSearchCV
 cargo run --example real_world_pipeline
+
+# ONNX export and deployment (requires onnx feature)
+cargo run --example export_onnx --features onnx
+
+# Full ONNX deployment workflow with HTTP server
+cargo run --example onnx_deployment --features onnx-server
 ```
 
 ---
@@ -198,6 +254,9 @@ The library follows a modular design with clear separation of concerns:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
+│                      Deployment Layer                       │
+│  (ONNX Export, HTTP Server, Serialization)                  │
+├─────────────────────────────────────────────────────────────┤
 │                      Pipeline Layer                         │
 │  (FittedPipeline: preprocessing + model for deployment)     │
 ├─────────────────────────────────────────────────────────────┤
@@ -232,6 +291,20 @@ let model: LinearModel<CpuBackend, Unfitted> = LinearRegression::new(2);
 // After training - can predict, cannot train again
 let fitted: LinearModel<CpuBackend, Fitted> = trainer.fit(model, &dataset)?;
 ```
+
+---
+
+## Feature Flags
+
+| Flag | Description |
+|------|-------------|
+| `cpu` (default) | Pure-Rust CPU backend |
+| `ndarray` | ndarray-based backend for ecosystem compatibility |
+| `serde` (default) | Serialization support |
+| `onnx` | ONNX model export |
+| `onnx-inference` | ONNX Runtime inference (requires ONNX Runtime installed) |
+| `onnx-server` | HTTP inference server with REST API |
+| `onnx-cuda` | CUDA execution provider for GPU acceleration |
 
 ---
 

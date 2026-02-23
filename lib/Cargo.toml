@@ -25,12 +25,23 @@ prost = { version = "0.13", optional = true }
 prost-types = { version = "0.13", optional = true }
 
 # ONNX inference dependencies (optional)
-ort = { version = "2.0.0-rc.11", optional = true }
+# Use system ONNX Runtime library instead of downloading prebuilt binaries
+# Note: The "cuda" feature for ort requires CUDA 11.6+ to be installed
+ort = { version = "2.0.0-rc.11", default-features = false, features = ["std", "pkg-config"], optional = true }
+
+# ONNX server dependencies (optional)
+tokio = { version = "1.0", features = ["rt-multi-thread", "net", "macros", "time"], optional = true }
+axum = { version = "0.8", optional = true }
+serde_json = { version = "1.0", optional = true }
+clap = { version = "4.0", features = ["derive"], optional = true }
 
 [dev-dependencies]
 tempfile = "3.10"
 serde_json = "1.0"
 criterion = "0.5"
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "time"] }
+tracing-subscriber = "0.3.22"
 
 [[bench]]
 name = "onnx_inference"
@@ -64,3 +75,5 @@ blas-accelerate = ["blas", "blas-src/accelerate"]
 # ONNX export and inference
 onnx = ["dep:prost", "dep:prost-types", "dep:prost-build"]
 onnx-inference = ["onnx", "dep:ort", "dep:ndarray"]
+onnx-server = ["onnx-inference", "dep:tokio", "dep:axum", "dep:serde_json", "dep:clap"]
+onnx-cuda = ["onnx-inference", "ort?/cuda"]

@@ -23,6 +23,9 @@ impl<B: Backend> OnnxExportable for LinearModel<B, Fitted> {
         // Create model with name
         let mut builder = OnnxGraphBuilder::new("linear_model");
 
+        // Set metadata
+        builder.set_metadata("machinelearne-rs", env!("CARGO_PKG_VERSION"), None);
+
         // Override opset version
         builder.model.opset_import.clear();
         builder
@@ -70,6 +73,12 @@ impl<B: Backend> OnnxExportable for LinearModel<B, Fitted> {
     }
 }
 
+impl<B: Backend> OnnxExportable for FittedPipeline<B> {
+    fn to_onnx(&self, opset_version: i64) -> Result<Vec<u8>, OnnxError> {
+        export_pipeline_to_onnx(self, opset_version)
+    }
+}
+
 /// Export a FittedPipeline to ONNX format.
 ///
 /// This function converts the complete pipeline (preprocessing + model)
@@ -79,6 +88,9 @@ pub fn export_pipeline_to_onnx<B: Backend>(
     opset_version: i64,
 ) -> Result<Vec<u8>, OnnxError> {
     let mut builder = OnnxGraphBuilder::new("pipeline");
+
+    // Set metadata
+    builder.set_metadata("machinelearne-rs", env!("CARGO_PKG_VERSION"), None);
 
     // Set opset version
     builder.model.opset_import.clear();
@@ -138,6 +150,71 @@ pub fn export_pipeline_to_onnx<B: Backend>(
     builder.add_output_float("output", 1);
 
     builder.build()
+}
+
+/// Validate that a pipeline can be exported to ONNX.
+///
+/// This function checks all transformers in the pipeline to ensure they
+/// can be exported to ONNX format. Returns `Ok(())` if the pipeline is
+/// exportable, or an error describing the first unsupported transformer.
+///
+/// # Arguments
+/// * `pipeline` - The fitted pipeline to validate
+///
+/// # Returns
+/// * `Ok(())` if the pipeline can be exported
+/// * `Err(OnnxError::UnsupportedTransformer)` if a transformer is not supported
+pub fn validate_pipeline_export<B: Backend>(pipeline: &FittedPipeline<B>) -> Result<(), OnnxError> {
+    // Check preprocessing steps
+    if let Some(preproc) = pipeline.preprocessor() {
+        for step in preproc.steps() {
+            validate_preproc_step(step)?;
+        }
+    }
+
+    // Check polynomial features
+    if let Some(poly) = pipeline.polynomial() {
+        validate_polynomial_features(poly)?;
+    }
+
+    // Linear model is always supported
+    Ok(())
+}
+
+/// Validate a single preprocessing step.
+fn validate_preproc_step<B: Backend>(
+    step: &crate::preprocessing::pipeline::PipelineStepEnum<B>,
+) -> Result<(), OnnxError> {
+    match step {
+        crate::preprocessing::pipeline::PipelineStepEnum::StandardScaler(_)
+        | crate::preprocessing::pipeline::PipelineStepEnum::MinMaxScaler(_)
+        | crate::preprocessing::pipeline::PipelineStepEnum::RobustScaler(_)
+        | crate::preprocessing::pipeline::PipelineStepEnum::MaxAbsScaler(_)
+        | crate::preprocessing::pipeline::PipelineStepEnum::Normalizer(_)
+        | crate::preprocessing::pipeline::PipelineStepEnum::SimpleImputer(_)
+        | crate::preprocessing::pipeline::PipelineStepEnum::OneHotEncoder(_)
+        | crate::preprocessing::pipeline::PipelineStepEnum::OrdinalEncoder(_) => Ok(()),
+    }
+}
+
+/// Validate polynomial features transformer.
+fn validate_polynomial_features<B: Backend>(
+    poly: &crate::preprocessing::feature_engineering::FittedPolynomialFeatures<B>,
+) -> Result<(), OnnxError> {
+    let params = poly.extract_params();
+
+    // PolynomialFeatures with degree > 1 has limited ONNX support
+    if params.degree > 1 {
+        return Err(OnnxError::UnsupportedTransformer {
+            transformer_name: "PolynomialFeatures".to_string(),
+            reason: format!(
+                "Degree {} is not fully supported. Only degree 1 is fully implemented.",
+                params.degree
+            ),
+        });
+    }
+
+    Ok(())
 }
 
 /// Export a single preprocessing step to ONNX.
@@ -871,5 +948,117 @@ mod tests {
         let step = crate::preprocessing::pipeline::PipelineStepEnum::OrdinalEncoder(encoder);
         let output = export_preproc_step(&mut builder, &step, "input").unwrap();
         assert!(output.starts_with("OrdinalEncoder"));
+    }
+
+    #[test]
+    fn test_validate_preproc_step_supported() {
+        let params = StandardScalerParams {
+            config: StandardScalerConfig::default(),
+            n_features: 3,
+            mean: vec![0.0, 1.0, 2.0],
+            std: vec![1.0, 1.0, 1.0],
+        };
+        let scaler = FittedStandardScaler::<CpuBackend>::from_params(params).unwrap();
+
+        let step = crate::preprocessing::pipeline::PipelineStepEnum::StandardScaler(scaler);
+        assert!(validate_preproc_step(&step).is_ok());
+    }
+
+    #[test]
+    fn test_validate_polynomial_features_degree_1() {
+        let params = crate::preprocessing::feature_engineering::PolynomialFeaturesParams {
+            degree: 1,
+            n_features_in: 2,
+            n_features_out: 2,
+            include_bias: false,
+            interaction_only: false,
+            output_combinations: vec![(1, vec![0]), (1, vec![1])],
+        };
+        let poly =
+            crate::preprocessing::feature_engineering::FittedPolynomialFeatures::<CpuBackend>::from_params(params).unwrap();
+
+        assert!(validate_polynomial_features(&poly).is_ok());
+    }
+
+    #[test]
+    fn test_validate_polynomial_features_degree_2_unsupported() {
+        let params = crate::preprocessing::feature_engineering::PolynomialFeaturesParams {
+            degree: 2,
+            n_features_in: 2,
+            n_features_out: 6,
+            include_bias: false,
+            interaction_only: false,
+            output_combinations: vec![
+                (1, vec![0]),
+                (1, vec![1]),
+                (2, vec![0, 0]),
+                (2, vec![0, 1]),
+                (2, vec![1, 1]),
+            ],
+        };
+        let poly =
+            crate::preprocessing::feature_engineering::FittedPolynomialFeatures::<CpuBackend>::from_params(params).unwrap();
+
+        let result = validate_polynomial_features(&poly);
+        assert!(result.is_err());
+        if let Err(OnnxError::UnsupportedTransformer {
+            transformer_name,
+            reason,
+        }) = result
+        {
+            assert_eq!(transformer_name, "PolynomialFeatures");
+            assert!(reason.contains("Degree 2"));
+        } else {
+            panic!("Expected UnsupportedTransformer error");
+        }
+    }
+
+    #[test]
+    fn test_export_multiple_preproc_steps() {
+        // Test exporting multiple preprocessing steps in sequence
+        let mut builder = OnnxGraphBuilder::new("multi_step_pipeline");
+
+        // Add input
+        builder.add_input_float("input", 3);
+
+        // Export StandardScaler
+        let scaler_params = StandardScalerParams {
+            config: StandardScalerConfig::default(),
+            n_features: 3,
+            mean: vec![0.0, 1.0, 2.0],
+            std: vec![1.0, 1.0, 1.0],
+        };
+        let scaler = FittedStandardScaler::<CpuBackend>::from_params(scaler_params).unwrap();
+        export_standard_scaler(&mut builder, &scaler, "input", "scaled").unwrap();
+
+        // Export MinMaxScaler on the output of StandardScaler
+        let minmax_params = MinMaxScalerParams {
+            n_features: 3,
+            min_: vec![0.0, 0.0, 0.0],
+            max_: vec![1.0, 1.0, 1.0],
+            scale_: vec![1.0, 1.0, 1.0],
+            config: MinMaxScalerConfig::default(),
+        };
+        let minmax = FittedMinMaxScaler::<CpuBackend>::from_params(minmax_params).unwrap();
+        export_minmax_scaler(&mut builder, &minmax, "scaled", "final").unwrap();
+
+        // Add output
+        builder.add_output_float("output", 3);
+
+        // Build and verify
+        let bytes = builder.build().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_onnx_metadata() {
+        let model = create_test_model();
+        let bytes = model.to_onnx_default().unwrap();
+        assert!(!bytes.is_empty());
+
+        // The metadata should be included in the serialized model
+        // We can verify by checking the bytes contain expected strings
+        let bytes_str = String::from_utf8_lossy(&bytes);
+        assert!(bytes_str.contains("machinelearne-rs"));
     }
 }
