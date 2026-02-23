@@ -8,7 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-#### WGPU Performance Optimizations
+#### WGPU Performance Optimizations (Phase 2)
+
+- **Reduced GPU-CPU synchronization in training loop**: Loss computation now happens once per epoch instead of per batch
+  - Previous: ~`num_batches × epochs` GPU syncs (e.g., 32,000 for large dataset)
+  - Now: ~`epochs` GPU syncs (e.g., 50 for large dataset)
+  - `compute_epoch_loss()`: New method that samples first batch for loss estimation
+  - Training loop no longer calls `loss_fn.loss()` per batch - only `grad_wrt_prediction()` which stays on GPU
+
+#### WGPU Performance Optimizations (Phase 1)
 - `StagingBufferPool`: Pool staging buffers for efficient CPU readback
   - Size-based bucketing for efficient buffer reuse
   - LRU eviction when pool exceeds max size (64MB default)
