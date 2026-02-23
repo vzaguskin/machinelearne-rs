@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### Composable ONNX Export API
+- `OnnxNodeBuilder` trait: Allows preprocessing transformers to contribute nodes to ONNX graphs
+  - Implement `build_onnx_nodes()` to add transformer-specific operations
+  - Enables custom transformer export without modifying library code
+- `OnnxExportable` trait (refactored): New composable export API
+  - `build_onnx_graph()`: Core method for building ONNX graphs
+  - `to_onnx(model_name)`: Export to bytes with model name
+  - `to_onnx_default()`: Convenience method for quick exports
+  - `save_onnx(path, model_name)`: Save to file with optional model name
+  - `save_onnx_to_path(path)`: Convenience method for saving to file
+- Trait-based pipeline export: `FittedPipeline` now uses trait dispatch instead of hardcoded match statements
+- All preprocessing transformers implement `OnnxNodeBuilder`:
+  - StandardScaler, MinMaxScaler, RobustScaler, MaxAbsScaler
+  - Normalizer
+  - SimpleImputer
+  - OneHotEncoder, OrdinalEncoder
+  - PolynomialFeatures (degree 1 only)
+- `GraphConstruction` error variant for graph building failures
+- Extensibility: Users can implement `OnnxNodeBuilder` for custom transformers
+
 #### ONNX Export and Inference
 - `onnx` feature: Export trained models and pipelines to ONNX format for portable deployment
 - `onnx-inference` feature: Load ONNX models and run inference using ONNX Runtime
