@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### WGPU Performance Optimizations
+- `StagingBufferPool`: Pool staging buffers for efficient CPU readback
+  - Size-based bucketing for efficient buffer reuse
+  - LRU eviction when pool exceeds max size (64MB default)
+  - Reduces allocation overhead on `to_vec()` calls
+- `PooledStagingBuffer`: RAII wrapper that returns buffers to pool on drop
+- `StagingPoolStats`: Statistics for monitoring pool usage
+- Debug mode for eager flushing: `device.set_debug_mode(true)` for debugging
+- Configurable flush threshold: `device.set_flush_threshold(n)` (default 500 operations)
+- `AccumulatorStats.debug_mode`: Track debug mode status
+
+### Changed
+- Increased default command accumulator flush threshold from 50 to 500 operations
+- `to_vec()` and `sum()` methods now use pooled staging buffers
+- Command accumulator supports debug mode for eager flushing
+
 #### Composable ONNX Export API
 - `OnnxNodeBuilder` trait: Allows preprocessing transformers to contribute nodes to ONNX graphs
   - Implement `build_onnx_nodes()` to add transformer-specific operations

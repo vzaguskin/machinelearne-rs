@@ -21,7 +21,8 @@ use wgpu::{BindGroup, CommandEncoder, Device, Queue};
 use super::shaders::ComputePipeline;
 
 /// Default number of operations before auto-flush.
-const DEFAULT_FLUSH_THRESHOLD: usize = 50;
+/// Increased from 50 to 500 to reduce sync overhead during training.
+const DEFAULT_FLUSH_THRESHOLD: usize = 500;
 
 /// An executable compute command ready to be added to a command encoder.
 ///
@@ -151,6 +152,8 @@ pub struct CommandAccumulator {
     total_ops: u64,
     /// Total flushes performed.
     total_flushes: u64,
+    /// Debug mode: flush after every operation.
+    debug_mode: bool,
 }
 
 impl CommandAccumulator {
@@ -166,6 +169,7 @@ impl CommandAccumulator {
             flush_threshold: threshold,
             total_ops: 0,
             total_flushes: 0,
+            debug_mode: false,
         }
     }
 
@@ -173,6 +177,12 @@ impl CommandAccumulator {
     pub fn add_command(&mut self, command: ExecutableCommand) {
         self.pending_commands.push(command);
         self.total_ops += 1;
+    }
+
+    /// Returns true if we should flush after adding a command.
+    /// This is true in debug mode (eager flush) or when threshold is reached.
+    pub fn should_flush_after_add(&self) -> bool {
+        self.debug_mode || self.pending_commands.len() >= self.flush_threshold
     }
 
     /// Returns the number of pending commands.
@@ -220,12 +230,23 @@ impl CommandAccumulator {
             total_ops: self.total_ops,
             total_flushes: self.total_flushes,
             flush_threshold: self.flush_threshold,
+            debug_mode: self.debug_mode,
         }
     }
 
     /// Sets the flush threshold.
     pub fn set_flush_threshold(&mut self, threshold: usize) {
         self.flush_threshold = threshold;
+    }
+
+    /// Enables or disables debug mode for eager flushing.
+    pub fn set_debug_mode(&mut self, enabled: bool) {
+        self.debug_mode = enabled;
+    }
+
+    /// Returns whether debug mode is enabled.
+    pub fn is_debug_mode(&self) -> bool {
+        self.debug_mode
     }
 }
 
@@ -246,6 +267,8 @@ pub struct AccumulatorStats {
     pub total_flushes: u64,
     /// Current flush threshold.
     pub flush_threshold: usize,
+    /// Debug mode enabled (eager flushing).
+    pub debug_mode: bool,
 }
 
 // Thread-local command accumulator.

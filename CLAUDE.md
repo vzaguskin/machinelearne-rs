@@ -379,9 +379,36 @@ For linear regression:
 The library uses Cargo features to enable different backends:
 - `cpu` (default): Pure-Rust CPU backend
 - `ndarray`: Backend backed by ndarray crate
+- `wgpu`: GPU backend using wgpu (Vulkan/Metal/D3D12)
 - `serde` (default): Model serialization support
 
 When adding backend-specific code, always wrap in `#[cfg(feature = "...")]`.
+
+### WGPU Backend Performance Notes
+
+The WGPU backend provides GPU acceleration but has important performance characteristics:
+
+**Current Status:**
+- WGPU backend is functionally correct but not yet performant for training
+- Expect ~1000-2000x slower than CPU for typical training workloads
+- Root cause: Training loops trigger GPU synchronization per batch (for loss computation)
+
+**Optimizations Implemented:**
+- Staging buffer pooling: Reuses buffers for CPU readback
+- Command accumulation: Batches GPU operations (default 500 ops before flush)
+- Debug mode: `device.set_debug_mode(true)` for eager flushing during debugging
+
+**When to Use WGPU:**
+- Currently recommended for CPU backends for production training
+- WGPU useful for: inference on pre-trained models, very large batch operations
+- Future work: Asynchronous training to reduce sync points
+
+**Debugging WGPU:**
+```rust
+let device = WgpuDevice::global();
+device.set_debug_mode(true);  // Flush after each operation for debugging
+device.set_flush_threshold(50);  // Adjust threshold as needed
+```
 
 ## Working with the Codebase
 
