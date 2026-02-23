@@ -7,6 +7,7 @@
 //!
 //! - `onnx`: Enable ONNX export functionality (stable)
 //! - `onnx-inference`: Enable ONNX Runtime inference (includes `onnx`) - **EXPERIMENTAL**
+//! - `onnx-server`: Enable HTTP inference server (includes `onnx-inference`)
 //!
 //! ## Experimental Status
 //!
@@ -34,6 +35,21 @@
 //! let session = OnnxInferenceSession::load("model.onnx")?;
 //! let predictions = session.predict(&input)?;
 //! ```
+//!
+//! ## Inference Server (onnx-server feature)
+//!
+//! ```rust,ignore
+//! use machinelearne_rs::onnx::server::{OnnxServer, ExecutionProvider};
+//!
+//! // Start an inference server
+//! OnnxServer::new()
+//!     .model("model.onnx")
+//!     .host("0.0.0.0")
+//!     .port(8080)
+//!     .provider(ExecutionProvider::Cpu)
+//!     .run()
+//!     .await?;
+//! ```
 
 mod error;
 
@@ -55,6 +71,8 @@ pub use export::OnnxExportable;
 #[cfg(feature = "onnx")]
 pub use from_pipeline::export_pipeline_to_onnx;
 #[cfg(feature = "onnx")]
+pub use from_pipeline::validate_pipeline_export;
+#[cfg(feature = "onnx")]
 pub use graph::OnnxGraphBuilder;
 
 #[cfg(feature = "onnx-inference")]
@@ -62,6 +80,9 @@ mod inference;
 
 #[cfg(feature = "onnx-inference")]
 pub use inference::OnnxInferenceSession;
+
+#[cfg(feature = "onnx-server")]
+pub mod server;
 
 /// Default ONNX opset version for main domain.
 pub const DEFAULT_OPSET_VERSION: i64 = 17;

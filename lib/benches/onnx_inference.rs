@@ -69,20 +69,21 @@ fn create_test_data(n_samples: usize, n_features: usize) -> Tensor2D<CpuBackend>
 fn bench_native_inference(c: &mut Criterion) {
     let mut group = c.benchmark_group("native_inference");
 
-    for n_features in [2, 10, 50, 100].iter() {
-        let model = create_model(*n_features, 1000);
-        let test_data = create_test_data(100, *n_features);
+    // Test various batch sizes to show scaling
+    let batch_sizes = [100, 1000, 10000];
+    let n_features = 10;
 
-        group.throughput(Throughput::Elements(*n_features as u64));
-        group.bench_with_input(
-            BenchmarkId::new("batch_100", n_features),
-            n_features,
-            |b, _| {
-                b.iter(|| {
-                    let _ = model.predict_batch(&test_data);
-                });
-            },
-        );
+    let model = create_model(n_features, 5000);
+
+    for batch_size in batch_sizes.iter() {
+        let test_data = create_test_data(*batch_size, n_features);
+
+        group.throughput(Throughput::Elements((*batch_size * n_features) as u64));
+        group.bench_with_input(BenchmarkId::new("batch", batch_size), batch_size, |b, _| {
+            b.iter(|| {
+                let _ = model.predict_batch(&test_data);
+            });
+        });
     }
 
     group.finish();
@@ -118,39 +119,39 @@ fn bench_onnx_inference(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("onnx_inference");
 
-    for n_features in [2, 10, 50, 100].iter() {
-        let model = create_model(*n_features, 1000);
+    // Test various batch sizes to show scaling
+    let batch_sizes = [100, 1000, 10000];
+    let n_features = 10;
 
-        // Export model to temp file
-        let temp_path = std::env::temp_dir().join(format!("bench_model_{}.onnx", n_features));
-        model.save_onnx(&temp_path).unwrap();
+    let model = create_model(n_features, 5000);
 
-        // Load ONNX model
-        let session = OnnxInferenceSession::load(&temp_path).unwrap();
+    // Export model to temp file
+    let temp_path = std::env::temp_dir().join("bench_model.onnx");
+    model.save_onnx(&temp_path).unwrap();
 
+    // Load ONNX model
+    let session = OnnxInferenceSession::load(&temp_path).unwrap();
+
+    for batch_size in batch_sizes.iter() {
         // Create test data as ndarray
         let test_data: Array2<f32> = Array2::from_shape_vec(
-            (100, *n_features),
-            (0..100 * n_features)
+            (*batch_size, n_features),
+            (0..*batch_size * n_features)
                 .map(|i| (i as f32 % 50.0) / 10.0)
                 .collect(),
         )
         .unwrap();
 
-        group.throughput(Throughput::Elements(*n_features as u64));
-        group.bench_with_input(
-            BenchmarkId::new("batch_100", n_features),
-            n_features,
-            |b, _| {
-                b.iter(|| {
-                    let _ = session.predict(&test_data);
-                });
-            },
-        );
-
-        // Cleanup
-        std::fs::remove_file(&temp_path).ok();
+        group.throughput(Throughput::Elements((*batch_size * n_features) as u64));
+        group.bench_with_input(BenchmarkId::new("batch", batch_size), batch_size, |b, _| {
+            b.iter(|| {
+                let _ = session.predict(&test_data);
+            });
+        });
     }
+
+    // Cleanup
+    std::fs::remove_file(&temp_path).ok();
 
     group.finish();
 }
@@ -163,8 +164,10 @@ fn bench_comparison(c: &mut Criterion) {
     let mut group = c.benchmark_group("inference_comparison");
 
     let n_features = 10;
-    let model = create_model(n_features, 1000);
-    let test_data = create_test_data(100, n_features);
+    let batch_size = 10000; // Larger batch to see real differences
+
+    let model = create_model(n_features, 5000);
+    let test_data = create_test_data(batch_size, n_features);
 
     // Export and load ONNX model
     let temp_path = std::env::temp_dir().join("bench_comparison.onnx");
@@ -173,12 +176,14 @@ fn bench_comparison(c: &mut Criterion) {
 
     // Create ndarray test data
     let test_data_nd: Array2<f32> = Array2::from_shape_vec(
-        (100, n_features),
-        (0..100 * n_features)
+        (batch_size, n_features),
+        (0..batch_size * n_features)
             .map(|i| (i as f32 % 50.0) / 10.0)
             .collect(),
     )
     .unwrap();
+
+    group.throughput(Throughput::Elements((batch_size * n_features) as u64));
 
     group.bench_function("native_rust", |b| {
         b.iter(|| {
@@ -186,11 +191,122 @@ fn bench_comparison(c: &mut Criterion) {
         });
     });
 
-    group.bench_function("onnx_runtime", |b| {
+    group.bench_function("onnx_runtime_cpu", |b| {
         b.iter(|| {
             let _ = session.predict(&test_data_nd);
         });
     });
+
+    // Cleanup
+    std::fs::remove_file(&temp_path).ok();
+
+    group.finish();
+}
+
+/// CUDA inference benchmark - only runs if CUDA is available
+#[cfg(feature = "onnx-cuda")]
+fn bench_onnx_cuda_inference(c: &mut Criterion) {
+    use machinelearne_rs::onnx::{OnnxExportable, OnnxInferenceSession};
+    use ndarray::Array2;
+
+    let mut group = c.benchmark_group("onnx_cuda_inference");
+
+    // Test various batch sizes to show scaling
+    let batch_sizes = [100, 1000, 10000];
+    let n_features = 10;
+
+    let model = create_model(n_features, 5000);
+
+    // Export model to temp file
+    let temp_path = std::env::temp_dir().join("bench_cuda_model.onnx");
+    model.save_onnx(&temp_path).unwrap();
+
+    // Try to load with CUDA - skip if unavailable
+    match OnnxInferenceSession::load_gpu(&temp_path, 0) {
+        Ok(session) => {
+            for batch_size in batch_sizes.iter() {
+                // Create test data as ndarray
+                let test_data: Array2<f32> = Array2::from_shape_vec(
+                    (*batch_size, n_features),
+                    (0..*batch_size * n_features)
+                        .map(|i| (i as f32 % 50.0) / 10.0)
+                        .collect(),
+                )
+                .unwrap();
+
+                group.throughput(Throughput::Elements((*batch_size * n_features) as u64));
+                group.bench_with_input(
+                    BenchmarkId::new("batch", batch_size),
+                    batch_size,
+                    |b, _| {
+                        b.iter(|| {
+                            let _ = session.predict(&test_data);
+                        });
+                    },
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("CUDA not available for benchmark: {}", e);
+        }
+    }
+
+    // Cleanup
+    std::fs::remove_file(&temp_path).ok();
+
+    group.finish();
+}
+
+/// Compare CPU vs CUDA performance
+#[cfg(feature = "onnx-cuda")]
+fn bench_cpu_cuda_comparison(c: &mut Criterion) {
+    use machinelearne_rs::onnx::{OnnxExportable, OnnxInferenceSession};
+    use ndarray::Array2;
+
+    let mut group = c.benchmark_group("cpu_cuda_comparison");
+
+    let n_features = 10;
+    let batch_size = 10000; // Larger batch to see GPU benefits
+
+    let model = create_model(n_features, 5000);
+
+    // Export model to temp file
+    let temp_path = std::env::temp_dir().join("bench_cpu_cuda_comparison.onnx");
+    model.save_onnx(&temp_path).unwrap();
+
+    // Load CPU session
+    let cpu_session = OnnxInferenceSession::load(&temp_path).unwrap();
+
+    // Try CUDA session
+    match OnnxInferenceSession::load_gpu(&temp_path, 0) {
+        Ok(cuda_session) => {
+            // Create test data
+            let test_data: Array2<f32> = Array2::from_shape_vec(
+                (batch_size, n_features),
+                (0..batch_size * n_features)
+                    .map(|i| (i as f32 % 50.0) / 10.0)
+                    .collect(),
+            )
+            .unwrap();
+
+            group.throughput(Throughput::Elements((batch_size * n_features) as u64));
+
+            group.bench_function("onnx_cpu", |b| {
+                b.iter(|| {
+                    let _ = cpu_session.predict(&test_data);
+                });
+            });
+
+            group.bench_function("onnx_cuda", |b| {
+                b.iter(|| {
+                    let _ = cuda_session.predict(&test_data);
+                });
+            });
+        }
+        Err(e) => {
+            eprintln!("CUDA not available for comparison: {}", e);
+        }
+    }
 
     // Cleanup
     std::fs::remove_file(&temp_path).ok();
@@ -205,13 +321,24 @@ criterion_group!(benches, bench_native_inference);
 #[cfg(all(feature = "onnx", not(feature = "onnx-inference")))]
 criterion_group!(benches, bench_native_inference, bench_onnx_export);
 
-#[cfg(feature = "onnx-inference")]
+#[cfg(all(feature = "onnx-inference", not(feature = "onnx-cuda")))]
 criterion_group!(
     benches,
     bench_native_inference,
     bench_onnx_export,
     bench_onnx_inference,
     bench_comparison
+);
+
+#[cfg(feature = "onnx-cuda")]
+criterion_group!(
+    benches,
+    bench_native_inference,
+    bench_onnx_export,
+    bench_onnx_inference,
+    bench_comparison,
+    bench_onnx_cuda_inference,
+    bench_cpu_cuda_comparison
 );
 
 criterion_main!(benches);

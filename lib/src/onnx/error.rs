@@ -24,6 +24,11 @@ pub enum OnnxError {
     },
     /// Missing required field.
     MissingField(String),
+    /// Unsupported transformer in pipeline.
+    UnsupportedTransformer {
+        transformer_name: String,
+        reason: String,
+    },
 }
 
 impl std::fmt::Display for OnnxError {
@@ -39,6 +44,16 @@ impl std::fmt::Display for OnnxError {
                 write!(f, "Shape mismatch: expected {:?}, got {:?}", expected, got)
             }
             OnnxError::MissingField(field) => write!(f, "Missing required field: {}", field),
+            OnnxError::UnsupportedTransformer {
+                transformer_name,
+                reason,
+            } => {
+                write!(
+                    f,
+                    "Unsupported transformer '{}': {}",
+                    transformer_name, reason
+                )
+            }
         }
     }
 }
@@ -83,6 +98,13 @@ mod tests {
 
         let err = OnnxError::MissingField("field".to_string());
         assert!(err.to_string().contains("Missing required field"));
+
+        let err = OnnxError::UnsupportedTransformer {
+            transformer_name: "CustomTransformer".to_string(),
+            reason: "Not implemented".to_string(),
+        };
+        assert!(err.to_string().contains("Unsupported transformer"));
+        assert!(err.to_string().contains("CustomTransformer"));
     }
 
     #[test]

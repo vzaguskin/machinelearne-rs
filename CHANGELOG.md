@@ -8,6 +8,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### ONNX Export and Inference
+- `onnx` feature: Export trained models and pipelines to ONNX format for portable deployment
+- `onnx-inference` feature: Load ONNX models and run inference using ONNX Runtime
+- `onnx-server` feature: HTTP inference server for deploying models as microservices
+- `onnx-cuda` feature: GPU acceleration via CUDA execution provider
+- `OnnxExportable` trait: Export models to ONNX format with metadata support
+- `OnnxInferenceSession`: Load and run ONNX model inference with batch support
+- `OnnxServer`: HTTP server with `/predict`, `/predict/batch`, `/health`, `/ready` endpoints
+- Full pipeline export: `FittedPipeline` exports preprocessing + model in single ONNX file
+  - StandardScaler, MinMaxScaler, RobustScaler, MaxAbsScaler
+  - Normalizer (L1, L2, Max norms)
+  - SimpleImputer (mean, median, most_frequent, constant strategies)
+  - OneHotEncoder, OrdinalEncoder
+  - LinearRegressor, LinearClassifier
+- Execution provider selection (CPU, CUDA with graceful fallback)
+- `onnx_deployment` example: Complete end-to-end deployment workflow
+  - Train model with preprocessing pipeline
+  - Export full pipeline to ONNX
+  - Start HTTP server
+  - Make predictions via REST API
+  - Compare native vs ONNX predictions
+
 #### Training Stability Features
 - `gradient_clipping(max_norm)`: Clips gradients by global L2 norm to prevent gradient explosion
   - Configured via `TrainerBuilder::gradient_clipping()`

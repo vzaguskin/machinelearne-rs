@@ -12,23 +12,29 @@ pub struct ModelProto {
     #[prost(int64, tag = "1")]
     pub ir_version: i64,
 
+    /// Model producer name.
+    #[prost(string, tag = "2")]
+    pub producer_name: String,
+
+    /// Model producer version.
+    #[prost(string, tag = "3")]
+    pub producer_version: String,
+
+    /// Model domain.
+    #[prost(string, tag = "4")]
+    pub domain: String,
+
+    /// Model version.
+    #[prost(int64, tag = "5")]
+    pub model_version: i64,
+
+    /// The main graph.
+    #[prost(message, optional, tag = "7")]
+    pub graph: Option<GraphProto>,
+
     /// Operator sets used by the model.
     #[prost(message, repeated, tag = "8")]
     pub opset_import: Vec<OperatorSetIdProto>,
-
-    /// Model metadata.
-    #[prost(string, tag = "4")]
-    pub producer_name: String,
-
-    #[prost(string, tag = "5")]
-    pub producer_version: String,
-
-    #[prost(string, tag = "7")]
-    pub model_version: String,
-
-    /// The main graph.
-    #[prost(message, optional, tag = "100")]
-    pub graph: Option<GraphProto>,
 }
 
 /// Operator set identifier.
@@ -46,9 +52,17 @@ pub struct OperatorSetIdProto {
 /// Graph definition.
 #[derive(Clone, PartialEq, Message)]
 pub struct GraphProto {
+    /// Computation nodes.
+    #[prost(message, repeated, tag = "1")]
+    pub node: Vec<NodeProto>,
+
     /// Graph name.
-    #[prost(string, tag = "1")]
+    #[prost(string, tag = "2")]
     pub name: String,
+
+    /// Initializers (constant tensors).
+    #[prost(message, repeated, tag = "5")]
+    pub initializer: Vec<TensorProto>,
 
     /// Input tensors.
     #[prost(message, repeated, tag = "11")]
@@ -57,25 +71,17 @@ pub struct GraphProto {
     /// Output tensors.
     #[prost(message, repeated, tag = "12")]
     pub output: Vec<ValueInfoProto>,
-
-    /// Computation nodes.
-    #[prost(message, repeated, tag = "13")]
-    pub node: Vec<NodeProto>,
-
-    /// Initializers (constant tensors).
-    #[prost(message, repeated, tag = "5")]
-    pub initializer: Vec<TensorProto>,
 }
 
 /// Node in the computation graph.
 #[derive(Clone, PartialEq, Message)]
 pub struct NodeProto {
     /// Input names.
-    #[prost(string, repeated, tag = "4")]
+    #[prost(string, repeated, tag = "1")]
     pub input: Vec<String>,
 
     /// Output names.
-    #[prost(string, repeated, tag = "5")]
+    #[prost(string, repeated, tag = "2")]
     pub output: Vec<String>,
 
     /// Node name (optional).
@@ -83,16 +89,16 @@ pub struct NodeProto {
     pub name: String,
 
     /// Operator type.
-    #[prost(string, tag = "1")]
+    #[prost(string, tag = "4")]
     pub op_type: String,
+
+    /// Operator attributes.
+    #[prost(message, repeated, tag = "5")]
+    pub attribute: Vec<AttributeProto>,
 
     /// Operator domain (empty for default).
     #[prost(string, tag = "7")]
     pub domain: String,
-
-    /// Operator attributes.
-    #[prost(message, repeated, tag = "6")]
-    pub attribute: Vec<AttributeProto>,
 }
 
 /// Tensor value.
@@ -150,32 +156,36 @@ pub struct TensorShapeProtoDimension {
 /// Tensor data.
 #[derive(Clone, PartialEq, Message)]
 pub struct TensorProto {
-    /// Data type (1=float32, 2=uint8, 3=int8, 6=int32, 7=int64, etc.).
-    #[prost(int32, tag = "1")]
-    pub data_type: i32,
-
     /// Shape dimensions.
-    #[prost(int64, repeated, tag = "2")]
+    #[prost(int64, repeated, tag = "1")]
     pub dims: Vec<i64>,
 
-    /// Tensor name.
-    #[prost(string, tag = "3")]
-    pub name: String,
+    /// Data type (1=float32, 2=uint8, 3=int8, 6=int32, 7=int64, etc.).
+    #[prost(int32, tag = "2")]
+    pub data_type: i32,
 
     /// Float data (for float type).
     #[prost(float, repeated, tag = "4")]
     pub float_data: Vec<f32>,
 
+    /// Int32 data (for int32 type).
+    #[prost(int32, repeated, tag = "6")]
+    pub int32_data: Vec<i32>,
+
     /// Int64 data (for int64 type).
-    #[prost(int64, repeated, tag = "6")]
+    #[prost(int64, repeated, tag = "7")]
     pub int64_data: Vec<i64>,
+
+    /// Tensor name.
+    #[prost(string, tag = "8")]
+    pub name: String,
 
     /// Raw data bytes (for raw_data field).
     #[prost(bytes = "vec", tag = "9")]
     pub raw_data: Vec<u8>,
 
     /// Double data (for double type).
-    #[prost(double, repeated, tag = "10")]
+    #[prost(double, repeated, tag = "5")]
     pub double_data: Vec<f64>,
 }
 
@@ -287,12 +297,13 @@ impl TensorProto {
         let raw_data: Vec<u8> = data.iter().flat_map(|&f| f.to_le_bytes()).collect();
 
         Self {
-            data_type: tensor_data_type::FLOAT,
             dims: dims.to_vec(),
+            data_type: tensor_data_type::FLOAT,
+            float_data: Vec::new(),
+            int32_data: Vec::new(),
+            int64_data: Vec::new(),
             name: name.into(),
             raw_data,
-            float_data: Vec::new(),
-            int64_data: Vec::new(),
             double_data: Vec::new(),
         }
     }
@@ -303,12 +314,13 @@ impl TensorProto {
         let raw_data: Vec<u8> = data.iter().flat_map(|&i| i.to_le_bytes()).collect();
 
         Self {
-            data_type: tensor_data_type::INT64,
             dims: dims.to_vec(),
+            data_type: tensor_data_type::INT64,
+            float_data: Vec::new(),
+            int32_data: Vec::new(),
+            int64_data: Vec::new(),
             name: name.into(),
             raw_data,
-            float_data: Vec::new(),
-            int64_data: Vec::new(),
             double_data: Vec::new(),
         }
     }
@@ -318,12 +330,13 @@ impl TensorProto {
         let raw_data: Vec<u8> = data.iter().flat_map(|&d| d.to_le_bytes()).collect();
 
         Self {
-            data_type: tensor_data_type::DOUBLE,
             dims: dims.to_vec(),
+            data_type: tensor_data_type::DOUBLE,
+            float_data: Vec::new(),
+            int32_data: Vec::new(),
+            int64_data: Vec::new(),
             name: name.into(),
             raw_data,
-            float_data: Vec::new(),
-            int64_data: Vec::new(),
             double_data: Vec::new(),
         }
     }
