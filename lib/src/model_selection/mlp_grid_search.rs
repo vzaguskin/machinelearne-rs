@@ -631,4 +631,123 @@ mod tests {
         assert_eq!(result.all_results.len(), 1);
         assert_eq!(result.all_results[0].hidden_layers, vec![4]);
     }
+
+    #[test]
+    fn test_mlp_grid_search_verbose_output() {
+        let dataset = create_nonlinear_dataset();
+
+        let param_grid = MLPGrid::new()
+            .with_architectures(vec![MLPArchitecture::single(4)])
+            .with_hidden_activations(vec![Activation::ReLU], 1)
+            .with_learning_rates(vec![0.1]);
+
+        // Test verbose level 1
+        let grid_search =
+            MLPGridSearchCV::<CpuBackend, _>::new(param_grid.clone(), RegressionMetric::R2)
+                .verbose(1);
+
+        let result = grid_search.fit(&dataset, 2, 1).unwrap();
+        assert!(result.best_params.mean_score.is_finite());
+
+        // Test verbose level 2
+        let grid_search = MLPGridSearchCV::<CpuBackend, _>::new(param_grid, RegressionMetric::R2)
+            .with_cv(KFold::new(2))
+            .verbose(2);
+
+        let result = grid_search.fit(&dataset, 2, 1).unwrap();
+        assert!(result.best_params.mean_score.is_finite());
+    }
+
+    #[test]
+    fn test_mlp_grid_search_with_n_outputs() {
+        let dataset = create_nonlinear_dataset();
+
+        let param_grid = MLPGrid::new()
+            .with_architectures(vec![MLPArchitecture::single(4)])
+            .with_hidden_activations(vec![Activation::ReLU], 1)
+            .with_learning_rates(vec![0.1]);
+
+        let grid_search = MLPGridSearchCV::<CpuBackend, _>::new(param_grid, RegressionMetric::R2)
+            .with_n_outputs(1);
+
+        let result = grid_search.fit(&dataset, 2, 1).unwrap();
+        assert_eq!(result.n_outputs, 1);
+    }
+
+    #[test]
+    fn test_mlp_grid_search_result_all_activations() {
+        // Test all activation types in result helpers
+        let result = MLPGridSearchResult {
+            hidden_layers: vec![8],
+            activations: vec![
+                Activation::ReLU,
+                Activation::Sigmoid,
+                Activation::Tanh,
+                Activation::Identity,
+            ],
+            learning_rate: 0.01,
+            lambda: 0.0,
+            batch_size: 32,
+            max_epochs: 100,
+            mean_score: 0.9,
+            std_score: 0.05,
+            fold_scores: vec![0.88, 0.9, 0.92],
+        };
+
+        let act_str = result.activations_string();
+        assert!(act_str.contains("ReLU"));
+        assert!(act_str.contains("Sigmoid"));
+        assert!(act_str.contains("Tanh"));
+    }
+
+    #[test]
+    fn test_mlp_grid_search_no_valid_combinations() {
+        let dataset = create_nonlinear_dataset();
+
+        // Create a grid with no compatible architecture/activation combinations
+        let param_grid = MLPGrid::new()
+            .with_architectures(vec![MLPArchitecture::double(8, 4)]) // needs 3 activations
+            .with_activations(vec![MLPActivations::relu_all(1)]) // provides only 2 activations
+            .with_learning_rates(vec![0.1]);
+
+        let grid_search = MLPGridSearchCV::<CpuBackend, _>::new(param_grid, RegressionMetric::R2)
+            .with_cv(KFold::new(2))
+            .verbose(0);
+
+        let result = grid_search.fit(&dataset, 2, 1);
+        match result {
+            Err(msg) => assert!(msg.contains("No valid parameter combinations")),
+            Ok(_) => panic!("Expected error for invalid combinations"),
+        }
+    }
+
+    #[test]
+    fn test_mlp_grid_search_result_store_metadata() {
+        let dataset = create_nonlinear_dataset();
+
+        let param_grid = MLPGrid::new()
+            .with_architectures(vec![MLPArchitecture::single(4)])
+            .with_hidden_activations(vec![Activation::ReLU], 1)
+            .with_learning_rates(vec![0.1]);
+
+        let grid_search = MLPGridSearchCV::<CpuBackend, _>::new(param_grid, RegressionMetric::R2);
+
+        let result = grid_search.fit(&dataset, 2, 1).unwrap();
+
+        assert_eq!(result.n_features, 2);
+        assert_eq!(result.n_outputs, 1);
+    }
+
+    #[test]
+    fn test_format_activations_all_types() {
+        assert_eq!(
+            format_activations(&[Activation::ReLU, Activation::Identity]),
+            "ReLU-Id"
+        );
+        assert_eq!(
+            format_activations(&[Activation::Sigmoid, Activation::Tanh]),
+            "Sigmoid-Tanh"
+        );
+        assert_eq!(format_activations(&[Activation::Identity]), "Id");
+    }
 }

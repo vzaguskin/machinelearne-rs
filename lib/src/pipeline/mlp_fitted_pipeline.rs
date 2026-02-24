@@ -509,7 +509,6 @@ mod tests {
     use super::*;
     use crate::backend::CpuBackend;
     use crate::model::{Activation, TrainableModel, MLP};
-    use crate::preprocessing::feature_engineering::PolynomialFeatures;
     use crate::preprocessing::pipeline::Pipeline;
     use crate::preprocessing::scaling::StandardScaler;
     use crate::preprocessing::traits::Transformer;
@@ -710,5 +709,116 @@ mod tests {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
         let err: MLPPipelineError = io_err.into();
         assert!(matches!(err, MLPPipelineError::IoError(_)));
+    }
+
+    #[test]
+    fn test_mlp_pipeline_error_from_preprocessing() {
+        use crate::preprocessing::error::PreprocessingError;
+        let preproc_err = PreprocessingError::InvalidParameter("test error".to_string());
+        let err: MLPPipelineError = preproc_err.into();
+        assert!(matches!(err, MLPPipelineError::PreprocessingError(_)));
+    }
+
+    #[test]
+    fn test_mlp_pipeline_error_from_bincode() {
+        // Test serialization error path - use Box<dyn std::error::Error>
+        let bincode_err: bincode::Error = Box::new(bincode::ErrorKind::SizeLimit);
+        let err: MLPPipelineError = bincode_err.into();
+        assert!(matches!(err, MLPPipelineError::SerializationError(_)));
+    }
+
+    #[test]
+    fn test_mlp_pipeline_invalid_state_error() {
+        let err = MLPPipelineError::InvalidState("test state".to_string());
+        assert!(err.to_string().contains("test state"));
+    }
+
+    #[test]
+    fn test_mlp_pipeline_metadata_default() {
+        let meta = MLPPipelineMetadata::default();
+        assert_eq!(meta.n_features_in, 0);
+        assert_eq!(meta.n_outputs, 1);
+        assert!(!meta.has_polynomial);
+        assert_eq!(meta.poly_degree, 1);
+        assert_eq!(meta.n_preproc_steps, 0);
+        assert_eq!(meta.version, 1);
+        assert!(meta.layer_sizes.is_empty());
+    }
+
+    #[test]
+    fn test_mlp_pipeline_with_multiple_preprocessing_steps() {
+        // Create preprocessing pipeline with multiple steps
+        let data =
+            Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 4, 2);
+        let preproc = Pipeline::<CpuBackend>::new().add_standard_scaler(StandardScaler::new());
+        let fitted_preproc = preproc.fit(&data).unwrap();
+
+        // Create model
+        let model = create_simple_mlp_model();
+
+        // Create pipeline
+        let pipeline = MLPFittedPipeline::new(Some(fitted_preproc), None, model);
+
+        // Test predict
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let predictions = pipeline.predict(&input).unwrap();
+        assert_eq!(predictions.shape(), (2, 1));
+
+        // Check metadata
+        assert_eq!(pipeline.n_features_in(), 2);
+        assert!(pipeline.preprocessor().is_some());
+        assert!(pipeline.polynomial().is_none());
+    }
+
+    #[test]
+    fn test_mlp_pipeline_save_load_roundtrip_with_all_components() {
+        // Create preprocessing pipeline
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
+        let preproc = Pipeline::<CpuBackend>::new().add_standard_scaler(StandardScaler::new());
+        let fitted_preproc = preproc.fit(&data).unwrap();
+
+        // Create model
+        let model = create_simple_mlp_model();
+
+        // Create pipeline
+        let pipeline = MLPFittedPipeline::new(Some(fitted_preproc), None, model);
+
+        // Save
+        let temp_file = std::env::temp_dir().join("test_mlp_pipeline_full.bin");
+        pipeline.save_to_file(&temp_file).unwrap();
+
+        // Load
+        let loaded = MLPFittedPipeline::<CpuBackend>::load_from_file(&temp_file).unwrap();
+
+        // Verify metadata
+        assert_eq!(loaded.metadata().n_preproc_steps, 1);
+        assert_eq!(loaded.n_features_in(), 2);
+        assert_eq!(loaded.n_outputs(), 1);
+
+        // Verify predictions match
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let pred1 = pipeline.predict(&input).unwrap();
+        let pred2 = loaded.predict(&input).unwrap();
+
+        for (a, b) in pred1
+            .ravel()
+            .to_vec()
+            .iter()
+            .zip(pred2.ravel().to_vec().iter())
+        {
+            assert!((a - b).abs() < 1e-6);
+        }
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_mlp_pipeline_model_accessor() {
+        let model = create_simple_mlp_model();
+        let pipeline = MLPFittedPipeline::from_model(model.clone());
+
+        // Test model accessor
+        let model_ref = pipeline.model();
+        assert_eq!(model_ref.layer_sizes(), model.layer_sizes());
     }
 }
