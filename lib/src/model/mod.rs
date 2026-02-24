@@ -15,6 +15,9 @@ pub use state::{Fitted, Unfitted};
 pub mod activation;
 pub use activation::Activation;
 
+pub mod mlp;
+pub use mlp::{MLPModel, MLPParams, MLPRegressor, MLP};
+
 pub mod linear;
 pub use crate::backend::scalar::{Scalar, ScalarOps};
 pub use crate::backend::Backend;

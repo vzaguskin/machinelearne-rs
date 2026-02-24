@@ -311,6 +311,30 @@ impl<B: Backend> Tensor2D<B> {
         }
     }
 
+    /// Matrix-vector multiplication: y = A @ x
+    ///
+    /// # Arguments
+    /// * `x` - Input vector of length `cols`
+    ///
+    /// # Returns
+    /// Vector of length `rows`
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::{CpuBackend, Tensor2D, Tensor1D};
+    ///
+    /// let a = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+    /// let x = Tensor1D::<CpuBackend>::new(vec![1.0, 0.0]);
+    /// let y = a.matvec(&x);
+    /// assert_eq!(y.to_vec(), vec![1.0, 3.0]);
+    /// ```
+    pub fn matvec(&self, x: &Tensor1D<B>) -> Tensor1D<B> {
+        Tensor1D::<B> {
+            data: B::matvec(&self.data, &x.data),
+            backend: PhantomData,
+        }
+    }
+
     /// Returns the transpose of this matrix.
     ///
     /// # Example
@@ -694,6 +718,66 @@ impl<B: Backend> Tensor2D<B> {
     /// ```
     pub fn shape(&self) -> (usize, usize) {
         B::shape(&self.data)
+    }
+
+    /// Extracts a single row from the tensor as a 1D tensor.
+    ///
+    /// # Arguments
+    /// * `index` - Row index (0-based)
+    ///
+    /// # Panics
+    /// Panics if `index >= rows`.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::{CpuBackend, Tensor2D};
+    ///
+    /// let t = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3);
+    /// let row = t.row(1);
+    /// assert_eq!(row.to_vec(), vec![4.0, 5.0, 6.0]);
+    /// ```
+    pub fn row(&self, index: usize) -> Tensor1D<B> {
+        let (rows, cols) = self.shape();
+        assert!(
+            index < rows,
+            "Row index {} out of bounds (max {})",
+            index,
+            rows - 1
+        );
+
+        // Extract row from flattened data
+        let flat = self.ravel().to_vec();
+        let start = index * cols;
+        let end = start + cols;
+        let row_data: Vec<f32> = flat[start..end].iter().map(|&x| x as f32).collect();
+
+        Tensor1D::new(row_data)
+    }
+
+    /// Matrix-vector multiplication with transposed matrix: y = A^T @ x
+    ///
+    /// # Arguments
+    /// * `x` - Input vector of length `rows` (since we're using transposed matrix)
+    ///
+    /// # Returns
+    /// Vector of length `cols`
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::{CpuBackend, Tensor2D, Tensor1D};
+    ///
+    /// // [[1, 2], [3, 4]]^T = [[1, 3], [2, 4]]
+    /// // [[1, 3], [2, 4]] @ [1, 1] = [1+3, 2+4] = [4, 6]
+    /// let a = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+    /// let x = Tensor1D::<CpuBackend>::new(vec![1.0, 1.0]);
+    /// let y = a.transpose_matvec(&x);
+    /// assert_eq!(y.to_vec(), vec![4.0, 6.0]);
+    /// ```
+    pub fn transpose_matvec(&self, x: &Tensor1D<B>) -> Tensor1D<B> {
+        Tensor1D::<B> {
+            data: B::matvec_transposed(&self.data, &x.data),
+            backend: PhantomData,
+        }
     }
 
     pub fn ravel(&self) -> Tensor1D<B> {

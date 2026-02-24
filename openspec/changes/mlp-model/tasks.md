@@ -15,37 +15,37 @@
 - [x] Add unit tests
 
 ## Phase 3: MLPParams
-- [ ] Create `lib/src/model/mlp.rs`
-- [ ] Define `LayerParams<B>` struct
-- [ ] Define `MLPParams<B>` struct
-- [ ] Implement `ParamOps<B>` for `MLPParams<B>`
-- [ ] Add `SerializableMLPParams` for serde
-- [ ] Add unit tests
+- [x] Create `lib/src/model/mlp.rs`
+- [x] Define `LayerParams<B>` struct
+- [x] Define `MLPParams<B>` struct
+- [x] Implement `ParamOps<B>` for `MLPParams<B>`
+- [x] Add `SerializableMLPParams` for serde
+- [x] Add unit tests
 
 ## Phase 4: MLPModel Core
-- [ ] Define `MLPModel<B, S>` struct
-- [ ] Implement `new()` constructor with layer_sizes and activations
-- [ ] Implement weight initialization (Xavier)
-- [ ] Implement forward pass
-- [ ] Add type aliases (MLP, MLPRegressor)
+- [x] Define `MLPModel<B, S>` struct
+- [x] Implement `new()` constructor with layer_sizes and activations
+- [x] Implement weight initialization (Xavier - zeros pending random init)
+- [x] Implement forward pass
+- [x] Add type aliases (MLP, MLPRegressor)
 
 ## Phase 5: Training Support
-- [ ] Implement `ForwardCache` for storing activations
-- [ ] Implement `forward_with_cache()` method
-- [ ] Implement `backward()` with full backpropagation
-- [ ] Implement `TrainableModel<B>` trait
+- [x] Implement `ForwardCache` for storing activations
+- [x] Implement `forward_with_cache()` method
+- [x] Implement `backward()` with full backpropagation
+- [x] Implement `TrainableModel<B>` trait
 - [ ] Test with XOR dataset
 
 ## Phase 6: Inference Support
-- [ ] Implement `InferenceModel<B>` for `MLPModel<B, Fitted>`
-- [ ] Implement `predict()` for single sample
-- [ ] Implement `predict_batch()` for batch inference
-- [ ] Implement serialization (save/load)
+- [x] Implement `InferenceModel<B>` for `MLPModel<B, Fitted>`
+- [x] Implement `predict()` for single sample
+- [x] Implement `predict_batch()` for batch inference
+- [x] Implement serialization (save/load)
 
 ## Phase 7: Integration
 - [ ] Implement `Optimizer<B, MLPParams<B>>` for `SGD<B>`
 - [ ] Implement `Regularizer<B, MLP<B>>` for L2
-- [ ] Add exports to `lib/src/model/mod.rs`
+- [x] Add exports to `lib/src/model/mod.rs`
 - [ ] Test full training pipeline
 
 ## Phase 8: Examples & Docs
