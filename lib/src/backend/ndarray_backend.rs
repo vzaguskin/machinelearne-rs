@@ -337,6 +337,34 @@ impl super::Backend for NdarrayBackend {
         })
     }
 
+    /// Computes element-wise ReLU activation: max(0, x).
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::{NdarrayBackend, NdarrayTensor2D, Backend};
+    /// use ndarray::{Array1, Array2, Ix1, Ix2};
+    /// let x = Array1::from_vec(vec![-2.0, 0.0, 3.0]);
+    /// let y = NdarrayBackend::relu_1d(&x);
+    /// assert_eq!(y.to_vec(), vec![0.0, 0.0, 3.0]);
+    /// ```
+    fn relu_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
+        x.mapv(|z| if z > 0.0 { z } else { 0.0 })
+    }
+
+    /// Computes element-wise hyperbolic tangent: tanh(x).
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::{NdarrayBackend, NdarrayTensor2D, Backend};
+    /// use ndarray::{Array1, Array2, Ix1, Ix2};
+    /// let x = Array1::from_vec(vec![0.0]);
+    /// let y = NdarrayBackend::tanh_1d(&x);
+    /// assert!((y[0] - 0.0).abs() < 1e-6);
+    /// ```
+    fn tanh_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
+        x.mapv(f64::tanh)
+    }
+
     /// Computes element-wise absolute value.
     ///
     /// # Example
@@ -421,6 +449,16 @@ impl super::Backend for NdarrayBackend {
                 ez / (1.0 + ez)
             }
         }))
+    }
+
+    /// Computes element-wise ReLU activation for 2D tensors: max(0, x).
+    fn relu_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(x.0.mapv(|z| if z > 0.0 { z } else { 0.0 }))
+    }
+
+    /// Computes element-wise hyperbolic tangent for 2D tensors: tanh(x).
+    fn tanh_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
+        NdarrayTensor2D(x.0.mapv(f64::tanh))
     }
 
     /// Computes element-wise absolute value for 2D tensors.
