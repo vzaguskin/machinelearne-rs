@@ -51,8 +51,8 @@
 ## Phase 8: Examples & Docs
 - [x] Create `train_mlp.rs` example (XOR)
 - [x] Create `train_mlp_california.rs` example
-- [ ] Update CHANGELOG.md
-- [ ] Update CLAUDE.md with MLP section
+- [x] Update CHANGELOG.md
+- [x] Update CLAUDE.md with MLP section
 
 ## Phase 9: ONNX Export
 - [x] Implement `OnnxNodeBuilder` for MLP layers (using accessor methods)
