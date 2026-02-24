@@ -46,10 +46,10 @@
 - [x] Implement `Optimizer<B, MLPParams<B>>` for `SGD<B>`
 - [x] Implement `Regularizer<B, MLP<B>>` for L2
 - [x] Add exports to `lib/src/model/mod.rs`
-- [ ] Test full training pipeline
+- [x] Test full training pipeline
 
 ## Phase 8: Examples & Docs
-- [ ] Create `train_mlp.rs` example (XOR)
+- [x] Create `train_mlp.rs` example (XOR)
 - [ ] Create `train_mlp_california.rs` example
 - [ ] Update CHANGELOG.md
 - [ ] Update CLAUDE.md with MLP section
