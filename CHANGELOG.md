@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### MLP Model Selection and Pipeline Support
+- `MLPGridSearchCV`: Hyperparameter grid search for MLP models with cross-validation
+  - Search over architectures (hidden layer configurations)
+  - Search over activation functions
+  - Search over learning rates, batch sizes, epochs, and L2 regularization
+- `MLPGrid`: Parameter grid for defining MLP hyperparameter search space
+- `MLPArchitecture`: Configuration for hidden layer sizes
+- `MLPActivations`: Configuration for per-layer activation functions
+- `MLPFittedPipeline`: End-to-end pipeline combining preprocessing and MLP model
+  - Supports preprocessing transformers (scalers, imputers, encoders)
+  - Supports polynomial feature expansion
+  - Full serialization/deserialization with "MLPM" magic bytes
+  - Multi-output support (2D predictions)
+  - `predict()` for 2D output, `predict_flattened()` for 1D output
+- `mlp_inference_benchmark` example: Benchmark comparing CPU inference performance across different MLP architectures and batch sizes
+
 #### MLP (Multi-Layer Perceptron) Neural Network
 - `MLPModel<B, S>`: Configurable feedforward neural network with type-state pattern
   - Variable number of hidden layers

@@ -25,16 +25,19 @@
 
 mod cross_validation;
 mod grid_search;
+mod mlp_grid_search;
 mod param_grid;
 mod pipeline_grid_search;
 mod split;
 
 pub use cross_validation::{CVSplit, KFold};
 pub use grid_search::{GridSearchCV, GridSearchCVResult, GridSearchResult};
+pub use mlp_grid_search::{MLPGridSearchCV, MLPGridSearchCVResult, MLPGridSearchResult};
 pub use param_grid::{
-    ImputeStrategy, ImputerGrid, LinearRegressionGrid, ModelParams, ParamCombination, PipelineGrid,
-    PipelineParams, PolynomialGrid, PreprocessingGrid, PreprocessingParams, RegularizerGrid,
-    SGDGrid, ScalerGrid, ScalerType, TrainerGrid,
+    ImputeStrategy, ImputerGrid, LinearRegressionGrid, MLPActivations, MLPActivationsGrid,
+    MLPArchitecture, MLPArchitectureGrid, MLPGrid, MLPParamCombination, ModelParams,
+    ParamCombination, PipelineGrid, PipelineParams, PolynomialGrid, PreprocessingGrid,
+    PreprocessingParams, RegularizerGrid, SGDGrid, ScalerGrid, ScalerType, TrainerGrid,
 };
 pub use pipeline_grid_search::{PipelineGridSearchCV, PipelineSearchResult, PipelineSearchResultB};
 pub use split::train_test_split;

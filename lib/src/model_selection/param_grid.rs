@@ -511,6 +511,374 @@ impl Iterator for ParamGridIterator {
 }
 
 // ============================================================================
+// MLP Types
+// ============================================================================
+
+use crate::model::Activation;
+
+/// Architecture configuration for MLP (hidden layer sizes).
+///
+/// The full layer sizes will be: [n_features, hidden_layers..., n_outputs]
+#[derive(Clone, Debug, PartialEq)]
+pub struct MLPArchitecture {
+    /// Hidden layer sizes (e.g., vec![64, 32] for two hidden layers)
+    pub hidden_layers: Vec<usize>,
+}
+
+impl MLPArchitecture {
+    /// Create a new architecture with the given hidden layer sizes.
+    pub fn new(hidden_layers: Vec<usize>) -> Self {
+        Self { hidden_layers }
+    }
+
+    /// Create an architecture with a single hidden layer.
+    pub fn single(size: usize) -> Self {
+        Self {
+            hidden_layers: vec![size],
+        }
+    }
+
+    /// Create an architecture with two hidden layers.
+    pub fn double(size1: usize, size2: usize) -> Self {
+        Self {
+            hidden_layers: vec![size1, size2],
+        }
+    }
+}
+
+/// Activation configuration for MLP layers.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MLPActivations {
+    /// Activation functions for each layer transition (hidden + output).
+    pub activations: Vec<Activation>,
+}
+
+impl MLPActivations {
+    /// Create activation configuration.
+    pub fn new(activations: Vec<Activation>) -> Self {
+        Self { activations }
+    }
+
+    /// Use the same activation for all hidden layers, with Identity for output.
+    pub fn uniform(hidden_activation: Activation, num_hidden: usize) -> Self {
+        let mut activations = vec![hidden_activation; num_hidden];
+        activations.push(Activation::Identity); // Output layer
+        Self { activations }
+    }
+
+    /// ReLU for all hidden layers, Identity for output.
+    pub fn relu_all(num_hidden: usize) -> Self {
+        Self::uniform(Activation::ReLU, num_hidden)
+    }
+
+    /// Tanh for all hidden layers, Identity for output.
+    pub fn tanh_all(num_hidden: usize) -> Self {
+        Self::uniform(Activation::Tanh, num_hidden)
+    }
+
+    /// Sigmoid for all hidden layers, Identity for output.
+    pub fn sigmoid_all(num_hidden: usize) -> Self {
+        Self::uniform(Activation::Sigmoid, num_hidden)
+    }
+}
+
+/// A single parameter combination for MLP training.
+#[derive(Clone, Debug)]
+pub struct MLPParamCombination {
+    /// Architecture (hidden layer sizes).
+    pub architecture: MLPArchitecture,
+    /// Activation functions per layer.
+    pub activations: MLPActivations,
+    /// Learning rate for SGD optimizer.
+    pub learning_rate: f64,
+    /// L2 regularization lambda (0.0 for no regularization).
+    pub lambda: f64,
+    /// Batch size for training.
+    pub batch_size: usize,
+    /// Maximum training epochs.
+    pub max_epochs: usize,
+}
+
+/// Parameter grid for MLP architectures.
+#[derive(Clone, Debug, Default)]
+pub struct MLPArchitectureGrid {
+    /// Hidden layer configurations to search.
+    pub architectures: Vec<MLPArchitecture>,
+}
+
+impl MLPArchitectureGrid {
+    /// Create a new architecture grid.
+    pub fn new(architectures: Vec<MLPArchitecture>) -> Self {
+        Self { architectures }
+    }
+
+    /// Returns the number of architectures.
+    pub fn len(&self) -> usize {
+        self.architectures.len()
+    }
+
+    /// Returns true if there are no architectures.
+    pub fn is_empty(&self) -> bool {
+        self.architectures.is_empty()
+    }
+}
+
+/// Parameter grid for MLP activations.
+#[derive(Clone, Debug, Default)]
+pub struct MLPActivationsGrid {
+    /// Activation configurations to search.
+    pub activation_configs: Vec<MLPActivations>,
+}
+
+impl MLPActivationsGrid {
+    /// Create a new activations grid.
+    pub fn new(activation_configs: Vec<MLPActivations>) -> Self {
+        Self { activation_configs }
+    }
+
+    /// Create grid from a list of activations for hidden layers (output is always Identity).
+    /// Each activation will be used for all hidden layers.
+    pub fn from_hidden_activations(hidden_activations: Vec<Activation>, num_hidden: usize) -> Self {
+        let activation_configs = hidden_activations
+            .into_iter()
+            .map(|act| MLPActivations::uniform(act, num_hidden))
+            .collect();
+        Self { activation_configs }
+    }
+
+    /// Returns the number of activation configurations.
+    pub fn len(&self) -> usize {
+        self.activation_configs.len()
+    }
+
+    /// Returns true if there are no activation configurations.
+    pub fn is_empty(&self) -> bool {
+        self.activation_configs.is_empty()
+    }
+}
+
+/// Combined parameter grid for MLP models.
+///
+/// # Example
+///
+/// ```rust
+/// use machinelearne_rs::model_selection::{
+///     MLPGrid, MLPArchitecture, MLPActivations, SGDGrid, RegularizerGrid, TrainerGrid
+/// };
+/// use machinelearne_rs::model::Activation;
+///
+/// let grid = MLPGrid::new()
+///     .with_architectures(vec![
+///         MLPArchitecture::single(8),
+///         MLPArchitecture::double(16, 8),
+///     ])
+///     .with_hidden_activations(vec![Activation::ReLU, Activation::Tanh], 1)
+///     .with_learning_rates(vec![0.001, 0.01])
+///     .with_lambdas(vec![0.0, 0.01]);
+///
+/// // Total combinations depends on architecture/activation compatibility
+/// println!("Total combinations: {}", grid.n_combinations());
+/// ```
+#[derive(Clone, Debug, Default)]
+pub struct MLPGrid {
+    /// Architecture options.
+    pub architecture: MLPArchitectureGrid,
+    /// Activation options.
+    pub activations: MLPActivationsGrid,
+    /// Optimizer parameters.
+    pub optimizer: SGDGrid,
+    /// Regularizer parameters.
+    pub regularizer: RegularizerGrid,
+    /// Trainer parameters.
+    pub trainer: TrainerGrid,
+}
+
+impl MLPGrid {
+    /// Create a new empty grid with defaults.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set architecture grid.
+    pub fn with_architectures(mut self, architectures: Vec<MLPArchitecture>) -> Self {
+        self.architecture = MLPArchitectureGrid::new(architectures);
+        self
+    }
+
+    /// Set activations grid with full control over each config.
+    pub fn with_activations(mut self, activation_configs: Vec<MLPActivations>) -> Self {
+        self.activations = MLPActivationsGrid::new(activation_configs);
+        self
+    }
+
+    /// Set hidden layer activations (applied uniformly, output is always Identity).
+    /// Note: This sets up activations for the first architecture's hidden layer count.
+    pub fn with_hidden_activations(
+        mut self,
+        hidden_activations: Vec<Activation>,
+        num_hidden: usize,
+    ) -> Self {
+        self.activations =
+            MLPActivationsGrid::from_hidden_activations(hidden_activations, num_hidden);
+        self
+    }
+
+    /// Set optimizer grid with learning rates.
+    pub fn with_learning_rates(mut self, learning_rates: Vec<f64>) -> Self {
+        self.optimizer = SGDGrid::new(learning_rates);
+        self
+    }
+
+    /// Set optimizer grid.
+    pub fn with_optimizer(mut self, optimizer: SGDGrid) -> Self {
+        self.optimizer = optimizer;
+        self
+    }
+
+    /// Set L2 regularization with lambda values.
+    pub fn with_lambdas(mut self, lambdas: Vec<f64>) -> Self {
+        self.regularizer = RegularizerGrid::L2 { lambdas };
+        self
+    }
+
+    /// Set regularizer grid.
+    pub fn with_regularizer(mut self, regularizer: RegularizerGrid) -> Self {
+        self.regularizer = regularizer;
+        self
+    }
+
+    /// Set trainer grid.
+    pub fn with_trainer(mut self, trainer: TrainerGrid) -> Self {
+        self.trainer = trainer;
+        self
+    }
+
+    /// Count total parameter combinations.
+    pub fn n_combinations(&self) -> usize {
+        let n_arch = self.architecture.len().max(1);
+        let n_act = self.activations.len().max(1);
+        let n_lr = self.optimizer.learning_rates.len();
+        let n_lambda = self.regularizer.len();
+        let n_trainer = self.trainer.len();
+
+        n_arch * n_act * n_lr * n_lambda * n_trainer
+    }
+
+    /// Iterate over all parameter combinations.
+    ///
+    /// Only yields combinations where activations match the architecture.
+    pub fn iter(&self) -> MLPParamGridIterator {
+        let architectures: Vec<_> = if self.architecture.is_empty() {
+            vec![MLPArchitecture::new(vec![])] // Default: no hidden layers (linear)
+        } else {
+            self.architecture.architectures.clone()
+        };
+
+        let activation_configs: Vec<_> = if self.activations.is_empty() {
+            vec![MLPActivations::new(vec![Activation::Identity])] // Default: single identity
+        } else {
+            self.activations.activation_configs.clone()
+        };
+
+        MLPParamGridIterator {
+            grid: self.clone(),
+            architectures,
+            activation_configs,
+            current_arch: 0,
+            current_act: 0,
+            current_lr: 0,
+            current_lambda: 0,
+            current_batch: 0,
+            current_epochs: 0,
+        }
+    }
+}
+
+/// Iterator over MLP parameter combinations.
+pub struct MLPParamGridIterator {
+    grid: MLPGrid,
+    architectures: Vec<MLPArchitecture>,
+    activation_configs: Vec<MLPActivations>,
+    current_arch: usize,
+    current_act: usize,
+    current_lr: usize,
+    current_lambda: usize,
+    current_batch: usize,
+    current_epochs: usize,
+}
+
+impl Iterator for MLPParamGridIterator {
+    type Item = MLPParamCombination;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let lambdas = self.grid.regularizer.lambdas();
+
+        // Check if we've exhausted all combinations
+        if self.current_arch >= self.architectures.len() {
+            return None;
+        }
+
+        let arch = &self.architectures[self.current_arch];
+        let num_layers = arch.hidden_layers.len() + 1; // +1 for output layer
+
+        // Find a compatible activation config
+        let mut found_compatible = false;
+
+        while self.current_act < self.activation_configs.len() {
+            let act_config = &self.activation_configs[self.current_act];
+            if act_config.activations.len() == num_layers {
+                found_compatible = true;
+                break;
+            }
+            self.current_act += 1;
+        }
+
+        // If no compatible activation found, skip this architecture
+        if !found_compatible {
+            self.current_arch += 1;
+            self.current_act = 0;
+            return self.next();
+        }
+
+        let activations = self.activation_configs[self.current_act].clone();
+
+        let combination = MLPParamCombination {
+            architecture: arch.clone(),
+            activations,
+            learning_rate: self.grid.optimizer.learning_rates[self.current_lr],
+            lambda: lambdas[self.current_lambda],
+            batch_size: self.grid.trainer.batch_sizes[self.current_batch],
+            max_epochs: self.grid.trainer.max_epochs[self.current_epochs],
+        };
+
+        // Advance to next combination
+        self.current_epochs += 1;
+        if self.current_epochs >= self.grid.trainer.max_epochs.len() {
+            self.current_epochs = 0;
+            self.current_batch += 1;
+            if self.current_batch >= self.grid.trainer.batch_sizes.len() {
+                self.current_batch = 0;
+                self.current_lambda += 1;
+                if self.current_lambda >= lambdas.len() {
+                    self.current_lambda = 0;
+                    self.current_lr += 1;
+                    if self.current_lr >= self.grid.optimizer.learning_rates.len() {
+                        self.current_lr = 0;
+                        self.current_act += 1;
+                        if self.current_act >= self.activation_configs.len() {
+                            self.current_act = 0;
+                            self.current_arch += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(combination)
+    }
+}
+
+// ============================================================================
 // Combined Pipeline Types
 // ============================================================================
 
@@ -1078,5 +1446,121 @@ mod tests {
         let grid = SGDGrid::new(vec![]);
         assert!(grid.is_empty());
         assert_eq!(grid.len(), 0);
+    }
+
+    // ========================================================================
+    // MLP Grid Tests
+    // ========================================================================
+
+    #[test]
+    fn test_mlp_architecture() {
+        let arch = MLPArchitecture::single(16);
+        assert_eq!(arch.hidden_layers, vec![16]);
+
+        let arch = MLPArchitecture::double(32, 16);
+        assert_eq!(arch.hidden_layers, vec![32, 16]);
+
+        let arch = MLPArchitecture::new(vec![64, 32, 16]);
+        assert_eq!(arch.hidden_layers, vec![64, 32, 16]);
+    }
+
+    #[test]
+    fn test_mlp_activations() {
+        let act = MLPActivations::relu_all(2);
+        assert_eq!(act.activations.len(), 3); // 2 hidden + 1 output
+        assert_eq!(act.activations[0], Activation::ReLU);
+        assert_eq!(act.activations[1], Activation::ReLU);
+        assert_eq!(act.activations[2], Activation::Identity);
+
+        let act = MLPActivations::tanh_all(1);
+        assert_eq!(act.activations.len(), 2);
+        assert_eq!(act.activations[0], Activation::Tanh);
+        assert_eq!(act.activations[1], Activation::Identity);
+    }
+
+    #[test]
+    fn test_mlp_grid_n_combinations() {
+        let grid = MLPGrid::new()
+            .with_architectures(vec![
+                MLPArchitecture::single(8),
+                MLPArchitecture::single(16),
+            ])
+            .with_hidden_activations(vec![Activation::ReLU], 1)
+            .with_learning_rates(vec![0.001, 0.01])
+            .with_lambdas(vec![0.0]);
+
+        // 2 arch * 1 act * 2 lr * 1 lambda * 1 trainer = 4
+        assert_eq!(grid.n_combinations(), 4);
+    }
+
+    #[test]
+    fn test_mlp_grid_iterator() {
+        let grid = MLPGrid::new()
+            .with_architectures(vec![MLPArchitecture::single(8)])
+            .with_hidden_activations(vec![Activation::ReLU, Activation::Tanh], 1)
+            .with_learning_rates(vec![0.01]);
+
+        let combinations: Vec<_> = grid.iter().collect();
+        // 1 arch * 2 act * 1 lr * 1 lambda * 1 trainer = 2
+        assert_eq!(combinations.len(), 2);
+
+        // Check that both activation configs are present by counting unique strings
+        let activation_names: std::collections::HashSet<_> = combinations
+            .iter()
+            .map(|c| format!("{:?}", c.activations.activations[0]))
+            .collect();
+        assert_eq!(activation_names.len(), 2);
+    }
+
+    #[test]
+    fn test_mlp_grid_compatible_activations() {
+        // Test that incompatible activations are skipped
+        let grid = MLPGrid::new()
+            .with_architectures(vec![
+                MLPArchitecture::single(8),     // 2 layers (1 hidden + 1 output)
+                MLPArchitecture::double(16, 8), // 3 layers (2 hidden + 1 output)
+            ])
+            .with_activations(vec![
+                MLPActivations::relu_all(1), // For single hidden layer
+                MLPActivations::relu_all(2), // For double hidden layer
+            ])
+            .with_learning_rates(vec![0.01]);
+
+        let combinations: Vec<_> = grid.iter().collect();
+        // Each architecture should match with exactly one activation config
+        assert_eq!(combinations.len(), 2);
+
+        // Verify first combination has correct layer count
+        assert_eq!(combinations[0].architecture.hidden_layers.len(), 1);
+        assert_eq!(combinations[0].activations.activations.len(), 2);
+
+        // Verify second combination
+        assert_eq!(combinations[1].architecture.hidden_layers.len(), 2);
+        assert_eq!(combinations[1].activations.activations.len(), 3);
+    }
+
+    #[test]
+    fn test_mlp_grid_default() {
+        let grid = MLPGrid::new();
+        // Default grid has 1 combination (default architecture + default activation)
+        assert_eq!(grid.n_combinations(), 1);
+    }
+
+    #[test]
+    fn test_mlp_param_combination() {
+        let grid = MLPGrid::new()
+            .with_architectures(vec![MLPArchitecture::single(8)])
+            .with_hidden_activations(vec![Activation::ReLU], 1)
+            .with_learning_rates(vec![0.01])
+            .with_lambdas(vec![0.1])
+            .with_trainer(TrainerGrid::new(vec![32], vec![100]));
+
+        let combo = grid.iter().next().unwrap();
+        assert_eq!(combo.architecture.hidden_layers, vec![8]);
+        assert_eq!(combo.activations.activations.len(), 2);
+        assert_eq!(combo.learning_rate, 0.01);
+        assert_eq!(combo.lambda, 0.1);
+        assert_eq!(combo.batch_size, 32);
+        assert_eq!(combo.max_epochs, 100);
     }
 }
