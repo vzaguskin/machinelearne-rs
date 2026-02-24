@@ -504,23 +504,27 @@ impl<B: Backend> InferenceModel<B> for MLPModel<B, Fitted> {
     }
 
     fn predict_batch(&self, input: &Self::InputBatch) -> Self::OutputBatch {
-        let (batch_size, _) = input.shape();
-        let output_size = *self.layer_sizes.last().unwrap();
+        // Optimized batch inference using matrix operations
+        // Process the entire batch at once for GPU efficiency
+        let mut current = input.clone();
 
-        // Process each sample and collect results
-        let mut outputs = Vec::with_capacity(batch_size * output_size);
+        for (i, layer) in self.params.layers.iter().enumerate() {
+            // z = current @ W^T + b
+            // current: (batch_size, in_features), W: (out_features, in_features)
+            // W^T: (in_features, out_features)
+            let w_t = layer.weights.transpose();
 
-        for i in 0..batch_size {
-            let sample = input.row(i);
-            let pred = self.predict(&sample);
-            outputs.extend(pred.to_vec());
+            // Matrix multiplication: (batch_size, in_features) @ (in_features, out_features)
+            let z = current.matmul(&w_t);
+
+            // Add bias to each row
+            let z = add_bias_to_rows(&z, &layer.bias);
+
+            // Apply activation (element-wise, preserves batch dimension)
+            current = self.activations[i].forward_2d(&z);
         }
 
-        Tensor2D::new(
-            outputs.into_iter().map(|x| x as f32).collect(),
-            batch_size,
-            output_size,
-        )
+        current
     }
 
     fn extract_params(&self) -> Self::ParamsRepr {

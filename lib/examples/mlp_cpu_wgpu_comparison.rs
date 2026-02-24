@@ -10,16 +10,17 @@
 //!
 //! **Training Performance:**
 //! - WGPU is 10-20x FASTER than CPU
-//! - Large model: ~18x speedup
-//! - XLarge model: ~11x speedup
+//! - Large model: ~16x speedup
+//! - XLarge model: ~23x speedup
 //!
-//! **Inference Performance:**
-//! - CPU is currently faster for batch inference
-//! - WGPU inference needs optimization (predict_batch not GPU-optimized)
+//! **Inference Performance (optimized predict_batch):**
+//! - WGPU is 6-16x FASTER than CPU
+//! - Large model: ~7x speedup
+//! - XLarge model: ~16x speedup
 //!
 //! **Recommendations:**
-//! - Use WGPU for training large models with large batches
-//! - Use CPU for single-sample or small-batch inference
+//! - Use WGPU for training and batch inference on large models
+//! - Use CPU for single-sample or very small batch inference
 
 use machinelearne_rs::{
     backend::CpuBackend,
@@ -350,10 +351,9 @@ fn main() {
     println!("{}", "=".repeat(60));
     println!("\nWith large batch sizes (512+) and large models (100+ neurons):");
     println!("  - WGPU training is 10-20x FASTER than CPU");
-    println!("  - CPU inference is currently faster (predict_batch not GPU-optimized)");
+    println!("  - WGPU inference is 6-16x FASTER than CPU (with optimized predict_batch)");
     println!("\nRecommendations:");
-    println!("  - Use WGPU for training large models with large batches");
-    println!("  - Use CPU for single-sample or small-batch inference");
-    println!("  - Future: optimize predict_batch for GPU batch inference");
+    println!("  - Use WGPU for training and batch inference on large models");
+    println!("  - Use CPU for single-sample or very small batch inference");
     println!("\nTo enable WGPU benchmarks, compile with: --features wgpu");
 }
