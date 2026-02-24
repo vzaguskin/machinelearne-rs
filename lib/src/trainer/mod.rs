@@ -481,7 +481,8 @@ mod tests {
 
     #[test]
     fn test_trainer_builder_default_values() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer);
 
         assert_eq!(builder.batch_size, 32);
         assert_eq!(builder.max_epochs, 1000);
@@ -490,8 +491,9 @@ mod tests {
 
     #[test]
     fn test_trainer_builder_custom_batch_size() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .batch_size(64);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .batch_size(64);
 
         assert_eq!(builder.batch_size, 64);
         assert_eq!(builder.max_epochs, 1000);
@@ -499,8 +501,9 @@ mod tests {
 
     #[test]
     fn test_trainer_builder_custom_max_epochs() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .max_epochs(500);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .max_epochs(500);
 
         assert_eq!(builder.batch_size, 32);
         assert_eq!(builder.max_epochs, 500);
@@ -508,12 +511,13 @@ mod tests {
 
     #[test]
     fn test_trainer_builder_verbose() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .verbose(false);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .verbose(false);
 
         assert_eq!(builder.verbose, false);
 
-        let builder_verbose =
+        let builder_verbose: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
             TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer).verbose(true);
 
         assert_eq!(builder_verbose.verbose, true);
@@ -521,10 +525,11 @@ mod tests {
 
     #[test]
     fn test_trainer_builder_chaining() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .batch_size(128)
-            .max_epochs(250)
-            .verbose(false);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .batch_size(128)
+                .max_epochs(250)
+                .verbose(false);
 
         assert_eq!(builder.batch_size, 128);
         assert_eq!(builder.max_epochs, 250);
@@ -533,13 +538,15 @@ mod tests {
 
     #[test]
     fn test_trainer_builder_chaining_order_independent() {
-        let builder1 = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .batch_size(16)
-            .max_epochs(100);
+        let builder1: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .batch_size(16)
+                .max_epochs(100);
 
-        let builder2 = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .max_epochs(100)
-            .batch_size(16);
+        let builder2: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .max_epochs(100)
+                .batch_size(16);
 
         assert_eq!(builder1.batch_size, builder2.batch_size);
         assert_eq!(builder1.max_epochs, builder2.max_epochs);
@@ -547,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_trainer_builder_small_batch_size() {
-        let builder =
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
             TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer).batch_size(1);
 
         assert_eq!(builder.batch_size, 1);
@@ -555,15 +562,16 @@ mod tests {
 
     #[test]
     fn test_trainer_builder_large_batch_size() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .batch_size(10000);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .batch_size(10000);
 
         assert_eq!(builder.batch_size, 10000);
     }
 
     #[test]
     fn test_trainer_builder_zero_epochs() {
-        let builder =
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
             TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer).max_epochs(0);
 
         assert_eq!(builder.max_epochs, 0);
@@ -571,18 +579,20 @@ mod tests {
 
     #[test]
     fn test_trainer_builder_large_epochs() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .max_epochs(100000);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .max_epochs(100000);
 
         assert_eq!(builder.max_epochs, 100000);
     }
 
     #[test]
     fn test_trainer_builder_creates_valid_trainer() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .batch_size(64)
-            .max_epochs(200)
-            .verbose(false);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .batch_size(64)
+                .max_epochs(200)
+                .verbose(false);
 
         let trainer = builder.build();
 
@@ -593,28 +603,32 @@ mod tests {
 
     #[test]
     fn test_trainer_builder_does_not_consume_loss_fn() {
-        let _builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .batch_size(16)
-            .max_epochs(50);
+        let _builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .batch_size(16)
+                .max_epochs(50);
 
         // Components are reused via Clone for SGD, creating fresh instances for other builders
-        let _builder2 = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer);
+        let _builder2: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer);
     }
 
     #[test]
     fn test_trainer_builder_clone_components() {
-        let builder1 = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .batch_size(32)
-            .max_epochs(100);
+        let builder1: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .batch_size(32)
+                .max_epochs(100);
 
         // SGD implements Clone, so we can use it multiple times
-        let _builder2 = TrainerBuilder::new(MSELoss, builder1.optimizer.clone(), NoRegularizer);
+        let _builder2: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, builder1.optimizer.clone(), NoRegularizer);
     }
 
     #[test]
     fn test_trainer_builder_zero_batch_size() {
         // Builder allows 0 batch size - this is up to the user to validate
-        let builder =
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
             TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer).batch_size(0);
 
         assert_eq!(builder.batch_size, 0);
@@ -752,8 +766,9 @@ mod tests {
 
     #[test]
     fn test_gradient_clipping_builder() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .gradient_clipping(1.0);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .gradient_clipping(1.0);
 
         assert!(builder.gradient_clipping.is_some());
         assert_eq!(builder.gradient_clipping.unwrap().max_norm, 1.0);
@@ -761,7 +776,8 @@ mod tests {
 
     #[test]
     fn test_gradient_clipping_disabled_by_default() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer);
 
         assert!(builder.gradient_clipping.is_none());
     }
@@ -849,8 +865,9 @@ mod tests {
 
     #[test]
     fn test_early_stopping_builder() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .early_stopping(5, 0.001);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .early_stopping(5, 0.001);
 
         assert!(builder.early_stopping.is_some());
         let config = builder.early_stopping.unwrap();
@@ -860,15 +877,17 @@ mod tests {
 
     #[test]
     fn test_divergence_threshold_builder() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
-            .divergence_threshold(10.0);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .divergence_threshold(10.0);
 
         assert_eq!(builder.divergence_threshold, Some(10.0));
     }
 
     #[test]
     fn test_early_stopping_disabled_by_default() {
-        let builder = TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer);
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer);
 
         assert!(builder.early_stopping.is_none());
         assert!(builder.divergence_threshold.is_none());

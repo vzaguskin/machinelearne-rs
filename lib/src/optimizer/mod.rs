@@ -3,6 +3,8 @@ use crate::backend::tensor1d::Tensor1D;
 use crate::backend::Backend;
 use crate::loss::TensorLike;
 use crate::model::linear::LinearParams;
+use crate::model::mlp::MLPParams;
+use crate::model::ParamOps;
 
 /// Trait for gradient-based optimizers.
 ///
@@ -128,6 +130,16 @@ where
             weights: weights_update,
             bias: bias_update,
         }
+    }
+}
+
+impl<B: Backend> Optimizer<B, MLPParams<B>> for SGD<B> {
+    fn step(&self, params: &MLPParams<B>, grads: &MLPParams<B>) -> MLPParams<B> {
+        // params_new = params - lr * grads
+        // Using ParamOps: scaled_grads = -lr * grads, then add
+        let neg_lr = Scalar::<B>::new(0.0) - self.lr;
+        let scaled_grads = grads.scale(neg_lr);
+        params.add(&scaled_grads)
     }
 }
 

@@ -3,6 +3,7 @@ use crate::backend::tensorlike::TensorLike;
 use crate::backend::Backend;
 use crate::loss::{LinearParams, Tensor1D};
 use crate::model::linear::LinearRegression;
+use crate::model::mlp::{LayerParams, MLPParams, MLP};
 use crate::model::TrainableModel;
 /// Computes the regularization penalty and its gradient w.r.t. model parameters.
 ///
@@ -150,6 +151,113 @@ where
         )
     }
 }
+
+// =============================================================================
+// MLP Regularizers
+// =============================================================================
+
+impl<B: Backend> Regularizer<B, MLP<B>> for L2<B> {
+    fn regularizer_penalty_grad(
+        &self,
+        model: &MLP<B>,
+    ) -> (Scalar<B>, <MLP<B> as TrainableModel<B>>::Gradients) {
+        let params = model.params();
+        let mut total_penalty = Scalar::<B>::new(0.0);
+        let two_lambda = self.lambda * Scalar::<B>::new(2.0);
+
+        let layer_grads: Vec<LayerParams<B>> = params
+            .layers
+            .iter()
+            .map(|layer| {
+                // L2 penalty on weights: λ * ||W||²
+                let weights_flat = layer.weights.ravel();
+                let weight_penalty = weights_flat.dot(&weights_flat);
+                total_penalty = total_penalty + self.lambda * weight_penalty;
+
+                // Gradient: 2λW for weights, 0 for bias
+                let weight_grad = layer.weights.scale(two_lambda);
+                let bias_grad = Tensor1D::<B>::zeros(layer.bias.len());
+
+                LayerParams {
+                    weights: weight_grad,
+                    bias: bias_grad,
+                }
+            })
+            .collect();
+
+        (
+            total_penalty,
+            MLPParams {
+                layers: layer_grads,
+            },
+        )
+    }
+}
+
+impl<B: Backend> Regularizer<B, MLP<B>> for L1<B> {
+    fn regularizer_penalty_grad(
+        &self,
+        model: &MLP<B>,
+    ) -> (Scalar<B>, <MLP<B> as TrainableModel<B>>::Gradients) {
+        let params = model.params();
+        let mut total_penalty = Scalar::<B>::new(0.0);
+
+        let layer_grads: Vec<LayerParams<B>> = params
+            .layers
+            .iter()
+            .map(|layer| {
+                // L1 penalty on weights: λ * ||W||₁
+                let weights_flat = layer.weights.ravel();
+                let abs_weights = weights_flat.abs();
+                let l1_norm = abs_weights.sum();
+                total_penalty = total_penalty + self.lambda * l1_norm;
+
+                // Gradient: λ * sign(W) for weights, 0 for bias
+                let weight_grad = layer.weights.sign().scale(self.lambda);
+                let bias_grad = Tensor1D::<B>::zeros(layer.bias.len());
+
+                LayerParams {
+                    weights: weight_grad,
+                    bias: bias_grad,
+                }
+            })
+            .collect();
+
+        (
+            total_penalty,
+            MLPParams {
+                layers: layer_grads,
+            },
+        )
+    }
+}
+
+impl<B: Backend> Regularizer<B, MLP<B>> for NoRegularizer {
+    fn regularizer_penalty_grad(
+        &self,
+        model: &MLP<B>,
+    ) -> (Scalar<B>, <MLP<B> as TrainableModel<B>>::Gradients) {
+        let params = model.params();
+
+        let layer_grads: Vec<LayerParams<B>> = params
+            .layers
+            .iter()
+            .map(|layer| LayerParams {
+                weights: Tensor2D::<B>::zeros(layer.weights.shape().0, layer.weights.shape().1),
+                bias: Tensor1D::<B>::zeros(layer.bias.len()),
+            })
+            .collect();
+
+        (
+            Scalar::<B>::new(0.0),
+            MLPParams {
+                layers: layer_grads,
+            },
+        )
+    }
+}
+
+use crate::backend::Tensor2D;
 
 #[cfg(test)]
 mod tests {
