@@ -44,6 +44,9 @@ cargo run --example train_linear_l2       # L2 regularization
 cargo run --example train_linear_mae      # MAE loss
 cargo run --example train_linear_ndarray   # Using ndarray backend (requires --features ndarray)
 cargo run --example train_logistic        # Binary classification with BCE
+cargo run --example train_mlp             # MLP learning XOR function
+cargo run --example train_mlp_california  # MLP on California Housing dataset
+cargo run --example export_mlp_onnx --features onnx  # Export MLP to ONNX
 ```
 
 ## Git Workflow
@@ -253,6 +256,40 @@ Models are split into two phases via marker types in `state.rs`:
 - `LinearRegressor` = `LinearRegression<CpuBackend>` (convenience alias)
 
 **Key invariant**: You cannot call `predict()` on an `Unfitted` model — this is enforced at compile time.
+
+#### MLP Model (`lib/src/model/mlp.rs`)
+
+`MLPModel<B, S>` implements a Multi-Layer Perceptron neural network:
+- Configurable architecture with variable hidden layers
+- Per-layer activation functions (ReLU, Sigmoid, Tanh, Identity)
+- Xavier/Glorot weight initialization
+- Full backpropagation support
+
+Type aliases:
+- `MLP<B>` = `MLPModel<B, Unfitted>` for training
+- `MLPModel<B, Fitted>` for inference
+- `MLPRegressor` = `MLP<CpuBackend>` (convenience alias)
+
+Usage:
+```rust
+use machinelearne_rs::model::{MLP, Activation, InferenceModel};
+
+// Create: 2 inputs -> 8 hidden (Tanh) -> 1 output (Sigmoid)
+let model = MLP::<CpuBackend>::new(&[2, 8, 1], &[Activation::Tanh, Activation::Sigmoid]);
+
+// Train using existing Trainer infrastructure
+let trainer = Trainer::builder(MSELoss, SGD::new(0.5), NoRegularizer)
+    .batch_size(1)
+    .max_epochs(5000)
+    .build();
+let fitted = trainer.fit(model, &dataset).unwrap();
+
+// Inference
+let prediction = fitted.predict(&input);
+
+// Export to ONNX
+fitted.save_onnx(&path, Some("mlp_model")).unwrap();
+```
 
 #### Loss Functions (`lib/src/loss/mod.rs`)
 

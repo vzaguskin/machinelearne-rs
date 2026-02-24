@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### MLP (Multi-Layer Perceptron) Neural Network
+- `MLPModel<B, S>`: Configurable feedforward neural network with type-state pattern
+  - Variable number of hidden layers
+  - Configurable activation functions per layer (ReLU, Sigmoid, Tanh, Identity)
+  - Full gradient computation for backpropagation
+  - Xavier/Glorot weight initialization
+- `Activation` enum: Supported activation functions with forward and backward methods
+- `LayerParams<B>`: Parameters for a single dense layer
+- `MLPParams<B>`: Container for all layer parameters
+- `TrainableModel<B>` implementation for `MLPModel<B, Unfitted>` with forward/backward passes
+- `InferenceModel<B>` implementation for `MLPModel<B, Fitted>` with predict/predict_batch
+- `OnnxExportable` implementation for exporting trained MLP models to ONNX format
+- `Optimizer<B, MLPParams<B>>` implementation for `SGD<B>`
+- `Regularizer<B, MLP<B>>` implementations for L1, L2, and NoRegularizer
+- Backend extensions: `relu_1d`, `relu_2d`, `tanh_1d`, `tanh_2d` methods
+- WGPU shader support for ReLU and Tanh activations
+- Examples: `train_mlp.rs` (XOR), `train_mlp_california.rs`, `export_mlp_onnx.rs`
+
 #### WGPU Performance Optimizations (Phase 2)
 
 - **Reduced GPU-CPU synchronization in training loop**: Loss computation now happens once per epoch instead of per batch
