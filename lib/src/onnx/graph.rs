@@ -578,6 +578,57 @@ impl OnnxGraphBuilder {
             ],
         )
     }
+
+    // ========================================================================
+    // Activation Functions
+    // ========================================================================
+
+    /// Add a ReLU activation node.
+    pub fn relu(&mut self, input: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "Relu",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add a Sigmoid activation node.
+    pub fn sigmoid(&mut self, input: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "Sigmoid",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add a Tanh activation node.
+    pub fn tanh(&mut self, input: &str, output: &str) -> &mut Self {
+        self.add_node(
+            "Tanh",
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
+
+    /// Add a generic activation node by name.
+    ///
+    /// Supported activation types: "Relu", "Sigmoid", "Tanh", "Identity", etc.
+    pub fn add_activation_node(
+        &mut self,
+        input: &str,
+        output: &str,
+        activation_type: &str,
+    ) -> &mut Self {
+        self.add_node(
+            activation_type,
+            vec![input.to_string()],
+            vec![output.to_string()],
+            vec![],
+        )
+    }
 }
 
 impl Default for OnnxGraphBuilder {

@@ -8,6 +8,7 @@ use super::graph::OnnxGraphBuilder;
 use super::traits::{OnnxExportable, OnnxNodeBuilder};
 use crate::backend::Backend;
 use crate::model::linear::{Fitted, LinearModel};
+use crate::model::mlp::MLPModel;
 use crate::model::InferenceModel;
 use crate::pipeline::FittedPipeline;
 
@@ -45,6 +46,98 @@ impl<B: Backend> OnnxExportable for LinearModel<B, Fitted> {
         builder.add_output_float("output", 1);
 
         Ok("output".to_string())
+    }
+}
+
+// =============================================================================
+// MLP Model
+// =============================================================================
+
+impl<B: Backend> OnnxExportable for MLPModel<B, Fitted> {
+    fn build_onnx_graph(&self, builder: &mut OnnxGraphBuilder) -> Result<String, OnnxError> {
+        let layer_sizes = self.layer_sizes();
+        let n_features_in = layer_sizes.first().copied().unwrap_or(0);
+        let n_features_out = layer_sizes.last().copied().unwrap_or(0);
+
+        // Add input: [batch_size, n_features_in]
+        builder.add_input_float("input", n_features_in);
+
+        // Track current tensor name
+        let mut current = "input".to_string();
+
+        // Get layers and activations
+        let layers = self.layers();
+        let activations = self.activations();
+
+        // Export each layer
+        for (layer_idx, layer) in layers.iter().enumerate() {
+            let (out_features, in_features) = layer.weights.shape();
+
+            // Get weights and bias as f32 vectors
+            let weights: Vec<f32> = layer
+                .weights
+                .ravel()
+                .to_vec()
+                .into_iter()
+                .map(|x| x as f32)
+                .collect();
+            let bias: Vec<f32> = layer.bias.to_vec().into_iter().map(|x| x as f32).collect();
+
+            // Create unique names for this layer's weights and bias
+            let weights_name = format!("layer{}_weights", layer_idx);
+            let bias_name = format!("layer{}_bias", layer_idx);
+            let gemm_output = format!("layer{}_gemm", layer_idx);
+            let activation_output = format!("layer{}_act", layer_idx);
+
+            // Add weights as initializer: shape [out_features, in_features]
+            builder.add_float_initializer(
+                &weights_name,
+                &[out_features as i64, in_features as i64],
+                &weights,
+            );
+
+            // Add bias as initializer: shape [out_features]
+            builder.add_float_initializer(&bias_name, &[out_features as i64], &bias);
+
+            // Add Gemm node: output = input @ weights^T + bias
+            // For MLP: Y = X @ W^T + b where W is [out, in]
+            builder.gemm(
+                &current,
+                &weights_name,
+                Some(&bias_name),
+                false, // transA
+                true,  // transB - transpose weights
+                1.0,   // alpha
+                1.0,   // beta
+                &gemm_output,
+            );
+
+            // Add activation node
+            let activation = activations[layer_idx];
+            match activation {
+                crate::model::Activation::ReLU => {
+                    builder.relu(&gemm_output, &activation_output);
+                }
+                crate::model::Activation::Sigmoid => {
+                    builder.sigmoid(&gemm_output, &activation_output);
+                }
+                crate::model::Activation::Tanh => {
+                    builder.tanh(&gemm_output, &activation_output);
+                }
+                crate::model::Activation::Identity => {
+                    // Identity: just use the gemm output directly
+                    current = gemm_output;
+                    continue;
+                }
+            }
+
+            current = activation_output;
+        }
+
+        // Add output
+        builder.add_output_float(&current, n_features_out);
+
+        Ok(current)
     }
 }
 
@@ -264,5 +357,88 @@ mod tests {
 
         let bytes = pipeline.to_onnx("model_only_pipeline").unwrap();
         assert!(!bytes.is_empty());
+    }
+
+    // ========================================================================
+    // MLP Model Tests
+    // ========================================================================
+
+    fn create_test_mlp() -> MLPModel<CpuBackend, Fitted> {
+        use crate::model::{Activation, TrainableModel, MLP};
+
+        // Create: 2 inputs -> 4 hidden (ReLU) -> 1 output (Identity)
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        model.into_fitted()
+    }
+
+    #[test]
+    fn test_mlp_build_onnx_graph() {
+        let model = create_test_mlp();
+        let mut builder = OnnxGraphBuilder::new("mlp_model");
+        builder.set_metadata("machinelearne-rs", env!("CARGO_PKG_VERSION"), None);
+
+        let output = model.build_onnx_graph(&mut builder).unwrap();
+        assert!(!output.is_empty());
+        assert!(!builder.graph.initializer.is_empty());
+        assert!(!builder.graph.node.is_empty());
+    }
+
+    #[test]
+    fn test_mlp_to_onnx() {
+        let model = create_test_mlp();
+        let bytes = model.to_onnx("test_mlp").unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_mlp_to_onnx_default() {
+        let model = create_test_mlp();
+        let bytes = model.to_onnx_default().unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn test_mlp_save_onnx() {
+        let model = create_test_mlp();
+
+        let temp_file = std::env::temp_dir().join("test_mlp_model.onnx");
+        model.save_onnx(&temp_file, Some("mlp_model")).unwrap();
+
+        let bytes = std::fs::read(&temp_file).unwrap();
+        assert!(!bytes.is_empty());
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_mlp_save_onnx_to_path() {
+        let model = create_test_mlp();
+
+        let temp_file = std::env::temp_dir().join("my_mlp_model.onnx");
+        model.save_onnx_to_path(&temp_file).unwrap();
+
+        let bytes = std::fs::read(&temp_file).unwrap();
+        assert!(!bytes.is_empty());
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_mlp_with_various_activations() {
+        use crate::model::{Activation, TrainableModel, MLP};
+
+        // Test with different activation combinations
+        let activations = vec![
+            &[Activation::Sigmoid, Activation::Identity][..],
+            &[Activation::Tanh, Activation::Identity][..],
+            &[Activation::ReLU, Activation::Sigmoid][..],
+        ];
+
+        for acts in activations {
+            let model = MLP::<CpuBackend>::new(&[2, 4, 1], acts);
+            let fitted = model.into_fitted();
+            let bytes = fitted.to_onnx("test_mlp_activations").unwrap();
+            assert!(!bytes.is_empty());
+        }
     }
 }

@@ -346,6 +346,16 @@ impl Backend for WgpuBackend {
         x.unary_op(&device, shaders::UnaryOp::Sigmoid)
     }
 
+    fn relu_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
+        let device = Self::default_device();
+        x.unary_op(&device, shaders::UnaryOp::Relu)
+    }
+
+    fn tanh_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
+        let device = Self::default_device();
+        x.unary_op(&device, shaders::UnaryOp::Tanh)
+    }
+
     // --- Mathematical functions (2D) ---
 
     fn abs_2d(t: &Self::Tensor2D) -> Self::Tensor2D {
@@ -387,6 +397,16 @@ impl Backend for WgpuBackend {
     fn sigmoid_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
         let device = Self::default_device();
         x.unary_op(&device, shaders::UnaryOp::Sigmoid)
+    }
+
+    fn relu_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
+        let device = Self::default_device();
+        x.unary_op(&device, shaders::UnaryOp::Relu)
+    }
+
+    fn tanh_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
+        let device = Self::default_device();
+        x.unary_op(&device, shaders::UnaryOp::Tanh)
     }
 
     // --- Linear algebra ---

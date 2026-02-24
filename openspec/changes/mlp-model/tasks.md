@@ -34,7 +34,7 @@
 - [x] Implement `forward_with_cache()` method
 - [x] Implement `backward()` with full backpropagation
 - [x] Implement `TrainableModel<B>` trait
-- [ ] Test with XOR dataset
+- [x] Test with XOR dataset
 
 ## Phase 6: Inference Support
 - [x] Implement `InferenceModel<B>` for `MLPModel<B, Fitted>`
@@ -50,15 +50,15 @@
 
 ## Phase 8: Examples & Docs
 - [x] Create `train_mlp.rs` example (XOR)
-- [ ] Create `train_mlp_california.rs` example
+- [x] Create `train_mlp_california.rs` example
 - [ ] Update CHANGELOG.md
 - [ ] Update CLAUDE.md with MLP section
 
 ## Phase 9: ONNX Export
-- [ ] Implement `OnnxNodeBuilder` for MLP layers
-- [ ] Implement `OnnxExportable` for fitted MLP
-- [ ] Add ONNX export tests
-- [ ] Create `export_mlp_onnx.rs` example
+- [x] Implement `OnnxNodeBuilder` for MLP layers (using accessor methods)
+- [x] Implement `OnnxExportable` for fitted MLP
+- [x] Add ONNX export tests
+- [x] Create `export_mlp_onnx.rs` example
 
 ## Phase 10: Benchmarks
 - [ ] Create `mlp_cpu_wgpu_comparison.rs` benchmark

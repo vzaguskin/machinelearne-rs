@@ -506,6 +506,27 @@ impl<B: Backend> InferenceModel<B> for MLPModel<B, Fitted> {
 }
 
 // =============================================================================
+// Accessor Methods (for ONNX export and introspection)
+// =============================================================================
+
+impl<B: Backend> MLPModel<B, Fitted> {
+    /// Returns the layer sizes: [input, hidden1, ..., output]
+    pub fn layer_sizes(&self) -> &[usize] {
+        &self.layer_sizes
+    }
+
+    /// Returns the activation functions for each layer.
+    pub fn activations(&self) -> &[Activation] {
+        &self.activations
+    }
+
+    /// Returns the parameters for each layer.
+    pub fn layers(&self) -> &[LayerParams<B>] {
+        &self.params.layers
+    }
+}
+
+// =============================================================================
 // Helper Functions
 // =============================================================================
 
@@ -582,8 +603,8 @@ mod tests {
     fn test_param_ops_l2_norm() {
         let params = MLPParams::<CpuBackend>::new(&[2, 2]);
         let norm = params.l2_norm();
-        // With zero initialization, norm should be 0
-        assert!(norm.data.to_f64().abs() < 1e-12);
+        // With Xavier initialization, norm should be positive
+        assert!(norm.data.to_f64() > 0.0);
     }
 
     #[test]
