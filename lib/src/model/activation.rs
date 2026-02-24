@@ -1,0 +1,537 @@
+//! Activation functions for neural network layers.
+//!
+//! This module provides common activation functions used in neural networks,
+//! with both forward and backward (derivative) implementations for training.
+//!
+//! # Available Activations
+//!
+//! | Activation | Range | Common Use |
+//! |------------|-------|------------|
+//! | ReLU | [0, ∞) | Hidden layers (default choice) |
+//! | Sigmoid | (0, 1) | Binary classification output |
+//! | Tanh | (-1, 1) | Hidden layers (zero-centered) |
+//! | Identity | (-∞, ∞) | Regression output |
+//!
+//! # Example
+//!
+//! ```rust
+//! use machinelearne_rs::model::Activation;
+//! use machinelearne_rs::backend::{CpuBackend, Tensor1D};
+//!
+//! let x = Tensor1D::<CpuBackend>::new(vec![-1.0, 0.0, 1.0]);
+//!
+//! // Forward pass
+//! let activated = Activation::ReLU.forward_1d::<CpuBackend>(&x);
+//! assert_eq!(activated.to_vec(), vec![0.0, 0.0, 1.0]);
+//!
+//! // Backward pass (for backpropagation)
+//! let grad = Tensor1D::<CpuBackend>::new(vec![1.0, 1.0, 1.0]);
+//! let backward = Activation::ReLU.backward_1d::<CpuBackend>(&x, &grad);
+//! // grad * (x > 0) = [0, 0, 1]
+//! ```
+
+use crate::backend::tensorlike::TensorLike;
+use crate::backend::{Backend, Scalar, Tensor1D, Tensor2D};
+
+/// Activation functions for neural network layers.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Activation {
+    /// Rectified Linear Unit: max(0, x)
+    ///
+    /// Most commonly used activation for hidden layers.
+    /// Fast computation, helps with vanishing gradient problem.
+    #[default]
+    ReLU,
+
+    /// Sigmoid: 1 / (1 + exp(-x))
+    ///
+    /// Output range: (0, 1). Commonly used for binary classification output.
+    Sigmoid,
+
+    /// Hyperbolic tangent: tanh(x)
+    ///
+    /// Output range: (-1, 1). Zero-centered, often works better than sigmoid
+    /// for hidden layers.
+    Tanh,
+
+    /// Identity: f(x) = x
+    ///
+    /// No transformation. Used for regression output layers.
+    Identity,
+}
+
+impl Activation {
+    /// Apply activation function to a 1D tensor (forward pass).
+    pub fn forward_1d<B: Backend>(&self, x: &Tensor1D<B>) -> Tensor1D<B> {
+        match self {
+            Activation::ReLU => x.relu(),
+            Activation::Sigmoid => x.sigmoid(),
+            Activation::Tanh => x.tanh(),
+            Activation::Identity => x.clone(),
+        }
+    }
+
+    /// Compute derivative of activation function (backward pass).
+    ///
+    /// # Arguments
+    /// * `pre_activation` - The input to the activation (z = Wx + b)
+    /// * `grad_output` - Gradient from the next layer
+    ///
+    /// # Returns
+    /// Gradient with respect to the input of this layer.
+    ///
+    /// # Note
+    /// For ReLU, Sigmoid, and Tanh, we can use the output (post-activation)
+    /// for a more numerically stable computation. For Identity, the derivative
+    /// is always 1.
+    pub fn backward_1d<B: Backend>(
+        &self,
+        pre_activation: &Tensor1D<B>,
+        grad_output: &Tensor1D<B>,
+    ) -> Tensor1D<B> {
+        match self {
+            Activation::ReLU => {
+                // ReLU'(z) = 1 if z > 0, else 0
+                // Create mask: 1 where z > 0, 0 elsewhere
+                let len = pre_activation.len();
+                let zeros = Tensor1D::<B>::zeros(len);
+                // sign gives -1, 0, or 1; max with 0 gives 0 or 1
+                let sign = pre_activation.sign();
+                let mask = zeros.maximum(sign);
+                grad_output.mul(&mask)
+            }
+            Activation::Sigmoid => {
+                // sigmoid'(z) = sigmoid(z) * (1 - sigmoid(z))
+                let output = self.forward_1d(pre_activation);
+                // 1 - output
+                let one = Scalar::<B>::new(1.0);
+                let one_minus = Tensor1D::<B>::zeros(output.len())
+                    .add_scalar(&one)
+                    .sub(&output);
+                // output * (1 - output)
+                let sigmoid_deriv = output.mul(&one_minus);
+                grad_output.mul(&sigmoid_deriv)
+            }
+            Activation::Tanh => {
+                // tanh'(z) = 1 - tanh(z)^2 = 1 - output^2
+                let output = self.forward_1d(pre_activation);
+                // output^2
+                let output_squared = output.mul(&output);
+                // 1 - output^2
+                let one = Scalar::<B>::new(1.0);
+                let tanh_deriv = Tensor1D::<B>::zeros(output.len())
+                    .add_scalar(&one)
+                    .sub(&output_squared);
+                grad_output.mul(&tanh_deriv)
+            }
+            Activation::Identity => {
+                // Identity'(z) = 1, so just pass through the gradient
+                grad_output.clone()
+            }
+        }
+    }
+
+    /// Apply activation function to a 2D tensor (forward pass for batch processing).
+    pub fn forward_2d<B: Backend>(&self, x: &Tensor2D<B>) -> Tensor2D<B> {
+        match self {
+            Activation::ReLU => x.relu(),
+            Activation::Sigmoid => x.sigmoid(),
+            Activation::Tanh => x.tanh(),
+            Activation::Identity => x.clone(),
+        }
+    }
+
+    /// Compute derivative of activation function for 2D tensor (backward pass for batch processing).
+    ///
+    /// # Arguments
+    /// * `pre_activation` - The input to the activation (z = Wx + b), shape (batch_size, features)
+    /// * `grad_output` - Gradient from the next layer, shape (batch_size, features)
+    ///
+    /// # Returns
+    /// Gradient with respect to the input of this layer, shape (batch_size, features).
+    pub fn backward_2d<B: Backend>(
+        &self,
+        pre_activation: &Tensor2D<B>,
+        grad_output: &Tensor2D<B>,
+    ) -> Tensor2D<B> {
+        match self {
+            Activation::ReLU => {
+                // ReLU'(z) = 1 if z > 0, else 0
+                let (rows, cols) = pre_activation.shape();
+                let zeros = Tensor2D::<B>::zeros(rows, cols);
+                let sign = pre_activation.sign();
+                let mask = zeros.maximum(sign);
+                grad_output.mul(&mask)
+            }
+            Activation::Sigmoid => {
+                // sigmoid'(z) = sigmoid(z) * (1 - sigmoid(z))
+                let output = self.forward_2d(pre_activation);
+                let one = Scalar::<B>::new(1.0);
+                let (rows, cols) = pre_activation.shape();
+                let one_minus = Tensor2D::<B>::zeros(rows, cols)
+                    .add_scalar(one)
+                    .sub(&output);
+                let sigmoid_deriv = output.mul(&one_minus);
+                grad_output.mul(&sigmoid_deriv)
+            }
+            Activation::Tanh => {
+                // tanh'(z) = 1 - tanh(z)^2 = 1 - output^2
+                let output = self.forward_2d(pre_activation);
+                let output_squared = output.mul(&output);
+                let one = Scalar::<B>::new(1.0);
+                let (rows, cols) = pre_activation.shape();
+                let tanh_deriv = Tensor2D::<B>::zeros(rows, cols)
+                    .add_scalar(one)
+                    .sub(&output_squared);
+                grad_output.mul(&tanh_deriv)
+            }
+            Activation::Identity => {
+                // Identity'(z) = 1, so just pass through the gradient
+                grad_output.clone()
+            }
+        }
+    }
+
+    /// Returns the ONNX op type name for this activation.
+    pub fn onnx_op_type(&self) -> &'static str {
+        match self {
+            Activation::ReLU => "Relu",
+            Activation::Sigmoid => "Sigmoid",
+            Activation::Tanh => "Tanh",
+            Activation::Identity => "Identity",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::backend::CpuBackend;
+
+    #[test]
+    fn test_relu_forward() {
+        let x = Tensor1D::<CpuBackend>::new(vec![-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let y = Activation::ReLU.forward_1d(&x);
+        assert_eq!(y.to_vec(), vec![0.0, 0.0, 0.0, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_relu_backward() {
+        let x = Tensor1D::<CpuBackend>::new(vec![-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let grad = Tensor1D::<CpuBackend>::new(vec![1.0, 1.0, 1.0, 1.0, 1.0]);
+        let backward = Activation::ReLU.backward_1d(&x, &grad);
+        let result = backward.to_vec();
+        // ReLU derivative: 0 for x <= 0, 1 for x > 0
+        assert_eq!(result[0], 0.0); // -2.0 <= 0
+        assert_eq!(result[1], 0.0); // -1.0 <= 0
+        assert_eq!(result[2], 0.0); // 0 <= 0 (subgradient at 0)
+        assert_eq!(result[3], 1.0); // 1.0 > 0
+        assert_eq!(result[4], 1.0); // 2.0 > 0
+    }
+
+    #[test]
+    fn test_sigmoid_forward() {
+        let x = Tensor1D::<CpuBackend>::new(vec![0.0]);
+        let y = Activation::Sigmoid.forward_1d(&x);
+        assert!((y.to_vec()[0] - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_sigmoid_backward() {
+        // At x=0, sigmoid(0) = 0.5, derivative = 0.5 * 0.5 = 0.25
+        let x = Tensor1D::<CpuBackend>::new(vec![0.0]);
+        let grad = Tensor1D::<CpuBackend>::new(vec![1.0]);
+        let backward = Activation::Sigmoid.backward_1d(&x, &grad);
+        assert!((backward.to_vec()[0] - 0.25).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_tanh_forward() {
+        let x = Tensor1D::<CpuBackend>::new(vec![0.0]);
+        let y = Activation::Tanh.forward_1d(&x);
+        assert!(y.to_vec()[0].abs() < 1e-12); // tanh(0) = 0
+    }
+
+    #[test]
+    fn test_tanh_backward() {
+        // At x=0, tanh(0) = 0, derivative = 1 - 0^2 = 1
+        let x = Tensor1D::<CpuBackend>::new(vec![0.0]);
+        let grad = Tensor1D::<CpuBackend>::new(vec![1.0]);
+        let backward = Activation::Tanh.backward_1d(&x, &grad);
+        assert!((backward.to_vec()[0] - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_identity_forward() {
+        let x = Tensor1D::<CpuBackend>::new(vec![-2.0, 0.0, 2.0]);
+        let y = Activation::Identity.forward_1d(&x);
+        assert_eq!(y.to_vec(), vec![-2.0, 0.0, 2.0]);
+    }
+
+    #[test]
+    fn test_identity_backward() {
+        let x = Tensor1D::<CpuBackend>::new(vec![-2.0, 0.0, 2.0]);
+        let grad = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0, 3.0]);
+        let backward = Activation::Identity.backward_1d(&x, &grad);
+        assert_eq!(backward.to_vec(), vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_onnx_op_type() {
+        assert_eq!(Activation::ReLU.onnx_op_type(), "Relu");
+        assert_eq!(Activation::Sigmoid.onnx_op_type(), "Sigmoid");
+        assert_eq!(Activation::Tanh.onnx_op_type(), "Tanh");
+        assert_eq!(Activation::Identity.onnx_op_type(), "Identity");
+    }
+
+    #[test]
+    fn test_default_activation() {
+        assert_eq!(Activation::default(), Activation::ReLU);
+    }
+
+    // ================== 2D Activation Tests ==================
+
+    #[test]
+    fn test_relu_forward_2d() {
+        let x = Tensor2D::<CpuBackend>::new(vec![-1.0, 0.0, 1.0, 2.0], 2, 2);
+        let y = Activation::ReLU.forward_2d(&x);
+        assert_eq!(y.ravel().to_vec(), vec![0.0, 0.0, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_relu_backward_2d() {
+        // At x=1, ReLU is active, derivative = 1
+        let x = Tensor2D::<CpuBackend>::new(vec![1.0, 1.0], 1, 2);
+        let grad = Tensor2D::<CpuBackend>::new(vec![2.0, 3.0], 1, 2);
+        let backward = Activation::ReLU.backward_2d(&x, &grad);
+        assert_eq!(backward.ravel().to_vec(), vec![2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_sigmoid_forward_2d() {
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0, 0.0], 1, 2);
+        let y = Activation::Sigmoid.forward_2d(&x);
+        assert!((y.ravel().to_vec()[0] - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_tanh_forward_2d() {
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0, 0.0], 1, 2);
+        let y = Activation::Tanh.forward_2d(&x);
+        assert!(y.ravel().to_vec()[0].abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_identity_forward_2d() {
+        let x = Tensor2D::<CpuBackend>::new(vec![-1.0, 0.0, 1.0, 2.0], 2, 2);
+        let y = Activation::Identity.forward_2d(&x);
+        assert_eq!(y.ravel().to_vec(), vec![-1.0, 0.0, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_identity_backward_2d() {
+        let x = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0], 1, 2);
+        let grad = Tensor2D::<CpuBackend>::new(vec![3.0, 4.0], 1, 2);
+        let backward = Activation::Identity.backward_2d(&x, &grad);
+        assert_eq!(backward.ravel().to_vec(), vec![3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_relu_backward_2d_batch() {
+        // For x > 0, derivative = 1, so gradient passes through
+        // For x < 0, derivative = 0, so gradient is blocked
+        let x = Tensor2D::<CpuBackend>::new(vec![-1.0, 0.0, 1.0, 2.0], 2, 2);
+        let grad = Tensor2D::<CpuBackend>::new(vec![1.0, 1.0, 1.0, 1.0], 2, 2);
+        let backward = Activation::ReLU.backward_2d(&x, &grad);
+        let result = backward.ravel().to_vec();
+        assert!(result[0].abs() < 1e-12); // x=-1 < 0, grad blocked
+        assert!(result[1].abs() < 1e-12); // x=0, grad blocked
+        assert!((result[2] - 1.0).abs() < 1e-12); // x=1 > 0, grad passes
+        assert!((result[3] - 1.0).abs() < 1e-12); // x=2 > 0, grad passes
+    }
+
+    #[test]
+    fn test_sigmoid_backward_2d_values() {
+        // At x=0, sigmoid(0) = 0.5, derivative = 0.5 * (1 - 0.5) = 0.25
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0], 1, 1);
+        let grad = Tensor2D::<CpuBackend>::new(vec![1.0], 1, 1);
+        let backward = Activation::Sigmoid.backward_2d(&x, &grad);
+        let result = backward.ravel().to_vec();
+        assert!((result[0] - 0.25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_tanh_backward_2d_values() {
+        // At x=0, tanh(0) = 0, derivative = 1 - 0^2 = 1
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0], 1, 1);
+        let grad = Tensor2D::<CpuBackend>::new(vec![1.0], 1, 1);
+        let backward = Activation::Tanh.backward_2d(&x, &grad);
+        let result = backward.ravel().to_vec();
+        assert!((result[0] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_sigmoid_forward_2d_values() {
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0, 1.0, -1.0], 1, 3);
+        let y = Activation::Sigmoid.forward_2d(&x);
+        let result = y.ravel().to_vec();
+        assert!((result[0] - 0.5).abs() < 1e-6); // sigmoid(0) = 0.5
+        assert!(result[1] > 0.5); // sigmoid(1) > 0.5
+        assert!(result[2] < 0.5); // sigmoid(-1) < 0.5
+    }
+
+    #[test]
+    fn test_tanh_forward_2d_values() {
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0, 1.0, -1.0], 1, 3);
+        let y = Activation::Tanh.forward_2d(&x);
+        let result = y.ravel().to_vec();
+        assert!(result[0].abs() < 1e-6); // tanh(0) = 0
+        assert!(result[1] > 0.0); // tanh(1) > 0
+        assert!(result[2] < 0.0); // tanh(-1) < 0
+    }
+
+    #[test]
+    fn test_relu_forward_2d_batch_values() {
+        // Test with batch of 2
+        let x = Tensor2D::<CpuBackend>::new(vec![-1.0, 2.0, -3.0, 4.0], 2, 2);
+        let y = Activation::ReLU.forward_2d(&x);
+        let result = y.ravel().to_vec();
+        assert_eq!(result, vec![0.0, 2.0, 0.0, 4.0]);
+    }
+
+    #[test]
+    fn test_sigmoid_backward_2d_batch() {
+        // Batch of 2 samples
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0, 0.0, 1.0, -1.0], 2, 2);
+        let grad = Tensor2D::<CpuBackend>::new(vec![1.0, 1.0, 1.0, 1.0], 2, 2);
+        let backward = Activation::Sigmoid.backward_2d(&x, &grad);
+        let result = backward.ravel().to_vec();
+        // At x=0, derivative = 0.25
+        assert!((result[0] - 0.25).abs() < 1e-6);
+        assert!((result[1] - 0.25).abs() < 1e-6);
+        // At x=1, sigmoid(1) ≈ 0.73, derivative = 0.73 * 0.27 ≈ 0.20
+        assert!(result[2] > 0.0 && result[2] < 0.25);
+    }
+
+    #[test]
+    fn test_tanh_backward_2d_batch() {
+        // Batch of 2 samples
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0, 0.0, 1.0, -1.0], 2, 2);
+        let grad = Tensor2D::<CpuBackend>::new(vec![1.0, 1.0, 1.0, 1.0], 2, 2);
+        let backward = Activation::Tanh.backward_2d(&x, &grad);
+        let result = backward.ravel().to_vec();
+        // At x=0, tanh(0) = 0, derivative = 1 - 0 = 1
+        assert!((result[0] - 1.0).abs() < 1e-6);
+        assert!((result[1] - 1.0).abs() < 1e-6);
+        // At x=1, tanh(1) ≈ 0.76, derivative = 1 - 0.76² ≈ 0.42
+        assert!(result[2] > 0.0 && result[2] < 1.0);
+    }
+
+    #[test]
+    fn test_identity_backward_2d_batch() {
+        let x = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
+        let grad = Tensor2D::<CpuBackend>::new(vec![0.5, 0.5, 0.5, 0.5], 2, 2);
+        let backward = Activation::Identity.backward_2d(&x, &grad);
+        assert_eq!(backward.ravel().to_vec(), vec![0.5, 0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_relu_backward_2d_large_batch() {
+        // Large batch
+        let x = Tensor2D::<CpuBackend>::new(
+            vec![
+                -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0,
+            ],
+            3,
+            4,
+        );
+        let grad = Tensor2D::<CpuBackend>::new(vec![1.0; 12], 3, 4);
+        let backward = Activation::ReLU.backward_2d(&x, &grad);
+        let result = backward.ravel().to_vec();
+        // Only positive x values should pass gradient
+        assert_eq!(
+            result,
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        );
+    }
+
+    #[test]
+    fn test_sigmoid_forward_extreme_values() {
+        // Very large positive value should approach 1
+        let x_large = Tensor1D::<CpuBackend>::new(vec![100.0]);
+        let y_large = Activation::Sigmoid.forward_1d(&x_large);
+        assert!(y_large.to_vec()[0] > 0.99);
+
+        // Very large negative value should approach 0
+        let x_small = Tensor1D::<CpuBackend>::new(vec![-100.0]);
+        let y_small = Activation::Sigmoid.forward_1d(&x_small);
+        assert!(y_small.to_vec()[0] < 0.01);
+    }
+
+    #[test]
+    fn test_tanh_forward_extreme_values() {
+        // Very large positive value should approach 1
+        let x_large = Tensor1D::<CpuBackend>::new(vec![100.0]);
+        let y_large = Activation::Tanh.forward_1d(&x_large);
+        assert!(y_large.to_vec()[0] > 0.99);
+
+        // Very large negative value should approach -1
+        let x_small = Tensor1D::<CpuBackend>::new(vec![-100.0]);
+        let y_small = Activation::Tanh.forward_1d(&x_small);
+        assert!(y_small.to_vec()[0] < -0.99);
+    }
+
+    #[test]
+    fn test_sigmoid_backward_2d_extreme() {
+        // At very large x, sigmoid ≈ 1, derivative ≈ 0
+        let x = Tensor2D::<CpuBackend>::new(vec![100.0], 1, 1);
+        let grad = Tensor2D::<CpuBackend>::new(vec![1.0], 1, 1);
+        let backward = Activation::Sigmoid.backward_2d(&x, &grad);
+        assert!(backward.ravel().to_vec()[0].abs() < 0.01);
+    }
+
+    #[test]
+    fn test_tanh_backward_2d_extreme() {
+        // At very large x, tanh ≈ 1, derivative ≈ 0
+        let x = Tensor2D::<CpuBackend>::new(vec![100.0], 1, 1);
+        let grad = Tensor2D::<CpuBackend>::new(vec![1.0], 1, 1);
+        let backward = Activation::Tanh.backward_2d(&x, &grad);
+        assert!(backward.ravel().to_vec()[0].abs() < 0.01);
+    }
+
+    #[test]
+    fn test_all_activations_forward_1d() {
+        let x = Tensor1D::<CpuBackend>::new(vec![0.5]);
+
+        let relu = Activation::ReLU.forward_1d(&x);
+        assert_eq!(relu.to_vec()[0], 0.5);
+
+        let sigmoid = Activation::Sigmoid.forward_1d(&x);
+        assert!((sigmoid.to_vec()[0] - 0.622459).abs() < 1e-5);
+
+        let tanh = Activation::Tanh.forward_1d(&x);
+        assert!((tanh.to_vec()[0] - 0.462117).abs() < 1e-5);
+
+        let identity = Activation::Identity.forward_1d(&x);
+        assert_eq!(identity.to_vec()[0], 0.5);
+    }
+
+    #[test]
+    fn test_all_activations_forward_2d() {
+        let x = Tensor2D::<CpuBackend>::new(vec![0.5, -0.5], 1, 2);
+
+        let relu = Activation::ReLU.forward_2d(&x);
+        assert_eq!(relu.ravel().to_vec(), vec![0.5, 0.0]);
+
+        let sigmoid = Activation::Sigmoid.forward_2d(&x);
+        assert!(sigmoid.ravel().to_vec()[0] > 0.5); // sigmoid(0.5) > 0.5
+        assert!(sigmoid.ravel().to_vec()[1] < 0.5); // sigmoid(-0.5) < 0.5
+
+        let tanh = Activation::Tanh.forward_2d(&x);
+        assert!(tanh.ravel().to_vec()[0] > 0.0); // tanh(0.5) > 0
+        assert!(tanh.ravel().to_vec()[1] < 0.0); // tanh(-0.5) < 0
+
+        let identity = Activation::Identity.forward_2d(&x);
+        assert_eq!(identity.ravel().to_vec(), vec![0.5, -0.5]);
+    }
+}

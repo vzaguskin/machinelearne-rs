@@ -77,3 +77,8 @@ onnx = ["dep:prost", "dep:prost-types", "dep:prost-build"]
 onnx-inference = ["onnx", "dep:ort", "dep:ndarray"]
 onnx-server = ["onnx-inference", "dep:tokio", "dep:axum", "dep:serde_json", "dep:clap"]
 onnx-cuda = ["onnx-inference", "ort?/cuda"]
+
+# Examples that require specific features
+[[example]]
+name = "export_mlp_onnx"
+required-features = ["onnx"]

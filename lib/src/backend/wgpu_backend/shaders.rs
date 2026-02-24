@@ -137,6 +137,8 @@ pub enum UnaryOp {
     Log,
     Sigmoid,
     Sqrt,
+    Relu,
+    Tanh,
 }
 
 impl UnaryOp {
@@ -148,6 +150,8 @@ impl UnaryOp {
             UnaryOp::Log => "log",
             UnaryOp::Sigmoid => "sigmoid",
             UnaryOp::Sqrt => "sqrt",
+            UnaryOp::Relu => "relu",
+            UnaryOp::Tanh => "tanh",
         }
     }
 }
@@ -1695,6 +1699,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             }
         }
         case 5u: { out[idx] = sqrt(v); }
+        case 6u: { out[idx] = max(0.0, v); }  // ReLU
+        case 7u: { out[idx] = tanh(v); }       // Tanh
         default: {}
     }
 }
@@ -1741,6 +1747,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             }
         }
         case 5u: { out[idx] = sqrt(v); }
+        case 6u: { out[idx] = max(0.0, v); }  // ReLU
+        case 7u: { out[idx] = tanh(v); }       // Tanh
         default: {}
     }
 }

@@ -519,6 +519,20 @@ impl Backend for CpuBackend {
             .collect()
     }
 
+    /// Element-wise ReLU (Rectified Linear Unit): max(0, x).
+    ///
+    /// Commonly used activation function in neural networks.
+    fn relu_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
+        x.iter().map(|&v| v.max(0.0)).collect()
+    }
+
+    /// Element-wise hyperbolic tangent: tanh(x).
+    ///
+    /// Output range: [-1, 1]. Often used in hidden layers.
+    fn tanh_1d(x: &Self::Tensor1D) -> Self::Tensor1D {
+        x.iter().map(|&v| v.tanh()).collect()
+    }
+
     // --- Mathematical functions (2D) ---
 
     /// Element-wise absolute value for 2D tensors.
@@ -569,6 +583,16 @@ impl Backend for CpuBackend {
     /// Element-wise sigmoid function for 2D tensors.
     fn sigmoid_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
         CpuTensor2D::new(Self::sigmoid_1d(&x.0), x.1, x.2)
+    }
+
+    /// Element-wise ReLU for 2D tensors: max(0, x).
+    fn relu_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
+        CpuTensor2D::new(Self::relu_1d(&x.0), x.1, x.2)
+    }
+
+    /// Element-wise hyperbolic tangent for 2D tensors: tanh(x).
+    fn tanh_2d(x: &Self::Tensor2D) -> Self::Tensor2D {
+        CpuTensor2D::new(Self::tanh_1d(&x.0), x.1, x.2)
     }
 
     // --- Linear algebra ---

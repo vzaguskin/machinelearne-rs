@@ -180,13 +180,13 @@ mod tests {
 
         let mut model = LinearModel::<CpuBackend, Unfitted>::new(1);
         let loss_fn = MSELoss;
-        let optimizer = SGD::new(0.01);
+        let optimizer: SGD<CpuBackend> = SGD::new(0.01);
 
         for epoch in 0..200 {
             let pred = model.forward(&x_tensor);
             let grad_pred = Loss::<CpuBackend>::grad_wrt_prediction(&loss_fn, &pred, &y_tensor);
             let grads = model.backward(&x_tensor, &grad_pred);
-            let new_params = optimizer.step(&model.params(), &grads);
+            let new_params = optimizer.step(model.params(), &grads);
             model.update_params(&new_params);
             if epoch % 5 == 0 {
                 let loss_val = Loss::<CpuBackend>::loss(&loss_fn, &pred, &y_tensor);
@@ -221,7 +221,7 @@ mod tests {
         let mut model = LinearModel::<CpuBackend, Unfitted>::new(1);
 
         let loss_fn = MSELoss;
-        let optimizer = SGD::new(0.01);
+        let optimizer: SGD<CpuBackend> = SGD::new(0.01);
 
         for _ in 0..3000 {
             let pred = model.forward(&x_tensor);

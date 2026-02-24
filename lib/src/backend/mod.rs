@@ -330,6 +330,12 @@ pub trait Backend: Clone + Copy + 'static {
     /// Element-wise sigmoid function: 1 / (1 + e^(-x)).
     fn sigmoid_1d(x: &Self::Tensor1D) -> Self::Tensor1D;
 
+    /// Element-wise ReLU function: max(0, x).
+    fn relu_1d(x: &Self::Tensor1D) -> Self::Tensor1D;
+
+    /// Element-wise hyperbolic tangent: tanh(x).
+    fn tanh_1d(x: &Self::Tensor1D) -> Self::Tensor1D;
+
     // --- Mathematical functions (2D) ---
 
     /// Element-wise absolute value for 2D tensors.
@@ -355,6 +361,12 @@ pub trait Backend: Clone + Copy + 'static {
 
     /// Element-wise sigmoid function for 2D tensors.
     fn sigmoid_2d(x: &Self::Tensor2D) -> Self::Tensor2D;
+
+    /// Element-wise ReLU function for 2D tensors: max(0, x).
+    fn relu_2d(x: &Self::Tensor2D) -> Self::Tensor2D;
+
+    /// Element-wise hyperbolic tangent for 2D tensors: tanh(x).
+    fn tanh_2d(x: &Self::Tensor2D) -> Self::Tensor2D;
 
     // --- Linear algebra ---
 
