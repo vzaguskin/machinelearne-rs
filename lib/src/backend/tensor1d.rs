@@ -483,6 +483,46 @@ impl<B: Backend> Tensor1D<B> {
             backend: PhantomData,
         }
     }
+
+    /// Computes element-wise ReLU (Rectified Linear Unit): max(0, x).
+    ///
+    /// Commonly used activation function in neural networks.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor1D;
+    ///
+    /// let x = Tensor1D::<CpuBackend>::new(vec![-2.0, 0.0, 3.0]);
+    /// let y = x.relu();
+    /// assert_eq!(y.to_vec(), vec![0.0, 0.0, 3.0]);
+    /// ```
+    pub fn relu(&self) -> Self {
+        Self {
+            data: B::relu_1d(&self.data),
+            backend: PhantomData,
+        }
+    }
+
+    /// Computes element-wise hyperbolic tangent: tanh(x).
+    ///
+    /// Output range: [-1, 1]. Often used in hidden layers of neural networks.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor1D;
+    ///
+    /// let x = Tensor1D::<CpuBackend>::new(vec![0.0]);
+    /// let y = x.tanh();
+    /// assert!((y.to_vec()[0]).abs() < 1e-12); // tanh(0) = 0
+    /// ```
+    pub fn tanh(&self) -> Self {
+        Self {
+            data: B::tanh_1d(&self.data),
+            backend: PhantomData,
+        }
+    }
 }
 
 #[cfg(test)]

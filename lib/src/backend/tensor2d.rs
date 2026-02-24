@@ -636,6 +636,46 @@ impl<B: Backend> Tensor2D<B> {
         }
     }
 
+    /// Computes element-wise ReLU (Rectified Linear Unit): max(0, x).
+    ///
+    /// Commonly used activation function in neural networks.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor2D;
+    ///
+    /// let x = Tensor2D::<CpuBackend>::new(vec![-2.0, 0.0, 3.0, 1.0], 2, 2);
+    /// let y = x.relu();
+    /// assert_eq!(y.ravel().to_vec(), vec![0.0, 0.0, 3.0, 1.0]);
+    /// ```
+    pub fn relu(&self) -> Self {
+        Self {
+            data: B::relu_2d(&self.data),
+            backend: PhantomData,
+        }
+    }
+
+    /// Computes element-wise hyperbolic tangent: tanh(x).
+    ///
+    /// Output range: [-1, 1]. Often used in hidden layers of neural networks.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor2D;
+    ///
+    /// let x = Tensor2D::<CpuBackend>::new(vec![0.0, 0.0], 1, 2);
+    /// let y = x.tanh();
+    /// assert!((y.ravel().to_vec()[0]).abs() < 1e-12); // tanh(0) = 0
+    /// ```
+    pub fn tanh(&self) -> Self {
+        Self {
+            data: B::tanh_2d(&self.data),
+            backend: PhantomData,
+        }
+    }
+
     /// Returns the shape of the tensor as `(rows, columns)`.
     ///
     /// # Returns

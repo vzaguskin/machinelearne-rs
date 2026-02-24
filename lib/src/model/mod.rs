@@ -12,6 +12,9 @@
 pub mod state;
 pub use state::{Fitted, Unfitted};
 
+pub mod activation;
+pub use activation::Activation;
+
 pub mod linear;
 pub use crate::backend::scalar::{Scalar, ScalarOps};
 pub use crate::backend::Backend;
