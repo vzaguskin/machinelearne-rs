@@ -19,13 +19,13 @@ use machinelearne_rs::{
     dataset::memory::InMemoryDataset,
     loss::MSELoss,
     model::{Activation, InferenceModel, TrainableModel, MLP},
-    optimizer::{Optimizer, SGD},
+    optimizer::SGD,
     regularizers::NoRegularizer,
     trainer::Trainer,
 };
 
 #[cfg(feature = "wgpu")]
-use machinelearne_rs::backend::WgpuBackend;
+use machinelearne_rs::{backend::WgpuBackend, optimizer::Optimizer};
 
 /// Generate synthetic regression dataset
 fn generate_dataset(n_samples: usize, n_features: usize) -> (Vec<Vec<f32>>, Vec<f32>) {
