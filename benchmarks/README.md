@@ -40,6 +40,92 @@ python3 benchmarks/scripts/fair_comparison_sklearn.py
 | `full_batch_comparison.rs` | Full-batch training analysis |
 | `learning_rate_search.rs` | Find optimal learning rates |
 | `sgd_comparison.rs` | SGD hyperparameter comparison |
+| `collect_metrics.rs` | Collect performance metrics |
+
+---
+
+### Backend Comparison (`backend_comparison.rs`)
+
+**Purpose:** Compare performance between CPU and ndarray backends.
+
+```bash
+cargo run --release -p benchmarks --bin backend_comparison --features ndarray
+```
+
+**What it tests:**
+- Same training workload on different backends
+- Training time comparison
+- Model accuracy (MSE, R²) for each backend
+
+**Output:** JSON file with timing and metrics for each backend.
+
+---
+
+### Full Batch Comparison (`full_batch_comparison.rs`)
+
+**Purpose:** Analyze full-batch gradient descent performance.
+
+```bash
+cargo run --release -p benchmarks --bin full_batch_comparison
+```
+
+**What it tests:**
+- Full-batch vs mini-batch training
+- Convergence characteristics
+- Optimal epoch counts
+
+**Output:** Timing and accuracy metrics for different configurations.
+
+---
+
+### Learning Rate Search (`learning_rate_search.rs`)
+
+**Purpose:** Find optimal learning rates for different batch sizes.
+
+```bash
+cargo run --release -p benchmarks --bin learning_rate_search
+```
+
+**What it tests:**
+- Multiple learning rates (0.001 to 1.0)
+- Different batch sizes
+- Convergence stability
+
+**Output:** Learning rate vs convergence analysis.
+
+---
+
+### SGD Comparison (`sgd_comparison.rs`)
+
+**Purpose:** Compare Rust SGD against sklearn's SGDRegressor.
+
+```bash
+cargo run --release -p benchmarks --bin sgd_comparison
+```
+
+**What it tests:**
+- Matches sklearn's SGDRegressor configuration (max_iter=1000, tol=1e-3)
+- Same preprocessing (StandardScaler)
+- Training time and accuracy comparison
+
+**Output:** JSON file with comparison metrics.
+
+---
+
+### Collect Metrics (`collect_metrics.rs`)
+
+**Purpose:** Collect performance metrics for different feature counts.
+
+```bash
+cargo run --release -p benchmarks --bin collect_metrics
+```
+
+**What it tests:**
+- Training time scaling with feature count (1, 2, 4, 8 features)
+- MSE, MAE, R² metrics for each configuration
+- Consistent evaluation methodology
+
+**Output:** `benchmarks/results/rust_metrics.json` with structured metrics.
 
 ## Results
 
