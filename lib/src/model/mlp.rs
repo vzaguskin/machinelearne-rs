@@ -301,23 +301,28 @@ impl<B: Backend> MLPModel<B, Unfitted> {
 
 /// Cache for storing intermediate values during forward pass.
 pub struct ForwardCache<B: Backend> {
-    /// Pre-activation values (z = Wx + b) for each layer
-    pub pre_activations: Vec<Tensor1D<B>>,
-    /// Post-activation values (a = activation(z)) for each layer
-    pub post_activations: Vec<Tensor1D<B>>,
+    /// Pre-activation values (z = Wx + b) for each layer - shape: (batch_size, out_features)
+    pub pre_activations: Vec<Tensor2D<B>>,
+    /// Post-activation values (a = activation(z)) for each layer - shape: (batch_size, out_features)
+    pub post_activations: Vec<Tensor2D<B>>,
 }
 
 impl<B: Backend> TrainableModel<B> for MLPModel<B, Unfitted> {
     type Input = Tensor2D<B>;
-    type Prediction = Tensor1D<B>;
+    type Prediction = Tensor1D<B>; // For Trainer compatibility with single-output models
     type Params = MLPParams<B>;
     type Gradients = MLPParams<B>;
     type Output = MLPModel<B, Fitted>;
 
     fn forward(&self, input: &Self::Input) -> Self::Prediction {
         let (cache, _) = self.forward_with_cache(input);
-        // Return the final output (last post-activation)
-        cache.post_activations.last().unwrap().clone()
+        // Get the final output (batch_size, output_features)
+        let output_2d = cache.post_activations.last().unwrap();
+
+        // Flatten to 1D: for single-output models, this is (batch_size,)
+        // For multi-output models, this flattens to (batch_size * output_features,)
+        let output_data = output_2d.ravel().to_vec();
+        Tensor1D::new(output_data.into_iter().map(|x| x as f32).collect())
     }
 
     fn backward(&self, input: &Self::Input, grad_output: &Self::Prediction) -> Self::Gradients {
@@ -326,31 +331,41 @@ impl<B: Backend> TrainableModel<B> for MLPModel<B, Unfitted> {
         let num_layers = self.params.layers.len();
         let mut layer_grads = Vec::with_capacity(num_layers);
 
-        // Initialize delta with the output gradient
-        let mut delta = grad_output.clone();
+        // Get output features from the last layer
+        let output_features = *self.layer_sizes.last().unwrap();
+
+        // Reshape 1D gradient back to 2D: (batch_size, output_features)
+        let grad_data = grad_output.to_vec();
+        let mut delta = Tensor2D::new(
+            grad_data.into_iter().map(|x| x as f32).collect(),
+            batch_size,
+            output_features,
+        );
 
         // Backpropagate through layers (reverse order)
         for i in (0..num_layers).rev() {
-            // Apply activation derivative
-            delta = self.activations[i].backward_1d(&cache.pre_activations[i], &delta);
+            // Apply activation derivative (element-wise, preserves batch dimension)
+            delta = self.activations[i].backward_2d(&cache.pre_activations[i], &delta);
 
-            // Get input to this layer
+            // Get input to this layer - shape: (batch_size, input_features)
             let layer_input = if i == 0 {
-                // First layer uses the original input
-                // For simplicity with batched 2D input, we need to handle this properly
-                // For now, assume single sample (batch_size = 1)
-                input.row(0)
+                input.clone()
             } else {
                 cache.post_activations[i - 1].clone()
             };
 
             // Compute weight gradients: grad_W = delta^T @ layer_input / batch_size
-            // For a single sample: outer product
-            let grad_weights = outer_product(&delta, &layer_input);
+            // delta shape: (batch_size, out_features) -> transposed: (out_features, batch_size)
+            // layer_input shape: (batch_size, in_features)
+            // Result: (out_features, in_features)
+            let delta_t = delta.transpose();
+            let grad_weights = delta_t.matmul(&layer_input);
             let grad_weights = grad_weights.scale(Scalar::new(1.0 / batch_size as f64));
 
-            // Compute bias gradients: grad_b = mean(delta, axis=0) = delta / batch_size
-            let grad_bias = delta.scale(&Scalar::new(1.0 / batch_size as f64));
+            // Compute bias gradients: grad_b = mean(delta, axis=0) = sum(delta, axis=0) / batch_size
+            // delta shape: (batch_size, out_features)
+            // We need to sum across the batch dimension
+            let grad_bias = sum_rows(&delta);
 
             layer_grads.insert(
                 0,
@@ -360,9 +375,11 @@ impl<B: Backend> TrainableModel<B> for MLPModel<B, Unfitted> {
                 },
             );
 
-            // Propagate delta to previous layer: delta = W^T @ delta
+            // Propagate delta to previous layer: delta = delta @ W
+            // delta shape: (batch_size, out_features), W shape: (out_features, in_features)
+            // Result: (batch_size, in_features)
             if i > 0 {
-                delta = self.params.layers[i].weights.transpose_matvec(&delta);
+                delta = delta.matmul(&self.params.layers[i].weights);
             }
         }
 
@@ -389,6 +406,21 @@ impl<B: Backend> TrainableModel<B> for MLPModel<B, Unfitted> {
     }
 }
 
+/// Sum rows of a 2D tensor, returning a 1D tensor.
+fn sum_rows<B: Backend>(tensor: &Tensor2D<B>) -> Tensor1D<B> {
+    let (rows, cols) = tensor.shape();
+    let data = tensor.ravel().to_vec();
+
+    let mut result = vec![0.0f64; cols];
+    for r in 0..rows {
+        for c in 0..cols {
+            result[c] += data[r * cols + c];
+        }
+    }
+
+    Tensor1D::new(result.into_iter().map(|x| x as f32).collect())
+}
+
 impl<B: Backend> MLPModel<B, Unfitted> {
     /// Forward pass that also returns cached values for backpropagation.
     ///
@@ -401,17 +433,25 @@ impl<B: Backend> MLPModel<B, Unfitted> {
             post_activations: Vec::with_capacity(self.params.layers.len()),
         };
 
-        // Process each sample in the batch
-        // For simplicity, we process the batch by averaging (or taking first sample)
-        // A proper implementation would handle full batching
-        let mut current = input.row(0);
+        // Process the entire batch using matrix operations
+        // current shape: (batch_size, in_features)
+        let mut current = input.clone();
 
         for (i, layer) in self.params.layers.iter().enumerate() {
-            // z = W @ x + b
-            let z = layer.weights.matvec(&current).add(&layer.bias);
+            // z = current @ W^T + b
+            // current: (batch_size, in_features), W: (out_features, in_features)
+            // We need to compute: (batch_size, in_features) @ (in_features, out_features) + b
+            // So we use W.transpose() to get (in_features, out_features)
+            let w_t = layer.weights.transpose();
 
-            // a = activation(z)
-            let a = self.activations[i].forward_1d(&z);
+            // z = current @ W^T -> shape: (batch_size, out_features)
+            let z = current.matmul(&w_t);
+
+            // Add bias to each row: z + b (broadcasting)
+            let z = add_bias_to_rows(&z, &layer.bias);
+
+            // a = activation(z) - element-wise, preserves shape
+            let a = self.activations[i].forward_2d(&z);
 
             cache.pre_activations.push(z);
             cache.post_activations.push(a.clone());
@@ -421,6 +461,22 @@ impl<B: Backend> MLPModel<B, Unfitted> {
 
         (cache, batch_size)
     }
+}
+
+/// Add bias to each row of a 2D tensor.
+fn add_bias_to_rows<B: Backend>(tensor: &Tensor2D<B>, bias: &Tensor1D<B>) -> Tensor2D<B> {
+    let (rows, cols) = tensor.shape();
+    let tensor_data = tensor.ravel().to_vec();
+    let bias_data = bias.to_vec();
+
+    let mut result = Vec::with_capacity(rows * cols);
+    for r in 0..rows {
+        for c in 0..cols {
+            result.push((tensor_data[r * cols + c] + bias_data[c]) as f32);
+        }
+    }
+
+    Tensor2D::new(result, rows, cols)
 }
 
 // =============================================================================
@@ -527,27 +583,6 @@ impl<B: Backend> MLPModel<B, Fitted> {
 }
 
 // =============================================================================
-// Helper Functions
-// =============================================================================
-
-/// Computes outer product of two 1D tensors: result[i,j] = a[i] * b[j]
-fn outer_product<B: Backend>(a: &Tensor1D<B>, b: &Tensor1D<B>) -> Tensor2D<B> {
-    let a_len = a.len();
-    let b_len = b.len();
-    let a_vec = a.to_vec();
-    let b_vec = b.to_vec();
-
-    let mut result = Vec::with_capacity(a_len * b_len);
-    for &ai in &a_vec {
-        for &bj in &b_vec {
-            result.push((ai * bj) as f32);
-        }
-    }
-
-    Tensor2D::new(result, a_len, b_len)
-}
-
-// =============================================================================
 // Tests
 // =============================================================================
 
@@ -605,17 +640,5 @@ mod tests {
         let norm = params.l2_norm();
         // With Xavier initialization, norm should be positive
         assert!(norm.data.to_f64() > 0.0);
-    }
-
-    #[test]
-    fn test_outer_product() {
-        let a = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0]);
-        let b = Tensor1D::<CpuBackend>::new(vec![3.0, 4.0]);
-        let result = outer_product(&a, &b);
-
-        assert_eq!(result.shape(), (2, 2));
-        let values = result.ravel().to_vec();
-        // [[1*3, 1*4], [2*3, 2*4]] = [[3, 4], [6, 8]]
-        assert_eq!(values, vec![3.0, 4.0, 6.0, 8.0]);
     }
 }

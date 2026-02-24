@@ -31,7 +31,7 @@
 //! ```
 
 use crate::backend::tensorlike::TensorLike;
-use crate::backend::{Backend, Scalar, Tensor1D};
+use crate::backend::{Backend, Scalar, Tensor1D, Tensor2D};
 
 /// Activation functions for neural network layers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -121,6 +121,67 @@ impl Activation {
                 let one = Scalar::<B>::new(1.0);
                 let tanh_deriv = Tensor1D::<B>::zeros(output.len())
                     .add_scalar(&one)
+                    .sub(&output_squared);
+                grad_output.mul(&tanh_deriv)
+            }
+            Activation::Identity => {
+                // Identity'(z) = 1, so just pass through the gradient
+                grad_output.clone()
+            }
+        }
+    }
+
+    /// Apply activation function to a 2D tensor (forward pass for batch processing).
+    pub fn forward_2d<B: Backend>(&self, x: &Tensor2D<B>) -> Tensor2D<B> {
+        match self {
+            Activation::ReLU => x.relu(),
+            Activation::Sigmoid => x.sigmoid(),
+            Activation::Tanh => x.tanh(),
+            Activation::Identity => x.clone(),
+        }
+    }
+
+    /// Compute derivative of activation function for 2D tensor (backward pass for batch processing).
+    ///
+    /// # Arguments
+    /// * `pre_activation` - The input to the activation (z = Wx + b), shape (batch_size, features)
+    /// * `grad_output` - Gradient from the next layer, shape (batch_size, features)
+    ///
+    /// # Returns
+    /// Gradient with respect to the input of this layer, shape (batch_size, features).
+    pub fn backward_2d<B: Backend>(
+        &self,
+        pre_activation: &Tensor2D<B>,
+        grad_output: &Tensor2D<B>,
+    ) -> Tensor2D<B> {
+        match self {
+            Activation::ReLU => {
+                // ReLU'(z) = 1 if z > 0, else 0
+                let (rows, cols) = pre_activation.shape();
+                let zeros = Tensor2D::<B>::zeros(rows, cols);
+                let sign = pre_activation.sign();
+                let mask = zeros.maximum(sign);
+                grad_output.mul(&mask)
+            }
+            Activation::Sigmoid => {
+                // sigmoid'(z) = sigmoid(z) * (1 - sigmoid(z))
+                let output = self.forward_2d(pre_activation);
+                let one = Scalar::<B>::new(1.0);
+                let (rows, cols) = pre_activation.shape();
+                let one_minus = Tensor2D::<B>::zeros(rows, cols)
+                    .add_scalar(one)
+                    .sub(&output);
+                let sigmoid_deriv = output.mul(&one_minus);
+                grad_output.mul(&sigmoid_deriv)
+            }
+            Activation::Tanh => {
+                // tanh'(z) = 1 - tanh(z)^2 = 1 - output^2
+                let output = self.forward_2d(pre_activation);
+                let output_squared = output.mul(&output);
+                let one = Scalar::<B>::new(1.0);
+                let (rows, cols) = pre_activation.shape();
+                let tanh_deriv = Tensor2D::<B>::zeros(rows, cols)
+                    .add_scalar(one)
                     .sub(&output_squared);
                 grad_output.mul(&tanh_deriv)
             }

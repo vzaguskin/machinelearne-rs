@@ -159,6 +159,29 @@ impl<B: Backend> Tensor2D<B> {
         }
     }
 
+    /// Computes element-wise multiplication: `self * other`.
+    ///
+    /// # Panics
+    /// Panics if tensors have different shapes.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor2D;
+    ///
+    /// let a = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+    /// let b = Tensor2D::<CpuBackend>::new(vec![5.0f32, 6.0, 7.0, 8.0], 2, 2);
+    /// let product = a.mul(&b);
+    /// // Result: [[5.0, 12.0], [21.0, 32.0]]
+    /// assert_eq!(product.mean().to_f64(), 17.5);
+    /// ```
+    pub fn mul(&self, other: &Self) -> Self {
+        Self {
+            data: B::mul_2d(&self.data, &other.data),
+            backend: PhantomData,
+        }
+    }
+
     /// Computes the arithmetic mean of all elements in the tensor.
     ///
     /// # Returns
