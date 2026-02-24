@@ -63,12 +63,21 @@ impl<B: Backend> LayerParams<B> {
     /// `U(-sqrt(6 / (fan_in + fan_out)), sqrt(6 / (fan_in + fan_out)))`
     ///
     /// Biases are initialized to zero.
-    ///
-    /// Note: Currently uses zeros pending random initialization support.
     pub fn xavier_init(in_features: usize, out_features: usize) -> Self {
-        // TODO: Implement proper random initialization
-        // let scale = (6.0 / (in_features + out_features) as f64).sqrt();
-        let weights = Tensor2D::zeros(out_features, in_features);
+        let scale = (6.0 / (in_features + out_features) as f64).sqrt() as f32;
+
+        // Use a simple deterministic pseudo-random sequence for initialization
+        // This ensures reproducibility while breaking symmetry
+        let n = out_features * in_features;
+        let mut weights = Vec::with_capacity(n);
+        for i in 0..n {
+            // Simple pseudo-random based on position
+            let x = ((i * 1103515245 + 12345) % 2147483648) as f32 / 2147483647.0;
+            let rand_val = x * 2.0 - 1.0; // Map to [-1, 1]
+            weights.push(rand_val * scale);
+        }
+
+        let weights = Tensor2D::new(weights, out_features, in_features);
         let bias = Tensor1D::zeros(out_features);
         Self { weights, bias }
     }

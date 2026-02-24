@@ -43,8 +43,8 @@
 - [x] Implement serialization (save/load)
 
 ## Phase 7: Integration
-- [ ] Implement `Optimizer<B, MLPParams<B>>` for `SGD<B>`
-- [ ] Implement `Regularizer<B, MLP<B>>` for L2
+- [x] Implement `Optimizer<B, MLPParams<B>>` for `SGD<B>`
+- [x] Implement `Regularizer<B, MLP<B>>` for L2
 - [x] Add exports to `lib/src/model/mod.rs`
 - [ ] Test full training pipeline
 
