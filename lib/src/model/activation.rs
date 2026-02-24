@@ -335,4 +335,67 @@ mod tests {
         let backward = Activation::Identity.backward_2d(&x, &grad);
         assert_eq!(backward.ravel().to_vec(), vec![3.0, 4.0]);
     }
+
+    #[test]
+    fn test_relu_backward_2d_batch() {
+        // For x > 0, derivative = 1, so gradient passes through
+        // For x < 0, derivative = 0, so gradient is blocked
+        let x = Tensor2D::<CpuBackend>::new(vec![-1.0, 0.0, 1.0, 2.0], 2, 2);
+        let grad = Tensor2D::<CpuBackend>::new(vec![1.0, 1.0, 1.0, 1.0], 2, 2);
+        let backward = Activation::ReLU.backward_2d(&x, &grad);
+        let result = backward.ravel().to_vec();
+        assert!(result[0].abs() < 1e-12); // x=-1 < 0, grad blocked
+        assert!(result[1].abs() < 1e-12); // x=0, grad blocked
+        assert!((result[2] - 1.0).abs() < 1e-12); // x=1 > 0, grad passes
+        assert!((result[3] - 1.0).abs() < 1e-12); // x=2 > 0, grad passes
+    }
+
+    #[test]
+    fn test_sigmoid_backward_2d_values() {
+        // At x=0, sigmoid(0) = 0.5, derivative = 0.5 * (1 - 0.5) = 0.25
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0], 1, 1);
+        let grad = Tensor2D::<CpuBackend>::new(vec![1.0], 1, 1);
+        let backward = Activation::Sigmoid.backward_2d(&x, &grad);
+        let result = backward.ravel().to_vec();
+        assert!((result[0] - 0.25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_tanh_backward_2d_values() {
+        // At x=0, tanh(0) = 0, derivative = 1 - 0^2 = 1
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0], 1, 1);
+        let grad = Tensor2D::<CpuBackend>::new(vec![1.0], 1, 1);
+        let backward = Activation::Tanh.backward_2d(&x, &grad);
+        let result = backward.ravel().to_vec();
+        assert!((result[0] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_sigmoid_forward_2d_values() {
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0, 1.0, -1.0], 1, 3);
+        let y = Activation::Sigmoid.forward_2d(&x);
+        let result = y.ravel().to_vec();
+        assert!((result[0] - 0.5).abs() < 1e-6); // sigmoid(0) = 0.5
+        assert!(result[1] > 0.5); // sigmoid(1) > 0.5
+        assert!(result[2] < 0.5); // sigmoid(-1) < 0.5
+    }
+
+    #[test]
+    fn test_tanh_forward_2d_values() {
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0, 1.0, -1.0], 1, 3);
+        let y = Activation::Tanh.forward_2d(&x);
+        let result = y.ravel().to_vec();
+        assert!(result[0].abs() < 1e-6); // tanh(0) = 0
+        assert!(result[1] > 0.0); // tanh(1) > 0
+        assert!(result[2] < 0.0); // tanh(-1) < 0
+    }
+
+    #[test]
+    fn test_relu_forward_2d_batch_values() {
+        // Test with batch of 2
+        let x = Tensor2D::<CpuBackend>::new(vec![-1.0, 2.0, -3.0, 4.0], 2, 2);
+        let y = Activation::ReLU.forward_2d(&x);
+        let result = y.ravel().to_vec();
+        assert_eq!(result, vec![0.0, 2.0, 0.0, 4.0]);
+    }
 }
