@@ -402,4 +402,52 @@ mod tests {
         assert_eq!(grad.weights.to_vec(), vec![0.0, 0.0]);
         assert_eq!(grad.bias.data, 0.0);
     }
+
+    #[test]
+    fn test_mlp_l2_regularizer() {
+        use crate::model::{Activation, MLP};
+
+        // Create a simple MLP with 2 layers
+        let model = MLP::<CpuBackend>::new(&[2, 3, 1], &[Activation::ReLU, Activation::Identity]);
+
+        let lambda = 0.1;
+        let l2 = L2::<CpuBackend>::new(lambda);
+
+        let (penalty, grad) = l2.regularizer_penalty_grad(&model);
+
+        // Penalty should be positive (sum of squared weights)
+        assert!(penalty.data > 0.0);
+
+        // Gradients should have same number of layers
+        assert_eq!(grad.layers.len(), 2);
+
+        // Each layer gradient should have matching shapes
+        for (layer_grad, layer_params) in grad.layers.iter().zip(model.params().layers.iter()) {
+            assert_eq!(layer_grad.weights.shape(), layer_params.weights.shape());
+            assert_eq!(layer_grad.bias.len(), layer_params.bias.len());
+        }
+    }
+
+    #[test]
+    fn test_mlp_no_regularizer() {
+        use crate::model::{Activation, MLP};
+
+        let model = MLP::<CpuBackend>::new(&[2, 3, 1], &[Activation::ReLU, Activation::Identity]);
+
+        let (penalty, grad) = NoRegularizer.regularizer_penalty_grad(&model);
+
+        // Penalty should be zero
+        assert_eq!(penalty.data, 0.0);
+
+        // All gradients should be zero
+        for layer_grad in &grad.layers {
+            let weight_vec = layer_grad.weights.ravel().to_vec();
+            for w in &weight_vec {
+                assert_eq!(*w, 0.0);
+            }
+            for b in layer_grad.bias.to_vec() {
+                assert_eq!(b, 0.0);
+            }
+        }
+    }
 }
