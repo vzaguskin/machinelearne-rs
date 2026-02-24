@@ -678,8 +678,7 @@ mod tests {
 
     #[test]
     fn test_mlp_batch_backward() {
-        let mut model =
-            MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
         // Batch of 3 samples
         let input = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
         let grad_output = Tensor1D::<CpuBackend>::new(vec![0.5, 0.3, 0.1]);
@@ -758,5 +757,301 @@ mod tests {
         assert_eq!(fitted.layer_sizes(), &[2, 4, 1]);
         assert_eq!(fitted.activations().len(), 2);
         assert_eq!(fitted.layers().len(), 2);
+    }
+
+    #[test]
+    fn test_mlp_batch_backward_3_samples() {
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        // Batch of 3 samples
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
+        let grad_output = Tensor1D::<CpuBackend>::new(vec![0.5, 0.3, 0.1]);
+
+        let gradients = model.backward(&input, &grad_output);
+        assert_eq!(gradients.layers.len(), 2);
+
+        // Verify gradient shapes
+        assert_eq!(gradients.layers[0].weights.shape(), (4, 2));
+        assert_eq!(gradients.layers[0].bias.len(), 4);
+        assert_eq!(gradients.layers[1].weights.shape(), (1, 4));
+        assert_eq!(gradients.layers[1].bias.len(), 1);
+    }
+
+    #[test]
+    fn test_mlp_sigmoid_activation() {
+        let model =
+            MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::Sigmoid, Activation::Identity]);
+        let input = Tensor2D::<CpuBackend>::new(vec![0.5, -0.5], 1, 2);
+        let output = model.forward(&input);
+        assert_eq!(output.len(), 1);
+    }
+
+    #[test]
+    fn test_mlp_tanh_activation() {
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::Tanh, Activation::Identity]);
+        let input = Tensor2D::<CpuBackend>::new(vec![0.5, -0.5], 1, 2);
+        let output = model.forward(&input);
+        assert_eq!(output.len(), 1);
+    }
+
+    #[test]
+    fn test_mlp_backward_sigmoid() {
+        let model =
+            MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::Sigmoid, Activation::Identity]);
+        let input = Tensor2D::<CpuBackend>::new(vec![0.5, -0.5], 1, 2);
+        let grad_output = Tensor1D::<CpuBackend>::new(vec![1.0]);
+
+        let gradients = model.backward(&input, &grad_output);
+        assert_eq!(gradients.layers.len(), 2);
+    }
+
+    #[test]
+    fn test_mlp_backward_tanh() {
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::Tanh, Activation::Identity]);
+        let input = Tensor2D::<CpuBackend>::new(vec![0.5, -0.5], 1, 2);
+        let grad_output = Tensor1D::<CpuBackend>::new(vec![1.0]);
+
+        let gradients = model.backward(&input, &grad_output);
+        assert_eq!(gradients.layers.len(), 2);
+    }
+
+    #[test]
+    fn test_mlp_3_layer_backward() {
+        let model = MLP::<CpuBackend>::new(
+            &[2, 4, 4, 1],
+            &[Activation::ReLU, Activation::Tanh, Activation::Identity],
+        );
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0], 1, 2);
+        let grad_output = Tensor1D::<CpuBackend>::new(vec![0.5]);
+
+        let gradients = model.backward(&input, &grad_output);
+        assert_eq!(gradients.layers.len(), 3);
+    }
+
+    #[test]
+    fn test_mlp_predict_batch_multiple_outputs() {
+        use crate::model::InferenceModel;
+
+        // Model with 2 outputs
+        let model = MLP::<CpuBackend>::new(&[3, 4, 2], &[Activation::ReLU, Activation::Identity]);
+        let fitted = model.into_fitted();
+
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3);
+        let output = fitted.predict_batch(&input);
+        assert_eq!(output.shape(), (2, 2)); // 2 samples, 2 outputs each
+    }
+
+    #[test]
+    fn test_sum_rows_helper() {
+        // Test the sum_rows helper function indirectly through backward pass
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
+        let grad_output = Tensor1D::<CpuBackend>::new(vec![1.0, 1.0]);
+
+        let gradients = model.backward(&input, &grad_output);
+        // Verify bias gradient is computed (sum_rows is used for this)
+        assert_eq!(gradients.layers[1].bias.len(), 1);
+    }
+
+    #[test]
+    fn test_layer_params_zeros() {
+        let params = LayerParams::<CpuBackend>::zeros(3, 2);
+        assert_eq!(params.weights.shape(), (2, 3));
+        assert_eq!(params.bias.len(), 2);
+        // All values should be zero
+        for w in params.weights.ravel().to_vec() {
+            assert_eq!(w, 0.0);
+        }
+        for b in params.bias.to_vec() {
+            assert_eq!(b, 0.0);
+        }
+    }
+
+    #[test]
+    fn test_layer_params_xavier_init() {
+        let params = LayerParams::<CpuBackend>::xavier_init(4, 2);
+        assert_eq!(params.weights.shape(), (2, 4));
+        assert_eq!(params.bias.len(), 2);
+        // Biases should be zero
+        for b in params.bias.to_vec() {
+            assert_eq!(b, 0.0);
+        }
+        // Weights should not all be zero (xavier init)
+        let weights = params.weights.ravel().to_vec();
+        let non_zero: Vec<_> = weights.iter().filter(|&&x| x != 0.0).collect();
+        assert!(!non_zero.is_empty());
+    }
+
+    #[test]
+    fn test_serializable_layer_params_roundtrip() {
+        let original = LayerParams::<CpuBackend>::xavier_init(3, 2);
+        let serializable: SerializableLayerParams = (&original).into();
+        let restored: LayerParams<CpuBackend> = serializable.try_into().unwrap();
+
+        assert_eq!(restored.weights.shape(), original.weights.shape());
+        assert_eq!(restored.bias.len(), original.bias.len());
+    }
+
+    #[test]
+    fn test_serializable_mlp_params_roundtrip() {
+        let params = MLPParams::<CpuBackend>::new(&[2, 4, 3, 1]);
+        let serializable: SerializableMLPParams = (&params).into();
+        let restored: MLPParams<CpuBackend> = serializable.try_into().unwrap();
+
+        assert_eq!(restored.layers.len(), params.layers.len());
+    }
+
+    #[test]
+    fn test_mlp_extract_and_from_params() {
+        use crate::model::InferenceModel;
+
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let fitted = model.into_fitted();
+
+        // Extract params
+        let params_repr = fitted.extract_params();
+
+        // Reconstruct from params
+        let reconstructed = MLPModel::<CpuBackend, Fitted>::from_params(params_repr).unwrap();
+
+        assert_eq!(reconstructed.layer_sizes(), &[2, 4, 1]);
+        // Default activations should be ReLU for hidden, Identity for output
+        assert_eq!(reconstructed.activations()[0], Activation::ReLU);
+        assert_eq!(reconstructed.activations()[1], Activation::Identity);
+
+        // Should give same predictions
+        let input = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0]);
+        let original_pred = fitted.predict(&input);
+        let reconstructed_pred = reconstructed.predict(&input);
+
+        // Predictions should be identical
+        for (a, b) in original_pred
+            .to_vec()
+            .iter()
+            .zip(reconstructed_pred.to_vec().iter())
+        {
+            assert!((a - b).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_mlp_from_params_multi_layer() {
+        use crate::model::InferenceModel;
+
+        // Create a 3-hidden-layer model
+        let model = MLP::<CpuBackend>::new(
+            &[3, 4, 4, 2, 1],
+            &[
+                Activation::ReLU,
+                Activation::Tanh,
+                Activation::Sigmoid,
+                Activation::Identity,
+            ],
+        );
+        let fitted = model.into_fitted();
+        let params_repr = fitted.extract_params();
+
+        // Reconstruct
+        let reconstructed = MLPModel::<CpuBackend, Fitted>::from_params(params_repr).unwrap();
+
+        // Should have 4 layers (3->4, 4->4, 4->2, 2->1)
+        assert_eq!(reconstructed.layers().len(), 4);
+        // Default activations: first 3 are ReLU, last is Identity
+        assert_eq!(reconstructed.activations()[0], Activation::ReLU);
+        assert_eq!(reconstructed.activations()[1], Activation::ReLU);
+        assert_eq!(reconstructed.activations()[2], Activation::ReLU);
+        assert_eq!(reconstructed.activations()[3], Activation::Identity);
+    }
+
+    #[test]
+    fn test_add_bias_to_rows() {
+        // Test the add_bias_to_rows helper indirectly through predict
+        use crate::model::InferenceModel;
+
+        let model =
+            MLP::<CpuBackend>::new(&[2, 3, 1], &[Activation::Identity, Activation::Identity]);
+
+        // Set specific weights and biases
+        let layer0 = &model.params.layers[0];
+        assert_eq!(layer0.weights.shape(), (3, 2));
+
+        let fitted = model.into_fitted();
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0, 0.0, 0.0, 1.0], 2, 2);
+        let output = fitted.predict_batch(&input);
+
+        // Output shape should be (2, 1)
+        assert_eq!(output.shape(), (2, 1));
+    }
+
+    #[test]
+    fn test_mlp_predict_single_sigmoid() {
+        use crate::model::InferenceModel;
+
+        let model =
+            MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::Sigmoid, Activation::Identity]);
+        let fitted = model.into_fitted();
+
+        let input = Tensor1D::<CpuBackend>::new(vec![0.0, 0.0]);
+        let output = fitted.predict(&input);
+        assert_eq!(output.len(), 1);
+    }
+
+    #[test]
+    fn test_mlp_predict_single_tanh() {
+        use crate::model::InferenceModel;
+
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::Tanh, Activation::Identity]);
+        let fitted = model.into_fitted();
+
+        let input = Tensor1D::<CpuBackend>::new(vec![0.0, 0.0]);
+        let output = fitted.predict(&input);
+        assert_eq!(output.len(), 1);
+    }
+
+    #[test]
+    fn test_mlp_batch_backward_with_sigmoid() {
+        let model =
+            MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::Sigmoid, Activation::Identity]);
+        let input = Tensor2D::<CpuBackend>::new(vec![0.5, -0.5, 1.0, 1.0], 2, 2);
+        let grad_output = Tensor1D::<CpuBackend>::new(vec![1.0, 0.5]);
+
+        let gradients = model.backward(&input, &grad_output);
+        assert_eq!(gradients.layers.len(), 2);
+        // Verify gradient shapes
+        assert_eq!(gradients.layers[0].weights.shape(), (4, 2));
+        assert_eq!(gradients.layers[1].weights.shape(), (1, 4));
+    }
+
+    #[test]
+    fn test_mlp_batch_backward_with_tanh() {
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::Tanh, Activation::Identity]);
+        let input = Tensor2D::<CpuBackend>::new(vec![0.5, -0.5, 1.0, 1.0], 2, 2);
+        let grad_output = Tensor1D::<CpuBackend>::new(vec![1.0, 0.5]);
+
+        let gradients = model.backward(&input, &grad_output);
+        assert_eq!(gradients.layers.len(), 2);
+    }
+
+    #[test]
+    fn test_mlp_large_batch() {
+        let model = MLP::<CpuBackend>::new(&[4, 8, 2], &[Activation::ReLU, Activation::Identity]);
+        // Batch of 10 samples
+        let input_data: Vec<f32> = (0..40).map(|x| x as f32 * 0.1).collect();
+        let input = Tensor2D::<CpuBackend>::new(input_data, 10, 4);
+        let output = model.forward(&input);
+        assert_eq!(output.len(), 20); // 10 samples * 2 outputs
+    }
+
+    #[test]
+    fn test_mlp_clone() {
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let cloned = model.clone();
+        assert_eq!(cloned.layer_sizes, model.layer_sizes);
+    }
+
+    #[test]
+    fn test_mlp_params_clone() {
+        let params = MLPParams::<CpuBackend>::new(&[2, 4, 1]);
+        let cloned = params.clone();
+        assert_eq!(cloned.layers.len(), params.layers.len());
     }
 }

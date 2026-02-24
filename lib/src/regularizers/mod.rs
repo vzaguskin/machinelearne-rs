@@ -450,4 +450,135 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_mlp_l1_regularizer() {
+        use crate::model::{Activation, MLP};
+
+        // Create a simple MLP with 2 layers
+        let model = MLP::<CpuBackend>::new(&[2, 3, 1], &[Activation::ReLU, Activation::Identity]);
+
+        let lambda = 0.1;
+        let l1 = L1::<CpuBackend>::new(lambda);
+
+        let (penalty, grad) = l1.regularizer_penalty_grad(&model);
+
+        // Penalty should be positive (sum of absolute weights)
+        assert!(penalty.data > 0.0);
+
+        // Gradients should have same number of layers
+        assert_eq!(grad.layers.len(), 2);
+
+        // Each layer gradient should have matching shapes
+        for (layer_grad, layer_params) in grad.layers.iter().zip(model.params().layers.iter()) {
+            assert_eq!(layer_grad.weights.shape(), layer_params.weights.shape());
+            assert_eq!(layer_grad.bias.len(), layer_params.bias.len());
+        }
+    }
+
+    #[test]
+    fn test_mlp_l1_regularizer_3_layer() {
+        use crate::model::{Activation, MLP};
+
+        // Create a 3-hidden-layer MLP
+        let model = MLP::<CpuBackend>::new(
+            &[4, 8, 4, 2],
+            &[Activation::ReLU, Activation::Tanh, Activation::Identity],
+        );
+
+        let lambda = 0.01;
+        let l1 = L1::<CpuBackend>::new(lambda);
+
+        let (penalty, grad) = l1.regularizer_penalty_grad(&model);
+
+        // Penalty should be positive
+        assert!(penalty.data > 0.0);
+
+        // Gradients should have 3 layers
+        assert_eq!(grad.layers.len(), 3);
+
+        // Bias gradients should all be zero (not regularized)
+        for layer_grad in &grad.layers {
+            for b in layer_grad.bias.to_vec() {
+                assert_eq!(b, 0.0);
+            }
+        }
+    }
+
+    #[test]
+    fn test_mlp_l2_regularizer_multi_layer() {
+        use crate::model::{Activation, MLP};
+
+        // Create a 3-hidden-layer MLP
+        let model = MLP::<CpuBackend>::new(
+            &[4, 8, 4, 2],
+            &[Activation::ReLU, Activation::Tanh, Activation::Identity],
+        );
+
+        let lambda = 0.01;
+        let l2 = L2::<CpuBackend>::new(lambda);
+
+        let (penalty, grad) = l2.regularizer_penalty_grad(&model);
+
+        // Penalty should be positive
+        assert!(penalty.data > 0.0);
+
+        // Gradients should have 3 layers
+        assert_eq!(grad.layers.len(), 3);
+
+        // Bias gradients should all be zero (not regularized)
+        for layer_grad in &grad.layers {
+            for b in layer_grad.bias.to_vec() {
+                assert_eq!(b, 0.0);
+            }
+        }
+    }
+
+    #[test]
+    fn test_l2_regularizer_large_weights() {
+        let weights = Tensor1D::<CpuBackend>::new(vec![10.0f32, 20.0, 30.0]);
+        let bias = Scalar::<CpuBackend>::new(1.0);
+        let params = LinearParams { weights, bias };
+        let model = LinearRegression::<CpuBackend>::from_params(params);
+
+        let l2 = L2::<CpuBackend>::new(1.0);
+        let (penalty, grad) = l2.regularizer_penalty_grad(&model);
+
+        // ||w||² = 10² + 20² + 30² = 100 + 400 + 900 = 1400
+        assert!((penalty.data - 1400.0).abs() < 1e-10);
+
+        // grad_w = 2 * λ * w = 2 * 1 * [10, 20, 30] = [20, 40, 60]
+        assert_eq!(grad.weights.to_vec(), vec![20.0, 40.0, 60.0]);
+    }
+
+    #[test]
+    fn test_l1_regularizer_negative_weights() {
+        let weights = Tensor1D::<CpuBackend>::new(vec![-5.0f32, -10.0]);
+        let bias = Scalar::<CpuBackend>::new(1.0);
+        let params = LinearParams { weights, bias };
+        let model = LinearRegression::<CpuBackend>::from_params(params);
+
+        let l1 = L1::<CpuBackend>::new(1.0);
+        let (penalty, grad) = l1.regularizer_penalty_grad(&model);
+
+        // ||w||₁ = |-5| + |-10| = 15
+        assert!((penalty.data - 15.0).abs() < 1e-10);
+
+        // grad_w = λ * sign(w) = 1 * [-1, -1] = [-1, -1]
+        assert_eq!(grad.weights.to_vec(), vec![-1.0, -1.0]);
+    }
+
+    #[test]
+    fn test_no_regularizer_linear() {
+        let weights = Tensor1D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0]);
+        let bias = Scalar::<CpuBackend>::new(1.0);
+        let params = LinearParams { weights, bias };
+        let model = LinearRegression::<CpuBackend>::from_params(params);
+
+        let (penalty, grad) = NoRegularizer.regularizer_penalty_grad(&model);
+
+        assert_eq!(penalty.data, 0.0);
+        assert_eq!(grad.weights.to_vec(), vec![0.0, 0.0, 0.0]);
+        assert_eq!(grad.bias.data, 0.0);
+    }
 }
