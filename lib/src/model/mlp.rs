@@ -645,4 +645,118 @@ mod tests {
         // With Xavier initialization, norm should be positive
         assert!(norm.data.to_f64() > 0.0);
     }
+
+    #[test]
+    fn test_mlp_backward() {
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0], 1, 2);
+        let grad_output = Tensor1D::<CpuBackend>::new(vec![0.5]);
+
+        let gradients = model.backward(&input, &grad_output);
+        assert_eq!(gradients.layers.len(), 2);
+    }
+
+    #[test]
+    fn test_mlp_forward_with_cache() {
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0], 1, 2);
+
+        let (cache, batch_size) = model.forward_with_cache(&input);
+        assert_eq!(batch_size, 1);
+        assert_eq!(cache.pre_activations.len(), 2);
+        assert_eq!(cache.post_activations.len(), 2);
+    }
+
+    #[test]
+    fn test_mlp_batch_forward() {
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        // Batch of 3 samples
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
+        let output = model.forward(&input);
+        assert_eq!(output.len(), 3); // 3 samples * 1 output
+    }
+
+    #[test]
+    fn test_mlp_batch_backward() {
+        let mut model =
+            MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        // Batch of 3 samples
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
+        let grad_output = Tensor1D::<CpuBackend>::new(vec![0.5, 0.3, 0.1]);
+
+        let gradients = model.backward(&input, &grad_output);
+        assert_eq!(gradients.layers.len(), 2);
+    }
+
+    #[test]
+    fn test_mlp_update_params() {
+        let mut model =
+            MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let new_params = MLPParams::<CpuBackend>::new(&[2, 4, 1]);
+        model.update_params(&new_params);
+    }
+
+    #[test]
+    fn test_mlp_into_fitted() {
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let fitted = model.into_fitted();
+        assert_eq!(fitted.layer_sizes(), &[2, 4, 1]);
+    }
+
+    #[test]
+    fn test_mlp_predict_single() {
+        use crate::model::InferenceModel;
+
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let fitted = model.into_fitted();
+
+        let input = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0]);
+        let output = fitted.predict(&input);
+        assert_eq!(output.len(), 1);
+    }
+
+    #[test]
+    fn test_mlp_predict_batch() {
+        use crate::model::InferenceModel;
+
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let fitted = model.into_fitted();
+
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 2, 2);
+        let output = fitted.predict_batch(&input);
+        assert_eq!(output.shape(), (2, 1));
+    }
+
+    #[test]
+    fn test_mlp_various_activations() {
+        // Test with different activation combinations
+        let model = MLP::<CpuBackend>::new(
+            &[2, 4, 4, 1],
+            &[Activation::Sigmoid, Activation::Tanh, Activation::Identity],
+        );
+        let input = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0], 1, 2);
+        let output = model.forward(&input);
+        assert_eq!(output.len(), 1);
+    }
+
+    #[test]
+    fn test_layer_params_accessors() {
+        let params = MLPParams::<CpuBackend>::new(&[2, 4, 1]);
+        assert_eq!(params.layers.len(), 2);
+
+        // Check first layer
+        let layer0 = &params.layers[0];
+        assert_eq!(layer0.weights.shape(), (4, 2)); // out x in
+        assert_eq!(layer0.bias.len(), 4);
+    }
+
+    #[test]
+    fn test_mlp_model_accessors() {
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let fitted = model.into_fitted();
+
+        assert_eq!(fitted.layer_sizes(), &[2, 4, 1]);
+        assert_eq!(fitted.activations().len(), 2);
+        assert_eq!(fitted.layers().len(), 2);
+    }
 }
