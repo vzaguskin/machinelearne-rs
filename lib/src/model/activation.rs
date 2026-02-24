@@ -288,4 +288,51 @@ mod tests {
     fn test_default_activation() {
         assert_eq!(Activation::default(), Activation::ReLU);
     }
+
+    // ================== 2D Activation Tests ==================
+
+    #[test]
+    fn test_relu_forward_2d() {
+        let x = Tensor2D::<CpuBackend>::new(vec![-1.0, 0.0, 1.0, 2.0], 2, 2);
+        let y = Activation::ReLU.forward_2d(&x);
+        assert_eq!(y.ravel().to_vec(), vec![0.0, 0.0, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_relu_backward_2d() {
+        // At x=1, ReLU is active, derivative = 1
+        let x = Tensor2D::<CpuBackend>::new(vec![1.0, 1.0], 1, 2);
+        let grad = Tensor2D::<CpuBackend>::new(vec![2.0, 3.0], 1, 2);
+        let backward = Activation::ReLU.backward_2d(&x, &grad);
+        assert_eq!(backward.ravel().to_vec(), vec![2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_sigmoid_forward_2d() {
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0, 0.0], 1, 2);
+        let y = Activation::Sigmoid.forward_2d(&x);
+        assert!((y.ravel().to_vec()[0] - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_tanh_forward_2d() {
+        let x = Tensor2D::<CpuBackend>::new(vec![0.0, 0.0], 1, 2);
+        let y = Activation::Tanh.forward_2d(&x);
+        assert!(y.ravel().to_vec()[0].abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_identity_forward_2d() {
+        let x = Tensor2D::<CpuBackend>::new(vec![-1.0, 0.0, 1.0, 2.0], 2, 2);
+        let y = Activation::Identity.forward_2d(&x);
+        assert_eq!(y.ravel().to_vec(), vec![-1.0, 0.0, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_identity_backward_2d() {
+        let x = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0], 1, 2);
+        let grad = Tensor2D::<CpuBackend>::new(vec![3.0, 4.0], 1, 2);
+        let backward = Activation::Identity.backward_2d(&x, &grad);
+        assert_eq!(backward.ravel().to_vec(), vec![3.0, 4.0]);
+    }
 }
