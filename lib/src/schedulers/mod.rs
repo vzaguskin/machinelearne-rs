@@ -182,8 +182,8 @@ impl LRScheduler for ExponentialLR {
 ///
 /// // Start at initial_lr
 /// assert!((scheduler.step(0, &metrics) - 0.1).abs() < 1e-10);
-/// // At T_max/2, should be at eta_min
-/// assert!((scheduler.step(50, &metrics) - 0.0).abs() < 1e-10);
+/// // At T_max/2, cos(pi/2) = 0, so lr = initial_lr * (1+0)/2 = initial_lr/2
+/// assert!((scheduler.step(50, &metrics) - 0.05).abs() < 1e-10);
 /// // At T_max, should be back at initial_lr
 /// assert!((scheduler.step(100, &metrics) - 0.1).abs() < 1e-10);
 /// ```
