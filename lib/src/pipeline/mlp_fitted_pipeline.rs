@@ -823,6 +823,52 @@ mod tests {
     }
 
     #[test]
+    fn test_mlp_pipeline_with_maxabs_scaler() {
+        use crate::preprocessing::scaling::MaxAbsScaler;
+
+        let data =
+            Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 4, 2);
+        let preproc = Pipeline::<CpuBackend>::new().add_maxabs_scaler(MaxAbsScaler::new());
+        let fitted_preproc = preproc.fit(&data).unwrap();
+
+        let model = create_simple_mlp_model();
+        let pipeline = MLPFittedPipeline::new(Some(fitted_preproc), None, model);
+
+        // Test save/load with MaxAbsScaler
+        let temp_file = std::env::temp_dir().join("test_mlp_pipeline_maxabs.bin");
+        pipeline.save_to_file(&temp_file).unwrap();
+
+        let loaded = MLPFittedPipeline::<CpuBackend>::load_from_file(&temp_file).unwrap();
+        assert_eq!(loaded.metadata().n_preproc_steps, 1);
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_mlp_pipeline_with_simple_imputer() {
+        use crate::preprocessing::imputation::{ImputeStrategy, SimpleImputer};
+
+        // Data with no missing values (imputer just passes through)
+        let data =
+            Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 4, 2);
+        let preproc = Pipeline::<CpuBackend>::new()
+            .add_simple_imputer(SimpleImputer::new(ImputeStrategy::Mean));
+        let fitted_preproc = preproc.fit(&data).unwrap();
+
+        let model = create_simple_mlp_model();
+        let pipeline = MLPFittedPipeline::new(Some(fitted_preproc), None, model);
+
+        // Test save/load with SimpleImputer
+        let temp_file = std::env::temp_dir().join("test_mlp_pipeline_imputer.bin");
+        pipeline.save_to_file(&temp_file).unwrap();
+
+        let loaded = MLPFittedPipeline::<CpuBackend>::load_from_file(&temp_file).unwrap();
+        assert_eq!(loaded.metadata().n_preproc_steps, 1);
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
     fn test_mlp_pipeline_with_minmax_scaler() {
         use crate::preprocessing::scaling::MinMaxScaler;
 
