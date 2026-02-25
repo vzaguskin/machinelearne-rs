@@ -1536,4 +1536,83 @@ mod tests {
             "on_epoch_end should be called 3 times"
         );
     }
+
+    #[test]
+    fn test_trainer_callback_with_scheduler_verbose() {
+        // Test callback + scheduler together with verbose mode
+        use crate::callbacks::{Callback, TrainingState};
+        use crate::schedulers::StepLR;
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        struct MetricRecorder {
+            lrs: Rc<RefCell<Vec<f64>>>,
+        }
+
+        impl<B: Backend, M: TrainableModel<B>> Callback<B, M> for MetricRecorder {
+            fn on_epoch_end(&mut self, state: &mut TrainingState<B, M>) {
+                self.lrs.borrow_mut().push(state.learning_rate);
+            }
+        }
+
+        let lrs = Rc::new(RefCell::new(Vec::new()));
+        let callback = MetricRecorder { lrs: lrs.clone() };
+
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let scheduler = Box::new(StepLR::new(0.1, 2, 0.5)); // Decay every 2 epochs
+
+        let trainer = Trainer::builder(MSELoss, SGD::<CpuBackend>::new(0.1), NoRegularizer)
+            .batch_size(3)
+            .max_epochs(5)
+            .with_callback(Box::new(callback))
+            .with_lr_scheduler(scheduler)
+            .with_initial_lr(0.1)
+            .verbose(true)
+            .build();
+
+        let _ = trainer.fit(model, &dataset);
+
+        let recorded_lrs = lrs.borrow();
+        // Scheduler: epoch 0,1 -> 0.1; epoch 2,3 -> 0.05; epoch 4 -> 0.025
+        assert_eq!(recorded_lrs.len(), 5);
+        assert!((recorded_lrs[0] - 0.1).abs() < 1e-10);
+        assert!((recorded_lrs[1] - 0.1).abs() < 1e-10);
+        assert!((recorded_lrs[2] - 0.05).abs() < 1e-10);
+        assert!((recorded_lrs[3] - 0.05).abs() < 1e-10);
+        assert!((recorded_lrs[4] - 0.025).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_trainer_callback_sets_metrics() {
+        // Test that callbacks can set metrics that affect training
+        use crate::callbacks::{Callback, TrainingState};
+
+        struct MetricSetter;
+
+        impl<B: Backend, M: TrainableModel<B>> Callback<B, M> for MetricSetter {
+            fn on_epoch_end(&mut self, state: &mut TrainingState<B, M>) {
+                // Set a custom metric
+                state.set_metric("custom_metric", state.epoch as f64 * 0.1);
+            }
+        }
+
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let trainer = Trainer::builder(MSELoss, SGD::<CpuBackend>::new(0.1), NoRegularizer)
+            .batch_size(3)
+            .max_epochs(3)
+            .with_callback(Box::new(MetricSetter))
+            .verbose(false)
+            .build();
+
+        let result = trainer.fit(model, &dataset);
+        assert!(result.is_ok());
+    }
 }
