@@ -523,6 +523,29 @@ impl<B: Backend> Tensor1D<B> {
             backend: PhantomData,
         }
     }
+
+    /// Computes element-wise square root: `sqrt(x)`.
+    ///
+    /// # Behavior for edge cases
+    /// - `x >= 0.0` → `sqrt(x)` (finite value)
+    /// - `x < 0.0` → `NaN`
+    /// - `x == 0.0` → `0.0`
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor1D;
+    ///
+    /// let x = Tensor1D::<CpuBackend>::new(vec![4.0, 9.0, 16.0]);
+    /// let y = x.sqrt();
+    /// assert_eq!(y.to_vec(), vec![2.0, 3.0, 4.0]);
+    /// ```
+    pub fn sqrt(&self) -> Self {
+        Self {
+            data: B::sqrt_1d(&self.data),
+            backend: PhantomData,
+        }
+    }
 }
 
 #[cfg(test)]

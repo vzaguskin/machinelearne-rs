@@ -6,6 +6,9 @@ use crate::model::linear::LinearParams;
 use crate::model::mlp::MLPParams;
 use crate::model::ParamOps;
 
+mod adam;
+pub use adam::Adam;
+
 /// Trait for gradient-based optimizers.
 ///
 /// Optimizers are responsible for updating model parameters based on computed gradients.
