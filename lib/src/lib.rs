@@ -139,6 +139,15 @@ pub mod serialization;
 /// High-level training loop orchestration.
 pub mod trainer;
 
+/// Training callbacks for monitoring and control.
+pub mod callbacks;
+
+/// Learning rate schedulers for adaptive training.
+pub mod schedulers;
+
+/// Checkpoint utilities for saving and restoring model state.
+pub mod checkpoint;
+
 /// Linear algebra utilities for closed-form solutions.
 pub mod linalg;
 

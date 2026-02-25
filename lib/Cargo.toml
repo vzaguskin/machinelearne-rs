@@ -53,7 +53,7 @@ prost-build = { version = "0.13", optional = true }
 
 [features]
 default = ["cpu", "serde"]
-serde = ["dep:serde", "dep:bincode"]
+serde = ["dep:serde", "dep:bincode", "dep:serde_json"]
 cpu = []
 ndarray = ["dep:ndarray"]
 

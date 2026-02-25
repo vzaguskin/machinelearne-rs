@@ -565,7 +565,8 @@ mod tests {
     #[test]
     fn test_tensor1d_new_empty() {
         let t = Tensor1D::<CpuBackend>::new(vec![]);
-        assert_eq!(t.to_vec(), vec![]);
+        let empty: Vec<f64> = vec![];
+        assert_eq!(t.to_vec(), empty);
         assert_eq!(t.len(), 0);
         assert!(t.is_empty());
     }
@@ -595,7 +596,8 @@ mod tests {
     #[test]
     fn test_tensor1d_zeros_empty() {
         let t = Tensor1D::<CpuBackend>::zeros(0);
-        assert_eq!(t.to_vec(), vec![]);
+        let empty: Vec<f64> = vec![];
+        assert_eq!(t.to_vec(), empty);
         assert_eq!(t.len(), 0);
         assert!(t.is_empty());
     }
