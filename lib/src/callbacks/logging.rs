@@ -273,4 +273,73 @@ mod tests {
         assert!(logger.file_path.is_some());
         assert!(!logger.console); // Default is no console output
     }
+
+    #[test]
+    fn test_logging_callback_lifecycle() {
+        use super::*;
+        use crate::backend::CpuBackend;
+        use crate::callbacks::{Callback, TrainingState};
+        use crate::model::linear::LinearRegression;
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        let mut logger = LoggingCallback::new(&path).with_log_frequency(2);
+
+        let model = LinearRegression::<CpuBackend>::new(2);
+
+        // on_train_start
+        let state = TrainingState::new(0, 0, 2, 4, 0.5, &model, 0.01);
+        logger.on_train_start(&state);
+
+        // on_batch_end with different batches
+        let mut state = TrainingState::new(0, 0, 2, 4, 0.5, &model, 0.01);
+        logger.on_batch_end(&mut state); // batch 0, log_frequency=2, should not log
+
+        state.batch = 2;
+        logger.on_batch_end(&mut state); // batch 2, should log
+
+        state.batch = 4;
+        logger.on_batch_end(&mut state); // batch 4, should log
+
+        // on_epoch_end
+        let mut state = TrainingState::new(0, 4, 2, 4, 0.3, &model, 0.01);
+        state.set_metric("val_loss", 0.25);
+        logger.on_epoch_end(&mut state);
+
+        // on_train_end
+        let state = TrainingState::new(2, 0, 2, 4, 0.1, &model, 0.01);
+        logger.on_train_end(&state);
+
+        // Verify file was written
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert!(contents.contains("train_start"));
+        assert!(contents.contains("train_end"));
+        assert!(contents.contains("val_loss"));
+    }
+
+    #[test]
+    fn test_logging_callback_console_only() {
+        use super::*;
+        use crate::backend::CpuBackend;
+        use crate::callbacks::{Callback, TrainingState};
+        use crate::model::linear::LinearRegression;
+
+        let mut logger = LoggingCallback::console_only();
+        assert!(logger.file.is_none());
+        assert!(logger.console);
+
+        let model = LinearRegression::<CpuBackend>::new(2);
+
+        // Test lifecycle methods don't panic
+        let state = TrainingState::new(0, 0, 1, 1, 0.5, &model, 0.01);
+        logger.on_train_start(&state);
+
+        let mut state = TrainingState::new(0, 0, 1, 1, 0.5, &model, 0.01);
+        logger.on_epoch_end(&mut state);
+
+        let state = TrainingState::new(1, 0, 1, 1, 0.3, &model, 0.01);
+        logger.on_train_end(&state);
+    }
 }

@@ -485,4 +485,151 @@ mod tests {
         scheduler.step(15, &metrics);
         assert!((scheduler.current_lr() - 0.05).abs() < 1e-10);
     }
+
+    #[test]
+    fn test_reduce_lr_missing_metric() {
+        let mut scheduler = ReduceLROnPlateau::for_minimize(0.1, 0.5, 3, 0.01, "val_loss");
+        let metrics = HashMap::new(); // Empty metrics
+
+        // Should return current LR when metric is missing
+        let lr = scheduler.step(0, &metrics);
+        assert!((lr - 0.1).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_reduce_lr_multiple_reductions() {
+        let mut scheduler = ReduceLROnPlateau::for_minimize(0.1, 0.5, 2, 0.01, "val_loss");
+        let mut metrics = HashMap::new();
+
+        // Initial
+        metrics.insert("val_loss".to_string(), 1.0);
+        scheduler.step(0, &metrics);
+        assert!((scheduler.current_lr() - 0.1).abs() < 1e-10);
+
+        // No improvement - patience 1
+        scheduler.step(1, &metrics);
+        assert!((scheduler.current_lr() - 0.1).abs() < 1e-10);
+
+        // No improvement - patience 2, triggers reduction
+        scheduler.step(2, &metrics);
+        assert!((scheduler.current_lr() - 0.05).abs() < 1e-10);
+
+        // Continue without improvement
+        scheduler.step(3, &metrics);
+        scheduler.step(4, &metrics);
+        // Another reduction
+        assert!((scheduler.current_lr() - 0.025).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_reduce_lr_improvement_resets_patience() {
+        let mut scheduler = ReduceLROnPlateau::for_minimize(0.1, 0.5, 3, 0.01, "val_loss");
+        let mut metrics = HashMap::new();
+
+        // Initial
+        metrics.insert("val_loss".to_string(), 1.0);
+        scheduler.step(0, &metrics);
+
+        // Some epochs without improvement
+        scheduler.step(1, &metrics);
+        scheduler.step(2, &metrics);
+
+        // Improvement! Should reset patience
+        metrics.insert("val_loss".to_string(), 0.5);
+        scheduler.step(3, &metrics);
+        assert!((scheduler.current_lr() - 0.1).abs() < 1e-10); // Still at initial LR
+
+        // More epochs without improvement - patience should restart
+        metrics.insert("val_loss".to_string(), 0.5);
+        scheduler.step(4, &metrics);
+        scheduler.step(5, &metrics);
+        assert!((scheduler.current_lr() - 0.1).abs() < 1e-10); // Still at initial LR
+    }
+
+    #[test]
+    fn test_reduce_lr_exact_min_delta() {
+        let mut scheduler = ReduceLROnPlateau::for_minimize(0.1, 0.5, 2, 0.1, "val_loss");
+        let mut metrics = HashMap::new();
+
+        // Initial
+        metrics.insert("val_loss".to_string(), 1.0);
+        scheduler.step(0, &metrics);
+
+        // Improvement exactly equal to min_delta - does NOT count as improvement
+        // (condition is metric_value < best_metric - min_delta)
+        metrics.insert("val_loss".to_string(), 0.9); // 0.9 < 1.0 - 0.1 = 0.9 is false
+        scheduler.step(1, &metrics);
+        assert!((scheduler.current_lr() - 0.1).abs() < 1e-10);
+
+        // Epoch 2: still no improvement
+        scheduler.step(2, &metrics);
+        // Epoch 3: Triggers reduction (patience=2, but we've had 3 epochs without improvement)
+        scheduler.step(3, &metrics);
+        assert!((scheduler.current_lr() - 0.05).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_step_lr_edge_cases() {
+        let mut scheduler = StepLR::new(0.1, 1, 0.5); // Decay every epoch
+        let metrics = HashMap::new();
+
+        // Epoch 0: num_decays = 0/1 = 0, lr = 0.1 * 0.5^0 = 0.1
+        assert!((scheduler.step(0, &metrics) - 0.1).abs() < 1e-10);
+        // Epoch 1: num_decays = 1/1 = 1, lr = 0.1 * 0.5^1 = 0.05
+        assert!((scheduler.step(1, &metrics) - 0.05).abs() < 1e-10);
+        // Epoch 2: num_decays = 2/1 = 2, lr = 0.1 * 0.5^2 = 0.025
+        assert!((scheduler.step(2, &metrics) - 0.025).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_exponential_lr_high_epochs() {
+        let mut scheduler = ExponentialLR::new(1.0, 0.5);
+        let metrics = HashMap::new();
+
+        // After 10 epochs: 1.0 * 0.5^10 = 0.0009765625
+        let lr = scheduler.step(10, &metrics);
+        assert!((lr - 0.5_f64.powi(10)).abs() < 1e-15);
+    }
+
+    #[test]
+    fn test_cosine_annealing_lr_with_nonzero_eta_min() {
+        let mut scheduler = CosineAnnealingLR::new(1.0, 100, 0.1);
+        let metrics = HashMap::new();
+
+        // At epoch 0: lr = 0.1 + (1.0 - 0.1) * (1 + cos(0)) / 2 = 0.1 + 0.9 = 1.0
+        assert!((scheduler.step(0, &metrics) - 1.0).abs() < 1e-10);
+
+        // At epoch 50: progress = 0.5, cos(pi/2) = 0
+        // lr = 0.1 + (1.0 - 0.1) * (1 + 0) / 2 = 0.1 + 0.45 = 0.55
+        assert!((scheduler.step(50, &metrics) - 0.55).abs() < 1e-10);
+
+        // At epoch 100: cycles back to 1.0
+        assert!((scheduler.step(100, &metrics) - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_reduce_lr_for_maximize_with_accuracy() {
+        let mut scheduler = ReduceLROnPlateau::for_maximize(0.01, 0.1, 3, 0.01, "val_accuracy");
+        let mut metrics = HashMap::new();
+
+        // Initial accuracy
+        metrics.insert("val_accuracy".to_string(), 0.8);
+        scheduler.step(0, &metrics);
+        assert!((scheduler.current_lr() - 0.01).abs() < 1e-10);
+
+        // Improvement
+        metrics.insert("val_accuracy".to_string(), 0.85);
+        scheduler.step(1, &metrics);
+        assert!((scheduler.current_lr() - 0.01).abs() < 1e-10);
+
+        // No improvement for 3 epochs
+        metrics.insert("val_accuracy".to_string(), 0.84);
+        scheduler.step(2, &metrics);
+        scheduler.step(3, &metrics);
+        scheduler.step(4, &metrics);
+
+        // After 3 epochs without improvement, LR should be reduced
+        let lr = scheduler.step(5, &metrics);
+        assert!((lr - 0.001).abs() < 1e-10, "Expected lr=0.001, got {}", lr);
+    }
 }

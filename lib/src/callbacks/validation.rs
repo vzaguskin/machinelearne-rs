@@ -215,4 +215,50 @@ mod tests {
         callback.on_epoch_end(&mut state);
         assert!(!state.metrics.contains_key("val_loss"));
     }
+
+    #[test]
+    fn test_validation_callback_frequency_zero() {
+        let val_x = vec![vec![1.0], vec![2.0]];
+        let val_y = vec![2.0, 4.0];
+        let val_dataset = InMemoryDataset::new(val_x, val_y).unwrap();
+
+        // Frequency of 0 means never validate
+        let mut callback: ValidationCallback<CpuBackend, MSELoss, LinearRegression<CpuBackend>> =
+            ValidationCallback::new(val_dataset, MSELoss, 0);
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+
+        // No epoch should trigger validation
+        for epoch in 0..10 {
+            let mut state = TrainingState::new(epoch, 0, 10, 1, 0.5, &model, 0.01);
+            callback.on_epoch_end(&mut state);
+            assert!(
+                !state.metrics.contains_key("val_loss"),
+                "val_loss should not be set at epoch {}",
+                epoch
+            );
+        }
+    }
+
+    #[test]
+    fn test_validation_callback_epoch_edge_cases() {
+        let val_x = vec![vec![1.0], vec![2.0]];
+        let val_y = vec![2.0, 4.0];
+        let val_dataset = InMemoryDataset::new(val_x, val_y).unwrap();
+
+        let mut callback: ValidationCallback<CpuBackend, MSELoss, LinearRegression<CpuBackend>> =
+            ValidationCallback::new(val_dataset, MSELoss, 5);
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+
+        // Test epoch 4 (5th epoch) - should run
+        let mut state = TrainingState::new(4, 0, 10, 1, 0.5, &model, 0.01);
+        callback.on_epoch_end(&mut state);
+        assert!(state.metrics.contains_key("val_loss"));
+
+        // Test epoch 9 (10th epoch) - should run
+        let mut state = TrainingState::new(9, 0, 10, 1, 0.5, &model, 0.01);
+        callback.on_epoch_end(&mut state);
+        assert!(state.metrics.contains_key("val_loss"));
+    }
 }

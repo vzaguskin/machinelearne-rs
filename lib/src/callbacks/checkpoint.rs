@@ -667,4 +667,320 @@ mod tests {
         assert!(best.is_some());
         assert_eq!(best.unwrap().metadata.epoch, 2); // epoch 2 has lowest val_loss (0.3)
     }
+
+    #[test]
+    fn test_find_best_checkpoint_maximize() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+
+        // Create test checkpoints with different val_accuracy values
+        for (epoch, val_acc) in [(1, 0.8), (2, 0.9), (3, 0.85)] {
+            let mut metrics = HashMap::new();
+            metrics.insert("val_accuracy".to_string(), val_acc);
+
+            let metadata = CheckpointMetadata {
+                epoch,
+                loss: 0.1,
+                learning_rate: 0.01,
+                metrics,
+                timestamp: 1000 * epoch as u64,
+                checkpoint_file: format!("checkpoint_{:05}.bin", epoch),
+            };
+
+            let json_path = dir_path.join(format!("checkpoint_{:05}.json", epoch));
+            let bin_path = dir_path.join(format!("checkpoint_{:05}.bin", epoch));
+
+            fs::write(&json_path, serde_json::to_string(&metadata).unwrap()).unwrap();
+            fs::write(&bin_path, b"dummy").unwrap();
+        }
+
+        let best =
+            utils::find_best_checkpoint(dir_path, "val_accuracy", MetricMode::Maximize).unwrap();
+        assert!(best.is_some());
+        assert_eq!(best.unwrap().metadata.epoch, 2); // epoch 2 has highest val_accuracy (0.9)
+    }
+
+    #[test]
+    fn test_save_strategy_combined() {
+        let strategy = SaveStrategy::Combined {
+            every_n: 5,
+            metric_name: "val_loss".to_string(),
+            mode: MetricMode::Minimize,
+        };
+        let mut callback: CheckpointCallback<CpuBackend, LinearModel<CpuBackend, Unfitted>> =
+            CheckpointCallback::new("/tmp/test", strategy, 0);
+
+        let mut metrics = HashMap::new();
+
+        // First value - should save (metric improvement)
+        metrics.insert("val_loss".to_string(), 1.0);
+        assert!(callback.should_save(0, &metrics));
+        callback.update_best_metric(&metrics);
+
+        // Epoch 4 (5th epoch) - should save (periodic)
+        assert!(callback.should_save(4, &metrics));
+
+        // Epoch 5 (6th epoch) with no improvement - should not save
+        assert!(!callback.should_save(5, &metrics));
+
+        // Better value at non-periodic epoch - should save (metric improvement)
+        metrics.insert("val_loss".to_string(), 0.5);
+        assert!(callback.should_save(6, &metrics));
+    }
+
+    #[test]
+    fn test_save_strategy_maximize() {
+        let strategy = SaveStrategy::BestMetric {
+            metric_name: "val_accuracy".to_string(),
+            mode: MetricMode::Maximize,
+        };
+        let mut callback: CheckpointCallback<CpuBackend, LinearModel<CpuBackend, Unfitted>> =
+            CheckpointCallback::new("/tmp/test", strategy, 0);
+
+        let mut metrics = HashMap::new();
+
+        // First value - should save
+        metrics.insert("val_accuracy".to_string(), 0.8);
+        assert!(callback.should_save(0, &metrics));
+        callback.update_best_metric(&metrics);
+
+        // Lower value - should not save
+        metrics.insert("val_accuracy".to_string(), 0.7);
+        assert!(!callback.should_save(1, &metrics));
+
+        // Higher value - should save
+        metrics.insert("val_accuracy".to_string(), 0.9);
+        assert!(callback.should_save(2, &metrics));
+    }
+
+    #[test]
+    fn test_with_prefix() {
+        let callback: CheckpointCallback<CpuBackend, LinearModel<CpuBackend, Unfitted>> =
+            CheckpointCallback::new("/tmp/test", SaveStrategy::EveryNEpochs(1), 0)
+                .with_prefix("model_v1");
+
+        assert_eq!(callback.prefix, "model_v1");
+    }
+
+    #[test]
+    fn test_list_checkpoints() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+
+        // Create test checkpoints
+        for epoch in [3, 1, 2] {
+            let metadata = CheckpointMetadata {
+                epoch,
+                loss: 0.1,
+                learning_rate: 0.01,
+                metrics: HashMap::new(),
+                timestamp: 1000 * epoch as u64,
+                checkpoint_file: format!("checkpoint_{:05}.bin", epoch),
+            };
+
+            let json_path = dir_path.join(format!("checkpoint_{:05}.json", epoch));
+            let bin_path = dir_path.join(format!("checkpoint_{:05}.bin", epoch));
+
+            fs::write(&json_path, serde_json::to_string(&metadata).unwrap()).unwrap();
+            fs::write(&bin_path, b"dummy").unwrap();
+        }
+
+        let checkpoints = utils::list_checkpoints(dir_path).unwrap();
+        assert_eq!(checkpoints.len(), 3);
+
+        // Should be sorted by epoch
+        assert_eq!(checkpoints[0].metadata.epoch, 1);
+        assert_eq!(checkpoints[1].metadata.epoch, 2);
+        assert_eq!(checkpoints[2].metadata.epoch, 3);
+    }
+
+    #[test]
+    fn test_load_metadata() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+
+        let metadata = CheckpointMetadata {
+            epoch: 42,
+            loss: 0.123,
+            learning_rate: 0.001,
+            metrics: HashMap::new(),
+            timestamp: 999999,
+            checkpoint_file: "checkpoint_00042.bin".to_string(),
+        };
+
+        let json_path = dir_path.join("checkpoint_00042.json");
+        fs::write(&json_path, serde_json::to_string(&metadata).unwrap()).unwrap();
+
+        let loaded = utils::load_metadata(&json_path).unwrap();
+        assert_eq!(loaded.epoch, 42);
+        assert!((loaded.loss - 0.123).abs() < 1e-10);
+        assert!((loaded.learning_rate - 0.001).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_list_checkpoints_empty_dir() {
+        let dir = tempdir().unwrap();
+        let checkpoints = utils::list_checkpoints(dir.path()).unwrap();
+        assert!(checkpoints.is_empty());
+    }
+
+    #[test]
+    fn test_find_latest_checkpoint_empty_dir() {
+        let dir = tempdir().unwrap();
+        let latest = utils::find_latest_checkpoint(dir.path()).unwrap();
+        assert!(latest.is_none());
+    }
+
+    #[test]
+    fn test_find_best_checkpoint_missing_metric() {
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+
+        // Create checkpoint without the metric we're looking for
+        let metadata = CheckpointMetadata {
+            epoch: 1,
+            loss: 0.1,
+            learning_rate: 0.01,
+            metrics: HashMap::new(), // no metrics
+            timestamp: 1000,
+            checkpoint_file: "checkpoint_00001.bin".to_string(),
+        };
+
+        let json_path = dir_path.join("checkpoint_00001.json");
+        let bin_path = dir_path.join("checkpoint_00001.bin");
+
+        fs::write(&json_path, serde_json::to_string(&metadata).unwrap()).unwrap();
+        fs::write(&bin_path, b"dummy").unwrap();
+
+        let best = utils::find_best_checkpoint(dir_path, "val_loss", MetricMode::Minimize).unwrap();
+        assert!(best.is_none()); // no checkpoints have the metric
+    }
+
+    #[test]
+    fn test_find_latest_checkpoint_nonexistent_dir() {
+        let latest = utils::find_latest_checkpoint("/nonexistent/path").unwrap();
+        assert!(latest.is_none());
+    }
+
+    #[test]
+    fn test_find_best_checkpoint_nonexistent_dir() {
+        let best =
+            utils::find_best_checkpoint("/nonexistent/path", "val_loss", MetricMode::Minimize)
+                .unwrap();
+        assert!(best.is_none());
+    }
+
+    #[test]
+    fn test_should_save_missing_metric() {
+        let strategy = SaveStrategy::BestMetric {
+            metric_name: "val_loss".to_string(),
+            mode: MetricMode::Minimize,
+        };
+        let callback: CheckpointCallback<CpuBackend, LinearModel<CpuBackend, Unfitted>> =
+            CheckpointCallback::new("/tmp/test", strategy, 0);
+
+        // Empty metrics - should not save
+        let metrics = HashMap::new();
+        assert!(!callback.should_save(0, &metrics));
+    }
+
+    #[test]
+    fn test_checkpoint_callback_train_lifecycle() {
+        use crate::callbacks::Callback;
+        use crate::model::linear::LinearRegression;
+
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+
+        let strategy = SaveStrategy::EveryNEpochs(1);
+        let mut callback: CheckpointCallback<CpuBackend, LinearModel<CpuBackend, Unfitted>> =
+            CheckpointCallback::new(dir_path, strategy, 3);
+
+        let model = LinearRegression::<CpuBackend>::new(2);
+
+        // on_train_start
+        let state = TrainingState::new(0, 0, 5, 1, 0.5, &model, 0.01);
+        callback.on_train_start(&state);
+
+        // Directory should be created
+        assert!(dir_path.exists());
+
+        // on_epoch_end for multiple epochs
+        for epoch in 0..5 {
+            let mut state =
+                TrainingState::new(epoch, 0, 5, 1, 0.5 - epoch as f64 * 0.1, &model, 0.01);
+            callback.on_epoch_end(&mut state);
+        }
+
+        // on_train_end - should cleanup old checkpoints
+        let state = TrainingState::new(5, 0, 5, 1, 0.0, &model, 0.01);
+        callback.on_train_end(&state);
+
+        // Should have at most 3 checkpoints (keep_best_n=3)
+        let checkpoints: Vec<_> = fs::read_dir(dir_path)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "bin"))
+            .collect();
+        assert!(checkpoints.len() <= 3);
+    }
+
+    #[test]
+    fn test_checkpoint_cleanup_sorts_by_loss() {
+        use crate::callbacks::Callback;
+        use crate::model::linear::LinearRegression;
+
+        let dir = tempdir().unwrap();
+        let dir_path = dir.path();
+
+        // Use EveryNEpochs strategy (sorts by loss for cleanup)
+        let strategy = SaveStrategy::EveryNEpochs(1);
+        let mut callback: CheckpointCallback<CpuBackend, LinearModel<CpuBackend, Unfitted>> =
+            CheckpointCallback::new(dir_path, strategy, 2);
+
+        let model = LinearRegression::<CpuBackend>::new(2);
+
+        callback.on_train_start(&TrainingState::new(0, 0, 3, 1, 0.5, &model, 0.01));
+
+        // Save 3 checkpoints with different losses
+        for epoch in 0..3 {
+            let loss = match epoch {
+                0 => 0.5, // Highest - should be removed
+                1 => 0.1, // Lowest
+                2 => 0.3, // Middle
+                _ => 0.0,
+            };
+            let mut state = TrainingState::new(epoch, 0, 3, 1, loss, &model, 0.01);
+            callback.on_epoch_end(&mut state);
+        }
+
+        // Cleanup on train end should keep 2 best (by loss)
+        callback.on_train_end(&TrainingState::new(3, 0, 3, 1, 0.0, &model, 0.01));
+
+        let checkpoints = utils::list_checkpoints(dir_path).unwrap();
+        assert_eq!(checkpoints.len(), 2);
+
+        // Should have epochs 1 (loss=0.1) and 2 (loss=0.3)
+        let epochs: Vec<_> = checkpoints.iter().map(|c| c.metadata.epoch).collect();
+        assert!(epochs.contains(&1));
+        assert!(epochs.contains(&2));
+    }
+
+    #[test]
+    fn test_checkpoint_save_fails_gracefully() {
+        // Test that error in save_checkpoint is handled
+        use crate::model::linear::LinearRegression;
+
+        let model = LinearRegression::<CpuBackend>::new(2);
+
+        // Create callback pointing to an invalid path
+        let strategy = SaveStrategy::EveryNEpochs(1);
+        let mut callback: CheckpointCallback<CpuBackend, LinearModel<CpuBackend, Unfitted>> =
+            CheckpointCallback::new("/nonexistent/path/that/cannot/be/created", strategy, 0);
+
+        let mut state = TrainingState::new(0, 0, 1, 1, 0.5, &model, 0.01);
+
+        // Should not panic even though save will fail
+        callback.on_epoch_end(&mut state);
+    }
 }
