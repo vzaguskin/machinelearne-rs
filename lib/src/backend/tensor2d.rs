@@ -182,6 +182,29 @@ impl<B: Backend> Tensor2D<B> {
         }
     }
 
+    /// Computes element-wise division: `self / other`.
+    ///
+    /// # Panics
+    /// Panics if tensors have different shapes or if any element in `other` is zero.
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor2D;
+    ///
+    /// let a = Tensor2D::<CpuBackend>::new(vec![6.0f32, 8.0, 10.0, 12.0], 2, 2);
+    /// let b = Tensor2D::<CpuBackend>::new(vec![2.0f32, 4.0, 5.0, 3.0], 2, 2);
+    /// let quotient = a.div(&b);
+    /// // Result: [[3.0, 2.0], [2.0, 4.0]]
+    /// assert_eq!(quotient.ravel().to_vec(), vec![3.0, 2.0, 2.0, 4.0]);
+    /// ```
+    pub fn div(&self, other: &Self) -> Self {
+        Self {
+            data: B::div_2d(&self.data, &other.data),
+            backend: PhantomData,
+        }
+    }
+
     /// Computes the arithmetic mean of all elements in the tensor.
     ///
     /// # Returns
@@ -719,6 +742,29 @@ impl<B: Backend> Tensor2D<B> {
     pub fn tanh(&self) -> Self {
         Self {
             data: B::tanh_2d(&self.data),
+            backend: PhantomData,
+        }
+    }
+
+    /// Computes element-wise square root: `sqrt(x)`.
+    ///
+    /// # Behavior for edge cases
+    /// - `x >= 0.0` → `sqrt(x)` (finite value)
+    /// - `x < 0.0` → `NaN`
+    /// - `x == 0.0` → `0.0`
+    ///
+    /// # Example
+    /// ```
+    /// use machinelearne_rs::backend::CpuBackend;
+    /// use machinelearne_rs::backend::Tensor2D;
+    ///
+    /// let x = Tensor2D::<CpuBackend>::new(vec![4.0, 9.0, 16.0, 25.0], 2, 2);
+    /// let y = x.sqrt();
+    /// assert_eq!(y.ravel().to_vec(), vec![2.0, 3.0, 4.0, 5.0]);
+    /// ```
+    pub fn sqrt(&self) -> Self {
+        Self {
+            data: B::sqrt_2d(&self.data),
             backend: PhantomData,
         }
     }
