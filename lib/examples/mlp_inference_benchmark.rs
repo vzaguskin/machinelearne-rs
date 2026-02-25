@@ -240,7 +240,7 @@ fn benchmark_wgpu_inference(
     n_iterations: usize,
 ) -> BenchmarkResult {
     use machinelearne_rs::backend::WgpuBackend;
-    use machinelearne_rs::model::InferenceModel;
+    use machinelearne_rs::model::{InferenceModel, TrainableModel};
 
     let (n_samples, n_features) = data.shape();
     let data_vec: Vec<f32> = data.ravel().to_vec().iter().map(|&x| x as f32).collect();
