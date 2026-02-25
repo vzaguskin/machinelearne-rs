@@ -1110,4 +1110,60 @@ mod tests {
         let cloned = params.clone();
         assert_eq!(cloned.layers.len(), params.layers.len());
     }
+
+    #[test]
+    fn test_from_params_with_activations() {
+        // Create and fit a model
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::Tanh, Activation::Sigmoid]);
+        let fitted = model.into_fitted();
+
+        // Extract params and activations
+        let params = fitted.extract_params();
+        let activations = fitted.activations().to_vec();
+
+        // Create new model with same params and activations
+        let reconstructed =
+            MLPModel::<CpuBackend, Fitted>::from_params_with_activations(params, &activations)
+                .unwrap();
+
+        // Verify layer sizes match
+        assert_eq!(reconstructed.layer_sizes(), fitted.layer_sizes());
+
+        // Verify activations match
+        assert_eq!(
+            reconstructed.activations().len(),
+            fitted.activations().len()
+        );
+        for (a, b) in reconstructed
+            .activations()
+            .iter()
+            .zip(fitted.activations().iter())
+        {
+            assert_eq!(a, b);
+        }
+
+        // Verify predictions match
+        let input = Tensor1D::<CpuBackend>::new(vec![0.5, -0.5]);
+        let pred1 = fitted.predict(&input);
+        let pred2 = reconstructed.predict(&input);
+        assert!((pred1.to_vec()[0] - pred2.to_vec()[0]).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_from_params_with_activations_wrong_count() {
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let fitted = model.into_fitted();
+        let params = fitted.extract_params();
+
+        // Try with wrong number of activations (should fail)
+        let result = MLPModel::<CpuBackend, Fitted>::from_params_with_activations(
+            params,
+            &[Activation::ReLU], // Wrong - should be 2
+        );
+
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("Activations length mismatch"));
+        }
+    }
 }
