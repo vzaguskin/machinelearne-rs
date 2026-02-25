@@ -243,7 +243,7 @@ fn benchmark_wgpu_inference(
     use machinelearne_rs::model::InferenceModel;
 
     let (n_samples, n_features) = data.shape();
-    let data_vec = data.ravel().to_vec();
+    let data_vec: Vec<f32> = data.ravel().to_vec().iter().map(|&x| x as f32).collect();
 
     // Create WGPU model with same parameters
     let wgpu_model: machinelearne_rs::model::MLPModel<
@@ -306,7 +306,7 @@ fn benchmark_onnx_cpu_inference(
     use machinelearne_rs::onnx::{OnnxExportable, OnnxInferenceSession};
 
     let (n_samples, n_features) = data.shape();
-    let data_vec = data.ravel().to_vec();
+    let data_vec: Vec<f32> = data.ravel().to_vec().iter().map(|&x| x as f32).collect();
 
     // Export model to ONNX
     let temp_file = tempfile::NamedTempFile::new().unwrap();
@@ -368,7 +368,7 @@ fn benchmark_onnx_gpu_inference(
     use machinelearne_rs::onnx::{OnnxExportable, OnnxInferenceSession};
 
     let (n_samples, n_features) = data.shape();
-    let data_vec = data.ravel().to_vec();
+    let data_vec: Vec<f32> = data.ravel().to_vec().iter().map(|&x| x as f32).collect();
 
     // Export model to ONNX
     let temp_file = tempfile::NamedTempFile::new().unwrap();
