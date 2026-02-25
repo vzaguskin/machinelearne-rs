@@ -584,6 +584,62 @@ impl<B: Backend> MLPModel<B, Fitted> {
     pub fn layers(&self) -> &[LayerParams<B>] {
         &self.params.layers
     }
+
+    /// Creates a fitted MLP model from serializable parameters with specific activations.
+    ///
+    /// This is useful for transferring model weights between different backends
+    /// while preserving the original activation functions.
+    ///
+    /// # Arguments
+    /// * `params` - Serializable parameters (can be from any backend)
+    /// * `activations` - Activation functions for each layer
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// // Extract params from CPU model
+    /// let params = cpu_model.extract_params();
+    /// let activations = cpu_model.activations().to_vec();
+    ///
+    /// // Create WGPU model with same weights and activations
+    /// let wgpu_model = MLPModel::<WgpuBackend, Fitted>::from_params_with_activations(
+    ///     params,
+    ///     &activations
+    /// )?;
+    /// ```
+    pub fn from_params_with_activations(
+        params: SerializableMLPParams,
+        activations: &[Activation],
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let mlp_params: MLPParams<B> = params.try_into()?;
+
+        // Reconstruct layer sizes from parameters
+        let layer_sizes: Vec<usize> = std::iter::once(
+            mlp_params
+                .layers
+                .first()
+                .map(|l| l.weights.shape().1)
+                .unwrap_or(0),
+        )
+        .chain(mlp_params.layers.iter().map(|l| l.weights.shape().0))
+        .collect();
+
+        // Validate activations length
+        if activations.len() != mlp_params.layers.len() {
+            return Err(format!(
+                "Activations length mismatch: expected {}, got {}",
+                mlp_params.layers.len(),
+                activations.len()
+            )
+            .into());
+        }
+
+        Ok(Self {
+            params: mlp_params,
+            activations: activations.to_vec(),
+            layer_sizes,
+            _state: PhantomData,
+        })
+    }
 }
 
 // =============================================================================

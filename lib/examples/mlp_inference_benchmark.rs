@@ -232,6 +232,9 @@ fn benchmark_cpu_inference(
 }
 
 /// Run WGPU inference benchmark.
+///
+/// Creates a WGPU model with the same weights and activations as the CPU model
+/// by using serializable parameters for cross-backend weight transfer.
 #[cfg(feature = "wgpu")]
 fn benchmark_wgpu_inference(
     model: &machinelearne_rs::model::MLPModel<CpuBackend, machinelearne_rs::model::Fitted>,
@@ -240,24 +243,19 @@ fn benchmark_wgpu_inference(
     n_iterations: usize,
 ) -> BenchmarkResult {
     use machinelearne_rs::backend::WgpuBackend;
-    use machinelearne_rs::model::{InferenceModel, TrainableModel};
+    use machinelearne_rs::model::{InferenceModel, MLPModel};
 
     let (n_samples, n_features) = data.shape();
     let data_vec: Vec<f32> = data.ravel().to_vec().iter().map(|&x| x as f32).collect();
 
-    // Create WGPU model with same parameters
+    // Transfer weights from CPU to WGPU via serialization
+    let params = model.extract_params();
+    let activations = model.activations();
+
     let wgpu_model: machinelearne_rs::model::MLPModel<
         WgpuBackend,
         machinelearne_rs::model::Fitted,
-    > = {
-        // Get layer sizes and activations from the CPU model
-        let layer_sizes = model.layer_sizes().to_vec();
-        let activations = model.activations().to_vec();
-
-        // Create new model and convert to fitted
-        let mlp = MLP::<WgpuBackend>::new(&layer_sizes, &activations);
-        mlp.into_fitted()
-    };
+    > = MLPModel::from_params_with_activations(params, activations).unwrap();
 
     // Create WGPU tensor
     let wgpu_data = Tensor2D::<WgpuBackend>::new(data_vec, n_samples, n_features);
@@ -563,6 +561,7 @@ fn main() {
     println!("\n{}", "=".repeat(80));
     println!("Prediction Comparison (Correctness Check)");
     println!("{}", "=".repeat(80));
+    println!("\nNote: All backends use the same trained model weights.");
 
     for (config_name, _, results) in &all_results {
         println!("\n{}:", config_name);
