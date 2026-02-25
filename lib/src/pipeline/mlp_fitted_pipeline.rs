@@ -821,4 +821,118 @@ mod tests {
         let model_ref = pipeline.model();
         assert_eq!(model_ref.layer_sizes(), model.layer_sizes());
     }
+
+    #[test]
+    fn test_mlp_pipeline_with_minmax_scaler() {
+        use crate::preprocessing::scaling::MinMaxScaler;
+
+        let data =
+            Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 4, 2);
+        let preproc = Pipeline::<CpuBackend>::new().add_minmax_scaler(MinMaxScaler::new());
+        let fitted_preproc = preproc.fit(&data).unwrap();
+
+        let model = create_simple_mlp_model();
+        let pipeline = MLPFittedPipeline::new(Some(fitted_preproc), None, model);
+
+        // Test save/load with MinMaxScaler
+        let temp_file = std::env::temp_dir().join("test_mlp_pipeline_minmax.bin");
+        pipeline.save_to_file(&temp_file).unwrap();
+
+        let loaded = MLPFittedPipeline::<CpuBackend>::load_from_file(&temp_file).unwrap();
+        assert_eq!(loaded.metadata().n_preproc_steps, 1);
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_mlp_pipeline_with_robust_scaler() {
+        use crate::preprocessing::scaling::RobustScaler;
+
+        let data =
+            Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 4, 2);
+        let preproc = Pipeline::<CpuBackend>::new().add_robust_scaler(RobustScaler::new());
+        let fitted_preproc = preproc.fit(&data).unwrap();
+
+        let model = create_simple_mlp_model();
+        let pipeline = MLPFittedPipeline::new(Some(fitted_preproc), None, model);
+
+        let temp_file = std::env::temp_dir().join("test_mlp_pipeline_robust.bin");
+        pipeline.save_to_file(&temp_file).unwrap();
+
+        let loaded = MLPFittedPipeline::<CpuBackend>::load_from_file(&temp_file).unwrap();
+        assert_eq!(loaded.metadata().n_preproc_steps, 1);
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_mlp_pipeline_with_normalizer() {
+        use crate::preprocessing::scaling::{NormType, Normalizer};
+
+        let data =
+            Tensor2D::<CpuBackend>::new(vec![3.0f32, 4.0, 6.0, 8.0, 9.0, 12.0, 12.0, 16.0], 4, 2);
+        let preproc = Pipeline::<CpuBackend>::new().add_normalizer(Normalizer::new(NormType::L2));
+        let fitted_preproc = preproc.fit(&data).unwrap();
+
+        let model = create_simple_mlp_model();
+        let pipeline = MLPFittedPipeline::new(Some(fitted_preproc), None, model);
+
+        let temp_file = std::env::temp_dir().join("test_mlp_pipeline_normalizer.bin");
+        pipeline.save_to_file(&temp_file).unwrap();
+
+        let loaded = MLPFittedPipeline::<CpuBackend>::load_from_file(&temp_file).unwrap();
+        assert_eq!(loaded.metadata().n_preproc_steps, 1);
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_mlp_pipeline_with_polynomial_features() {
+        use crate::preprocessing::feature_engineering::PolynomialFeatures;
+
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2);
+        let poly = PolynomialFeatures::new();
+        let fitted_poly = poly.fit(&data).unwrap();
+
+        // Note: model expects 2 inputs but polynomial produces 6 outputs
+        // We'll create a model that can handle the expanded features
+        let expanded_model =
+            MLP::<CpuBackend>::new(&[6, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let fitted_expanded_model = expanded_model.into_fitted();
+
+        let pipeline = MLPFittedPipeline::new(None, Some(fitted_poly), fitted_expanded_model);
+
+        // Test that metadata reflects polynomial features
+        assert!(pipeline.metadata().has_polynomial);
+        assert_eq!(pipeline.metadata().poly_degree, 2);
+
+        // Test save/load with polynomial
+        let temp_file = std::env::temp_dir().join("test_mlp_pipeline_poly.bin");
+        pipeline.save_to_file(&temp_file).unwrap();
+
+        let loaded = MLPFittedPipeline::<CpuBackend>::load_from_file(&temp_file).unwrap();
+        assert!(loaded.metadata().has_polynomial);
+        assert_eq!(loaded.metadata().poly_degree, 2);
+
+        std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_mlp_pipeline_new_with_polynomial_only() {
+        use crate::preprocessing::feature_engineering::PolynomialFeatures;
+
+        let data = Tensor2D::<CpuBackend>::new(vec![1.0f32, 2.0, 3.0, 4.0], 2, 2);
+        let poly = PolynomialFeatures::new();
+        let fitted_poly = poly.fit(&data).unwrap();
+
+        // Model with 6 inputs (polynomial output for 2 features with degree 2)
+        let model = MLP::<CpuBackend>::new(&[6, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let fitted_model = model.into_fitted();
+
+        let pipeline = MLPFittedPipeline::new(None, Some(fitted_poly), fitted_model);
+
+        // n_features_in should come from polynomial
+        assert_eq!(pipeline.n_features_in(), 2);
+        assert!(pipeline.metadata().has_polynomial);
+    }
 }
