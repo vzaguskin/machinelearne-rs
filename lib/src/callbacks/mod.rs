@@ -235,4 +235,133 @@ mod tests {
         callback.on_epoch_end(&mut state);
         callback.on_train_end(&state);
     }
+
+    /// Callback that records invocation order for testing.
+    struct OrderTrackingCallback {
+        pub calls: Vec<String>,
+    }
+
+    impl OrderTrackingCallback {
+        fn new() -> Self {
+            Self { calls: Vec::new() }
+        }
+    }
+
+    impl<B: Backend, M: TrainableModel<B>> Callback<B, M> for OrderTrackingCallback {
+        fn on_train_start(&mut self, _state: &TrainingState<B, M>) {
+            self.calls.push("train_start".to_string());
+        }
+
+        fn on_train_end(&mut self, _state: &TrainingState<B, M>) {
+            self.calls.push("train_end".to_string());
+        }
+
+        fn on_epoch_start(&mut self, state: &TrainingState<B, M>) {
+            self.calls.push(format!("epoch_start_{}", state.epoch));
+        }
+
+        fn on_epoch_end(&mut self, state: &mut TrainingState<B, M>) {
+            self.calls.push(format!("epoch_end_{}", state.epoch));
+        }
+
+        fn on_batch_start(&mut self, state: &TrainingState<B, M>) {
+            self.calls
+                .push(format!("batch_start_{}_{}", state.epoch, state.batch));
+        }
+
+        fn on_batch_end(&mut self, state: &mut TrainingState<B, M>) {
+            self.calls
+                .push(format!("batch_end_{}_{}", state.epoch, state.batch));
+        }
+    }
+
+    #[test]
+    fn test_callback_invocation_order() {
+        let model = LinearRegression::<CpuBackend>::new(2);
+
+        let mut callback = OrderTrackingCallback::new();
+
+        // Simulate training lifecycle with multiple epochs
+        // Epoch 0
+        let state = TrainingState::new(0, 0, 2, 2, 0.5, &model, 0.01);
+        callback.on_train_start(&state);
+        callback.on_epoch_start(&state);
+        callback.on_batch_start(&state);
+        let mut state = TrainingState::new(0, 0, 2, 2, 0.5, &model, 0.01);
+        callback.on_batch_end(&mut state);
+        let state = TrainingState::new(0, 1, 2, 2, 0.5, &model, 0.01);
+        callback.on_batch_start(&state);
+        let mut state = TrainingState::new(0, 1, 2, 2, 0.5, &model, 0.01);
+        callback.on_batch_end(&mut state);
+        let mut state = TrainingState::new(0, 1, 2, 2, 0.5, &model, 0.01);
+        callback.on_epoch_end(&mut state);
+
+        // Epoch 1
+        let state = TrainingState::new(1, 0, 2, 2, 0.5, &model, 0.01);
+        callback.on_epoch_start(&state);
+        callback.on_batch_start(&state);
+        let mut state = TrainingState::new(1, 0, 2, 2, 0.5, &model, 0.01);
+        callback.on_batch_end(&mut state);
+        let mut state = TrainingState::new(1, 0, 2, 2, 0.5, &model, 0.01);
+        callback.on_epoch_end(&mut state);
+
+        let state = TrainingState::new(2, 0, 2, 2, 0.5, &model, 0.01);
+        callback.on_train_end(&state);
+
+        // Verify order
+        assert_eq!(callback.calls[0], "train_start");
+        assert_eq!(callback.calls[1], "epoch_start_0");
+        assert_eq!(callback.calls[2], "batch_start_0_0");
+        assert_eq!(callback.calls[3], "batch_end_0_0");
+        assert_eq!(callback.calls[4], "batch_start_0_1");
+        assert_eq!(callback.calls[5], "batch_end_0_1");
+        assert_eq!(callback.calls[6], "epoch_end_0");
+        assert_eq!(callback.calls[7], "epoch_start_1");
+        assert_eq!(callback.calls[8], "batch_start_1_0");
+        assert_eq!(callback.calls[9], "batch_end_1_0");
+        assert_eq!(callback.calls[10], "epoch_end_1");
+        assert_eq!(callback.calls[11], "train_end");
+    }
+
+    /// Callback that requests stop after N epochs.
+    struct StopAfterCallback {
+        stop_after: usize,
+    }
+
+    impl StopAfterCallback {
+        fn new(stop_after: usize) -> Self {
+            Self { stop_after }
+        }
+    }
+
+    impl<B: Backend, M: TrainableModel<B>> Callback<B, M> for StopAfterCallback {
+        fn on_epoch_end(&mut self, state: &mut TrainingState<B, M>) {
+            if state.epoch >= self.stop_after {
+                state.request_stop();
+            }
+        }
+    }
+
+    #[test]
+    fn test_stop_requested_flag() {
+        let model = LinearRegression::<CpuBackend>::new(2);
+        let mut state = TrainingState::new(0, 0, 100, 10, 0.5, &model, 0.01);
+
+        let mut callback = StopAfterCallback::new(2);
+
+        // Epoch 0 - should not stop
+        state.epoch = 0;
+        callback.on_epoch_end(&mut state);
+        assert!(!state.stop_requested);
+
+        // Epoch 1 - should not stop
+        state.epoch = 1;
+        callback.on_epoch_end(&mut state);
+        assert!(!state.stop_requested);
+
+        // Epoch 2 - should request stop
+        state.epoch = 2;
+        callback.on_epoch_end(&mut state);
+        assert!(state.stop_requested);
+    }
 }

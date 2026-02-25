@@ -150,4 +150,69 @@ mod tests {
 
         assert_eq!(callback.batch_size, 16);
     }
+
+    #[test]
+    fn test_validation_callback_metrics_computation() {
+        // Create validation dataset: y = 2*x
+        let val_x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let val_y = vec![2.0, 4.0, 6.0];
+        let val_dataset = InMemoryDataset::new(val_x, val_y).unwrap();
+
+        let mut callback: ValidationCallback<CpuBackend, MSELoss, LinearRegression<CpuBackend>> =
+            ValidationCallback::new(val_dataset, MSELoss, 1).with_batch_size(3);
+
+        // Create a model with perfect weights (w=2, b=0)
+        let model = LinearRegression::<CpuBackend>::new(1);
+        // Note: The model starts with random weights, so we just test that metrics are computed
+
+        // Create training state
+        let mut state = TrainingState::new(0, 0, 10, 1, 0.5, &model, 0.01);
+
+        // Run callback (frequency=1 means every epoch)
+        callback.on_epoch_end(&mut state);
+
+        // Check that val_loss metric was set
+        assert!(
+            state.metrics.contains_key("val_loss"),
+            "val_loss metric should be set"
+        );
+
+        // The validation loss should be a valid number
+        let val_loss = state.metrics.get("val_loss").unwrap();
+        assert!(val_loss.is_finite(), "val_loss should be finite");
+        assert!(*val_loss >= 0.0, "val_loss should be non-negative");
+    }
+
+    #[test]
+    fn test_validation_callback_frequency() {
+        let val_x = vec![vec![1.0], vec![2.0]];
+        let val_y = vec![2.0, 4.0];
+        let val_dataset = InMemoryDataset::new(val_x, val_y).unwrap();
+
+        // Frequency of 3 means validation every 3 epochs
+        let mut callback: ValidationCallback<CpuBackend, MSELoss, LinearRegression<CpuBackend>> =
+            ValidationCallback::new(val_dataset, MSELoss, 3);
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+
+        // Epoch 0 (1st epoch) - should not run (frequency=3)
+        let mut state = TrainingState::new(0, 0, 10, 1, 0.5, &model, 0.01);
+        callback.on_epoch_end(&mut state);
+        assert!(!state.metrics.contains_key("val_loss"));
+
+        // Epoch 2 (3rd epoch) - should run
+        let mut state = TrainingState::new(2, 0, 10, 1, 0.5, &model, 0.01);
+        callback.on_epoch_end(&mut state);
+        assert!(state.metrics.contains_key("val_loss"));
+
+        // Epoch 5 (6th epoch) - should run
+        let mut state = TrainingState::new(5, 0, 10, 1, 0.5, &model, 0.01);
+        callback.on_epoch_end(&mut state);
+        assert!(state.metrics.contains_key("val_loss"));
+
+        // Epoch 6 (7th epoch) - should not run
+        let mut state = TrainingState::new(6, 0, 10, 1, 0.5, &model, 0.01);
+        callback.on_epoch_end(&mut state);
+        assert!(!state.metrics.contains_key("val_loss"));
+    }
 }

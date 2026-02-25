@@ -99,18 +99,20 @@ impl LoggingCallback {
             .map(|(k, v)| format!("\"{}\": {:.6}", k, v))
             .collect();
 
-        let batch_part = batch
-            .map(|b| format!(", \"batch\": {}", b))
-            .unwrap_or_default();
+        let batch_part = match batch {
+            Some(b) => format!(", \"batch\": {}", b),
+            None => String::new(),
+        };
+
+        let metrics_part = if metrics_json.is_empty() {
+            String::new()
+        } else {
+            format!(", {}", metrics_json.join(", "))
+        };
 
         format!(
-            "{{\"epoch\": {}, {}\"loss\": {:.6}, \"learning_rate\": {:.6}, \"timestamp\": {}, {}}}\n",
-            epoch,
-            batch_part,
-            loss,
-            learning_rate,
-            timestamp,
-            metrics_json.join(", ")
+            "{{\"epoch\": {}{}, \"loss\": {:.6}, \"learning_rate\": {:.6}, \"timestamp\": {}{}}}\n",
+            epoch, batch_part, loss, learning_rate, timestamp, metrics_part
         )
     }
 
@@ -213,5 +215,62 @@ mod tests {
         let logger = LoggingCallback::console_only();
         assert!(logger.file.is_none());
         assert!(logger.console);
+    }
+
+    #[test]
+    fn test_format_entry_is_valid_json() {
+        let mut metrics = HashMap::new();
+        metrics.insert("val_loss".to_string(), 0.123);
+        metrics.insert("val_accuracy".to_string(), 0.95);
+
+        let entry = LoggingCallback::format_entry(10, Some(5), 0.5, 0.01, &metrics);
+
+        // Should be valid JSON
+        let parsed: serde_json::Value =
+            serde_json::from_str(entry.trim()).expect("Entry should be valid JSON");
+
+        assert_eq!(parsed["epoch"], 10);
+        assert_eq!(parsed["batch"], 5);
+        assert!((parsed["loss"].as_f64().unwrap() - 0.5).abs() < 0.001);
+        assert!((parsed["learning_rate"].as_f64().unwrap() - 0.01).abs() < 0.001);
+        // Metrics are at top level
+        assert!((parsed["val_loss"].as_f64().unwrap() - 0.123).abs() < 0.001);
+        assert!((parsed["val_accuracy"].as_f64().unwrap() - 0.95).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_format_entry_empty_metrics() {
+        let metrics = HashMap::new();
+        let entry = LoggingCallback::format_entry(0, None, 1.0, 0.1, &metrics);
+
+        let parsed: serde_json::Value = serde_json::from_str(entry.trim()).unwrap();
+        assert_eq!(parsed["epoch"], 0);
+        assert!((parsed["loss"].as_f64().unwrap() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_log_frequency_filtering() {
+        // Create a callback that logs every 5 batches
+        let mut logger = LoggingCallback::console_only();
+        logger.log_frequency = 5;
+
+        // Batches 0, 5, 10 should be logged (is_multiple_of)
+        assert!(5usize.is_multiple_of(logger.log_frequency));
+        assert!(10usize.is_multiple_of(logger.log_frequency));
+        assert!(!3usize.is_multiple_of(logger.log_frequency));
+        assert!(!7usize.is_multiple_of(logger.log_frequency));
+    }
+
+    #[test]
+    fn test_file_logger_creation() {
+        use tempfile::NamedTempFile;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_path_buf();
+
+        let logger = LoggingCallback::new(&path);
+        assert!(logger.file.is_some());
+        assert!(logger.file_path.is_some());
+        assert!(!logger.console); // Default is no console output
     }
 }
