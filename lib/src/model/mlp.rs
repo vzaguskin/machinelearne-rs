@@ -584,6 +584,62 @@ impl<B: Backend> MLPModel<B, Fitted> {
     pub fn layers(&self) -> &[LayerParams<B>] {
         &self.params.layers
     }
+
+    /// Creates a fitted MLP model from serializable parameters with specific activations.
+    ///
+    /// This is useful for transferring model weights between different backends
+    /// while preserving the original activation functions.
+    ///
+    /// # Arguments
+    /// * `params` - Serializable parameters (can be from any backend)
+    /// * `activations` - Activation functions for each layer
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// // Extract params from CPU model
+    /// let params = cpu_model.extract_params();
+    /// let activations = cpu_model.activations().to_vec();
+    ///
+    /// // Create WGPU model with same weights and activations
+    /// let wgpu_model = MLPModel::<WgpuBackend, Fitted>::from_params_with_activations(
+    ///     params,
+    ///     &activations
+    /// )?;
+    /// ```
+    pub fn from_params_with_activations(
+        params: SerializableMLPParams,
+        activations: &[Activation],
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let mlp_params: MLPParams<B> = params.try_into()?;
+
+        // Reconstruct layer sizes from parameters
+        let layer_sizes: Vec<usize> = std::iter::once(
+            mlp_params
+                .layers
+                .first()
+                .map(|l| l.weights.shape().1)
+                .unwrap_or(0),
+        )
+        .chain(mlp_params.layers.iter().map(|l| l.weights.shape().0))
+        .collect();
+
+        // Validate activations length
+        if activations.len() != mlp_params.layers.len() {
+            return Err(format!(
+                "Activations length mismatch: expected {}, got {}",
+                mlp_params.layers.len(),
+                activations.len()
+            )
+            .into());
+        }
+
+        Ok(Self {
+            params: mlp_params,
+            activations: activations.to_vec(),
+            layer_sizes,
+            _state: PhantomData,
+        })
+    }
 }
 
 // =============================================================================
@@ -1053,5 +1109,61 @@ mod tests {
         let params = MLPParams::<CpuBackend>::new(&[2, 4, 1]);
         let cloned = params.clone();
         assert_eq!(cloned.layers.len(), params.layers.len());
+    }
+
+    #[test]
+    fn test_from_params_with_activations() {
+        // Create and fit a model
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::Tanh, Activation::Sigmoid]);
+        let fitted = model.into_fitted();
+
+        // Extract params and activations
+        let params = fitted.extract_params();
+        let activations = fitted.activations().to_vec();
+
+        // Create new model with same params and activations
+        let reconstructed =
+            MLPModel::<CpuBackend, Fitted>::from_params_with_activations(params, &activations)
+                .unwrap();
+
+        // Verify layer sizes match
+        assert_eq!(reconstructed.layer_sizes(), fitted.layer_sizes());
+
+        // Verify activations match
+        assert_eq!(
+            reconstructed.activations().len(),
+            fitted.activations().len()
+        );
+        for (a, b) in reconstructed
+            .activations()
+            .iter()
+            .zip(fitted.activations().iter())
+        {
+            assert_eq!(a, b);
+        }
+
+        // Verify predictions match
+        let input = Tensor1D::<CpuBackend>::new(vec![0.5, -0.5]);
+        let pred1 = fitted.predict(&input);
+        let pred2 = reconstructed.predict(&input);
+        assert!((pred1.to_vec()[0] - pred2.to_vec()[0]).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_from_params_with_activations_wrong_count() {
+        let model = MLP::<CpuBackend>::new(&[2, 4, 1], &[Activation::ReLU, Activation::Identity]);
+        let fitted = model.into_fitted();
+        let params = fitted.extract_params();
+
+        // Try with wrong number of activations (should fail)
+        let result = MLPModel::<CpuBackend, Fitted>::from_params_with_activations(
+            params,
+            &[Activation::ReLU], // Wrong - should be 2
+        );
+
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("Activations length mismatch"));
+        }
     }
 }
