@@ -73,16 +73,20 @@
 //! - Chen & Guestrin (2016). "XGBoost: A Scalable Tree Boosting System"
 
 pub mod boosting;
+pub mod comparison;
 pub mod decision_stump;
 pub mod decision_tree;
 pub mod ensemble_model;
 pub mod loss;
+pub mod stacking;
+pub mod tuning;
 
 // Re-export main types for convenience
 pub use boosting::{
     EarlyStoppingConfig, GradientBoostingConfig, GradientBoostingRegressor,
     GradientBoostingTrainer, WeakLearner,
 };
+pub use comparison::{Evaluable, ModelComparison, ModelMetrics, ModelResult};
 pub use decision_stump::{DecisionStump, FittedStump};
 pub use decision_tree::{DecisionTree, DecisionTreeConfig, FittedTree, TreeNode};
 pub use ensemble_model::{
@@ -90,6 +94,8 @@ pub use ensemble_model::{
     StumpPredictor,
 };
 pub use loss::{BoostingLoss, LeastSquaresLoss, LogisticLoss, QuantileLoss};
+pub use stacking::{Stackable, StackingBuilder, StackingConfig, StackingEnsemble};
+pub use tuning::{EvalResult, GridSearchConfig, GridSearchGB, GridSearchResults, HyperParamConfig};
 
 #[cfg(test)]
 mod integration_tests {
