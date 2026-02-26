@@ -1306,7 +1306,8 @@ mod tests {
         let t = CpuTensor2D::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3);
         let result = CpuBackend::select_columns_2d(&t, &[]);
 
-        assert_eq!(result.0, vec![]);
+        let empty: Vec<f64> = vec![];
+        assert_eq!(result.0, empty);
         assert_eq!((result.1, result.2), (2, 0));
     }
 
@@ -1335,7 +1336,8 @@ mod tests {
         let indices: Vec<f64> = vec![];
         let result = CpuBackend::one_hot_from_indices(&indices, 3);
 
-        assert_eq!(result.0, vec![]);
+        let empty: Vec<f64> = vec![];
+        assert_eq!(result.0, empty);
         assert_eq!((result.1, result.2), (0, 3));
     }
 
@@ -1344,7 +1346,8 @@ mod tests {
         let indices = vec![0.0, 1.0];
         let result = CpuBackend::one_hot_from_indices(&indices, 0);
 
-        assert_eq!(result.0, vec![]);
+        let empty: Vec<f64> = vec![];
+        assert_eq!(result.0, empty);
         assert_eq!((result.1, result.2), (2, 0));
     }
 }

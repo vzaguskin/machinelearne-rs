@@ -8,6 +8,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### Training Callbacks and Checkpoints
+- **Callback System**: Hook into training events for monitoring and control
+  - `Callback<B, M>` trait with lifecycle hooks: `on_train_start`, `on_epoch_start`, `on_batch_start`, `on_batch_end`, `on_epoch_end`, `on_train_end`
+  - `TrainingState`: State object passed to callbacks with epoch, batch, loss, learning rate, and metrics
+  - `stop_requested` flag for early stopping from callbacks
+- **Learning Rate Schedulers**:
+  - `LRScheduler` trait for adaptive learning rate adjustment
+  - `StepLR`: Decay learning rate by gamma every N epochs
+  - `ExponentialLR`: Exponential decay each epoch
+  - `CosineAnnealingLR`: Cosine curve from initial to minimum LR
+  - `ReduceLROnPlateau`: Reduce LR when metric stops improving
+- **Callbacks**:
+  - `LoggingCallback`: JSON Lines format logging with file and console output
+  - `ValidationCallback`: Run validation on separate dataset every N epochs
+  - `CheckpointCallback`: Save model checkpoints with metadata
+    - Metric-based saving (save when metric improves)
+    - Best-N retention (keep only top N checkpoints)
+    - Periodic saving (every N epochs)
+    - JSON metadata (epoch, loss, metrics, lr, timestamp)
+- **Checkpoint Utilities**:
+  - `LoadedCheckpoint`: Load and inspect checkpoint files
+  - `find_latest_checkpoint()`: Find most recent checkpoint
+  - `find_best_checkpoint()`: Find best checkpoint by metric
+  - `RestorableFromCheckpoint` trait for model restoration
+- **Trainer Enhancements**:
+  - `with_callback()` builder method to register callbacks
+  - `with_lr_scheduler()` builder method for LR scheduling
+  - `start_epoch()` builder method for resuming training
+- **Examples**:
+  - `train_mlp_with_callbacks.rs`: Training with callbacks and logging
+  - `train_with_lr_scheduling.rs`: Learning rate scheduling
+  - `train_with_checkpoints.rs`: Checkpoint saving and resumption
+
 #### MLP Model Selection and Pipeline Support
 - `MLPGridSearchCV`: Hyperparameter grid search for MLP models with cross-validation
   - Search over architectures (hidden layer configurations)

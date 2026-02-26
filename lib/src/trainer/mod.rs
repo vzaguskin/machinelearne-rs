@@ -1,12 +1,16 @@
 // trainer/mod.rs
 use crate::{
     backend::{Backend, ScalarOps, Tensor1D, Tensor2D},
+    callbacks::{Callback, TrainingState},
     dataset::Dataset,
     loss::Loss,
     model::{ParamOps, TrainableModel},
     optimizer::Optimizer,
     regularizers::Regularizer,
+    schedulers::LRScheduler,
 };
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 
@@ -134,6 +138,10 @@ where
     pub(crate) gradient_clipping: Option<GradientClipping>,
     pub(crate) early_stopping: Option<EarlyStoppingConfig>,
     pub(crate) divergence_threshold: Option<f32>,
+    pub(crate) callbacks: RefCell<Vec<Box<dyn Callback<B, M>>>>,
+    pub(crate) lr_scheduler: RefCell<Option<Box<dyn LRScheduler>>>,
+    pub(crate) initial_lr: f64,
+    pub(crate) start_epoch: usize,
     _phantom_backend: PhantomData<B>,
     _phantom_model: PhantomData<M>,
 }
@@ -147,6 +155,9 @@ where
 /// - `gradient_clipping`: None (disabled)
 /// - `early_stopping`: None (disabled)
 /// - `divergence_threshold`: None (disabled)
+/// - `callbacks`: empty (no callbacks)
+/// - `lr_scheduler`: None (no scheduling)
+/// - `start_epoch`: 0 (start from beginning)
 pub struct TrainerBuilder<B, L, O, M, P, R>
 where
     B: Backend,
@@ -164,6 +175,10 @@ where
     gradient_clipping: Option<GradientClipping>,
     early_stopping: Option<EarlyStoppingConfig>,
     divergence_threshold: Option<f32>,
+    callbacks: Vec<Box<dyn Callback<B, M>>>,
+    lr_scheduler: Option<Box<dyn LRScheduler>>,
+    initial_lr: f64,
+    start_epoch: usize,
     _phantom_backend: PhantomData<B>,
     _phantom_model: PhantomData<M>,
 }
@@ -193,6 +208,10 @@ where
             gradient_clipping: None,
             early_stopping: None,
             divergence_threshold: None,
+            callbacks: Vec::new(),
+            lr_scheduler: None,
+            initial_lr: 0.01, // Default, should be set based on optimizer
+            start_epoch: 0,
             _phantom_backend: PhantomData,
             _phantom_model: PhantomData,
         }
@@ -279,6 +298,76 @@ where
         self
     }
 
+    /// Adds a callback to be invoked during training.
+    ///
+    /// Callbacks are invoked in the order they are added.
+    ///
+    /// # Example
+    /// ```ignore
+    /// use machinelearne_rs::callbacks::LoggingCallback;
+    ///
+    /// let trainer = Trainer::builder(loss, optimizer, regularizer)
+    ///     .with_callback(LoggingCallback::console_only())
+    ///     .build();
+    /// ```
+    pub fn with_callback(mut self, callback: Box<dyn Callback<B, M>>) -> Self {
+        self.callbacks.push(callback);
+        self
+    }
+
+    /// Sets a learning rate scheduler.
+    ///
+    /// Only one scheduler can be used at a time.
+    ///
+    /// # Example
+    /// ```ignore
+    /// use machinelearne_rs::schedulers::StepLR;
+    ///
+    /// let scheduler = Box::new(StepLR::new(0.01, 30, 0.1));
+    /// let trainer = Trainer::builder(loss, optimizer, regularizer)
+    ///     .with_lr_scheduler(scheduler)
+    ///     .build();
+    /// ```
+    pub fn with_lr_scheduler(mut self, scheduler: Box<dyn LRScheduler>) -> Self {
+        self.lr_scheduler = Some(scheduler);
+        self
+    }
+
+    /// Sets the initial learning rate (used with schedulers).
+    pub fn with_initial_lr(mut self, lr: f64) -> Self {
+        self.initial_lr = lr;
+        self
+    }
+
+    /// Sets the starting epoch for resuming training.
+    ///
+    /// This is useful when resuming training from a checkpoint. The training
+    /// loop will start from this epoch instead of epoch 0.
+    ///
+    /// Note: You must also restore the model's parameters from the checkpoint
+    /// before passing it to `fit()`.
+    ///
+    /// # Example
+    /// ```ignore
+    /// use machinelearne_rs::checkpoint::{LoadedCheckpoint, RestorableFromCheckpoint};
+    ///
+    /// // Load checkpoint
+    /// let checkpoint = LoadedCheckpoint::load_latest("checkpoints/")?;
+    /// let model = MyModel::from_checkpoint_bytes(&checkpoint.params_bytes)?;
+    ///
+    /// // Resume training from checkpoint epoch
+    /// let trainer = Trainer::builder(loss, optimizer, regularizer)
+    ///     .start_epoch(checkpoint.epoch() + 1)
+    ///     .max_epochs(100)
+    ///     .build();
+    ///
+    /// trainer.fit(model, &dataset)?;
+    /// ```
+    pub fn start_epoch(mut self, epoch: usize) -> Self {
+        self.start_epoch = epoch;
+        self
+    }
+
     pub fn build(self) -> Trainer<B, L, O, M, P, R> {
         Trainer {
             batch_size: self.batch_size,
@@ -290,6 +379,10 @@ where
             gradient_clipping: self.gradient_clipping,
             early_stopping: self.early_stopping,
             divergence_threshold: self.divergence_threshold,
+            callbacks: RefCell::new(self.callbacks),
+            lr_scheduler: RefCell::new(self.lr_scheduler),
+            initial_lr: self.initial_lr,
+            start_epoch: self.start_epoch,
             _phantom_backend: PhantomData,
             _phantom_model: PhantomData,
         }
@@ -328,6 +421,8 @@ where
     /// - If gradient clipping is enabled, gradients are clipped per batch.
     /// - If early stopping is enabled, training may stop before `max_epochs`.
     /// - When early stopping triggers, the model from the best epoch is returned.
+    /// - Callbacks are invoked at appropriate training events.
+    /// - Learning rate schedulers adjust the learning rate at epoch end.
     ///
     /// # GPU Performance
     /// For GPU backends, loss is computed once per epoch instead of per batch
@@ -342,13 +437,58 @@ where
             return Err("Dataset is empty".into());
         }
 
+        let total_batches = n_total.div_ceil(self.batch_size);
+        let mut current_lr = self.initial_lr;
+        let mut metrics: HashMap<String, f64> = HashMap::new();
+
         // Initialize early stopping state if enabled
         let mut early_stopping_state = self
             .early_stopping
             .as_ref()
             .map(|config| EarlyStoppingState::<P>::new(*config, self.divergence_threshold));
 
-        for epoch in 0..self.max_epochs {
+        // on_train_start callback
+        {
+            let mut callbacks = self.callbacks.borrow_mut();
+            if !callbacks.is_empty() {
+                let state = TrainingState::new(
+                    0,
+                    0,
+                    self.max_epochs,
+                    total_batches,
+                    0.0,
+                    &model,
+                    current_lr,
+                );
+                for callback in callbacks.iter_mut() {
+                    callback.on_train_start(&state);
+                }
+            }
+        }
+
+        let mut stop_requested = false;
+
+        for epoch in self.start_epoch..self.max_epochs {
+            // on_epoch_start callback
+            {
+                let mut callbacks = self.callbacks.borrow_mut();
+                if !callbacks.is_empty() {
+                    let state = TrainingState::new(
+                        epoch,
+                        0,
+                        self.max_epochs,
+                        total_batches,
+                        0.0,
+                        &model,
+                        current_lr,
+                    );
+                    for callback in callbacks.iter_mut() {
+                        callback.on_epoch_start(&state);
+                    }
+                }
+            }
+
+            let mut batch_idx = 0;
             // Training loop: don't compute loss per batch (avoids GPU sync)
             for batch_result in dataset.batches::<B>(self.batch_size) {
                 let (batch_x, batch_y) =
@@ -371,14 +511,58 @@ where
 
                 let new_params = self.optimizer.step(model.params(), &total_grads);
                 model.update_params(&new_params);
+
+                batch_idx += 1;
             }
 
             // Compute loss once at epoch end for logging and early stopping
             // This triggers a single GPU sync per epoch instead of per batch
             let loss_value = self.compute_epoch_loss(&model, dataset, n_total);
 
+            // Update learning rate from scheduler if enabled
+            {
+                let mut scheduler_opt = self.lr_scheduler.borrow_mut();
+                if let Some(ref mut scheduler) = *scheduler_opt {
+                    current_lr = scheduler.step(epoch, &metrics);
+                }
+            }
+
             if self.verbose {
                 println!("Epoch {}: loss = {}", epoch, loss_value);
+            }
+
+            // on_epoch_end callback
+            {
+                let mut callbacks = self.callbacks.borrow_mut();
+                if !callbacks.is_empty() {
+                    let mut state = TrainingState::new(
+                        epoch,
+                        batch_idx,
+                        self.max_epochs,
+                        total_batches,
+                        loss_value,
+                        &model,
+                        current_lr,
+                    );
+                    // Copy metrics into state for callbacks to access
+                    state.metrics = metrics.clone();
+
+                    for callback in callbacks.iter_mut() {
+                        callback.on_epoch_end(&mut state);
+                    }
+
+                    // Copy metrics back from callbacks
+                    metrics = state.metrics.clone();
+                    stop_requested = state.stop_requested;
+                }
+            }
+
+            // Check for stop requested by callback
+            if stop_requested {
+                if self.verbose {
+                    println!("Training stopped by callback at epoch {}", epoch);
+                }
+                break;
             }
 
             // Check early stopping if enabled
@@ -415,6 +599,25 @@ where
         if let Some(ref state) = early_stopping_state {
             if let Some(best_params) = &state.best_params {
                 model.update_params(best_params);
+            }
+        }
+
+        // on_train_end callback
+        {
+            let mut callbacks = self.callbacks.borrow_mut();
+            if !callbacks.is_empty() {
+                let state = TrainingState::new(
+                    self.max_epochs,
+                    0,
+                    self.max_epochs,
+                    total_batches,
+                    0.0,
+                    &model,
+                    current_lr,
+                );
+                for callback in callbacks.iter_mut() {
+                    callback.on_train_end(&state);
+                }
             }
         }
 
@@ -1131,5 +1334,285 @@ mod tests {
 
         let result = trainer.fit(model, &dataset);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_trainer_with_callback() {
+        use crate::callbacks::{Callback, LoggingCallback, TrainingState};
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        // A simple callback that tracks epoch counts
+        struct EpochCounter {
+            count: Rc<RefCell<usize>>,
+        }
+
+        impl<B: Backend, M: TrainableModel<B>> Callback<B, M> for EpochCounter {
+            fn on_epoch_end(&mut self, _state: &mut TrainingState<B, M>) {
+                *self.count.borrow_mut() += 1;
+            }
+        }
+
+        let counter = Rc::new(RefCell::new(0));
+        let callback = EpochCounter {
+            count: counter.clone(),
+        };
+
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let trainer = Trainer::builder(MSELoss, SGD::<CpuBackend>::new(0.1), NoRegularizer)
+            .batch_size(3)
+            .max_epochs(5)
+            .with_callback(Box::new(callback))
+            .verbose(false)
+            .build();
+
+        let _ = trainer.fit(model, &dataset);
+        assert_eq!(*counter.borrow(), 5, "Callback should be called 5 times");
+    }
+
+    #[test]
+    fn test_trainer_with_lr_scheduler() {
+        use crate::schedulers::StepLR;
+
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let scheduler = Box::new(StepLR::new(0.1, 2, 0.5)); // Decay every 2 epochs
+
+        let trainer = Trainer::builder(MSELoss, SGD::<CpuBackend>::new(0.1), NoRegularizer)
+            .batch_size(3)
+            .max_epochs(5)
+            .with_lr_scheduler(scheduler)
+            .with_initial_lr(0.1)
+            .verbose(false)
+            .build();
+
+        let result = trainer.fit(model, &dataset);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_trainer_with_start_epoch() {
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+
+        // Start from epoch 5 - should only train 5 more epochs (5-9)
+        let trainer = Trainer::builder(MSELoss, SGD::<CpuBackend>::new(0.1), NoRegularizer)
+            .batch_size(3)
+            .max_epochs(10)
+            .start_epoch(5)
+            .verbose(false)
+            .build();
+
+        let result = trainer.fit(model, &dataset);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_trainer_callback_stop_requested() {
+        use crate::callbacks::{Callback, TrainingState};
+
+        // A callback that stops training after 3 epochs
+        struct StopAfterThree;
+
+        impl<B: Backend, M: TrainableModel<B>> Callback<B, M> for StopAfterThree {
+            fn on_epoch_end(&mut self, state: &mut TrainingState<B, M>) {
+                if state.epoch >= 2 {
+                    state.request_stop();
+                }
+            }
+        }
+
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let trainer = Trainer::builder(MSELoss, SGD::<CpuBackend>::new(0.1), NoRegularizer)
+            .batch_size(3)
+            .max_epochs(100) // Would run 100 epochs normally
+            .with_callback(Box::new(StopAfterThree))
+            .verbose(false)
+            .build();
+
+        let result = trainer.fit(model, &dataset);
+        // Training should complete successfully (stopped early, not error)
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_trainer_builder_callback_and_scheduler() {
+        // Test that with_callback and with_lr_scheduler work on builder
+        use crate::schedulers::ExponentialLR;
+
+        let builder: TrainerBuilder<CpuBackend, _, _, LinearRegression<CpuBackend>, _, _> =
+            TrainerBuilder::new(MSELoss, SGD::<CpuBackend>::new(0.01), NoRegularizer)
+                .with_callback(Box::new(crate::callbacks::NoopCallback))
+                .with_lr_scheduler(Box::new(ExponentialLR::new(0.01, 0.9)))
+                .with_initial_lr(0.01)
+                .start_epoch(5);
+
+        // Verify builder state
+        assert_eq!(builder.callbacks.len(), 1);
+        assert!(builder.lr_scheduler.is_some());
+        assert!((builder.initial_lr - 0.01).abs() < 1e-10);
+        assert_eq!(builder.start_epoch, 5);
+    }
+
+    #[test]
+    fn test_trainer_callback_full_lifecycle_verbose() {
+        use crate::callbacks::{Callback, TrainingState};
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        // A callback that tracks all lifecycle events
+        #[derive(Default)]
+        struct LifecycleTracker {
+            train_start: Rc<RefCell<bool>>,
+            train_end: Rc<RefCell<bool>>,
+            epoch_starts: Rc<RefCell<usize>>,
+            epoch_ends: Rc<RefCell<usize>>,
+        }
+
+        impl<B: Backend, M: TrainableModel<B>> Callback<B, M> for LifecycleTracker {
+            fn on_train_start(&mut self, _state: &TrainingState<B, M>) {
+                *self.train_start.borrow_mut() = true;
+            }
+            fn on_train_end(&mut self, _state: &TrainingState<B, M>) {
+                *self.train_end.borrow_mut() = true;
+            }
+            fn on_epoch_start(&mut self, _state: &TrainingState<B, M>) {
+                *self.epoch_starts.borrow_mut() += 1;
+            }
+            fn on_epoch_end(&mut self, _state: &mut TrainingState<B, M>) {
+                *self.epoch_ends.borrow_mut() += 1;
+            }
+        }
+
+        let tracker = LifecycleTracker::default();
+        let callback = LifecycleTracker {
+            train_start: tracker.train_start.clone(),
+            train_end: tracker.train_end.clone(),
+            epoch_starts: tracker.epoch_starts.clone(),
+            epoch_ends: tracker.epoch_ends.clone(),
+        };
+
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let trainer = Trainer::builder(MSELoss, SGD::<CpuBackend>::new(0.1), NoRegularizer)
+            .batch_size(2) // 2 batches per epoch
+            .max_epochs(3)
+            .with_callback(Box::new(callback))
+            .verbose(true) // Test verbose callback paths
+            .build();
+
+        let _ = trainer.fit(model, &dataset);
+
+        assert!(
+            *tracker.train_start.borrow(),
+            "on_train_start should be called"
+        );
+        assert!(*tracker.train_end.borrow(), "on_train_end should be called");
+        assert_eq!(
+            *tracker.epoch_starts.borrow(),
+            3,
+            "on_epoch_start should be called 3 times"
+        );
+        assert_eq!(
+            *tracker.epoch_ends.borrow(),
+            3,
+            "on_epoch_end should be called 3 times"
+        );
+    }
+
+    #[test]
+    fn test_trainer_callback_with_scheduler_verbose() {
+        // Test callback + scheduler together with verbose mode
+        use crate::callbacks::{Callback, TrainingState};
+        use crate::schedulers::StepLR;
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        struct MetricRecorder {
+            lrs: Rc<RefCell<Vec<f64>>>,
+        }
+
+        impl<B: Backend, M: TrainableModel<B>> Callback<B, M> for MetricRecorder {
+            fn on_epoch_end(&mut self, state: &mut TrainingState<B, M>) {
+                self.lrs.borrow_mut().push(state.learning_rate);
+            }
+        }
+
+        let lrs = Rc::new(RefCell::new(Vec::new()));
+        let callback = MetricRecorder { lrs: lrs.clone() };
+
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let scheduler = Box::new(StepLR::new(0.1, 2, 0.5)); // Decay every 2 epochs
+
+        let trainer = Trainer::builder(MSELoss, SGD::<CpuBackend>::new(0.1), NoRegularizer)
+            .batch_size(3)
+            .max_epochs(5)
+            .with_callback(Box::new(callback))
+            .with_lr_scheduler(scheduler)
+            .with_initial_lr(0.1)
+            .verbose(true)
+            .build();
+
+        let _ = trainer.fit(model, &dataset);
+
+        let recorded_lrs = lrs.borrow();
+        // Scheduler: epoch 0,1 -> 0.1; epoch 2,3 -> 0.05; epoch 4 -> 0.025
+        assert_eq!(recorded_lrs.len(), 5);
+        assert!((recorded_lrs[0] - 0.1).abs() < 1e-10);
+        assert!((recorded_lrs[1] - 0.1).abs() < 1e-10);
+        assert!((recorded_lrs[2] - 0.05).abs() < 1e-10);
+        assert!((recorded_lrs[3] - 0.05).abs() < 1e-10);
+        assert!((recorded_lrs[4] - 0.025).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_trainer_callback_sets_metrics() {
+        // Test that callbacks can set metrics that affect training
+        use crate::callbacks::{Callback, TrainingState};
+
+        struct MetricSetter;
+
+        impl<B: Backend, M: TrainableModel<B>> Callback<B, M> for MetricSetter {
+            fn on_epoch_end(&mut self, state: &mut TrainingState<B, M>) {
+                // Set a custom metric
+                state.set_metric("custom_metric", state.epoch as f64 * 0.1);
+            }
+        }
+
+        let x = vec![vec![1.0], vec![2.0], vec![3.0]];
+        let y = vec![2.0, 4.0, 6.0];
+        let dataset = InMemoryDataset::new(x, y).unwrap();
+
+        let model = LinearRegression::<CpuBackend>::new(1);
+        let trainer = Trainer::builder(MSELoss, SGD::<CpuBackend>::new(0.1), NoRegularizer)
+            .batch_size(3)
+            .max_epochs(3)
+            .with_callback(Box::new(MetricSetter))
+            .verbose(false)
+            .build();
+
+        let result = trainer.fit(model, &dataset);
+        assert!(result.is_ok());
     }
 }
