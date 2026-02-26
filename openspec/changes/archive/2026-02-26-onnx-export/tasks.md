@@ -44,5 +44,5 @@
 - [x] Run cargo fmt
 - [x] Verify all tests pass
 - [x] Archive OpenSpec change
-- [ ] Create pull request
-- [ ] Merge and close issue
+- [x] Create pull request
+- [x] Merge and close issue
