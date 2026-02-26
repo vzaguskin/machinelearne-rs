@@ -193,7 +193,31 @@ pub fn load_checkpoint_bytes<P: AsRef<Path>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error;
+    use std::fs;
     use tempfile::tempdir;
+
+    fn create_test_checkpoint(dir: &Path, epoch: usize, val_loss: f64) -> PathBuf {
+        let mut metrics = HashMap::new();
+        metrics.insert("val_loss".to_string(), val_loss);
+
+        let metadata = CheckpointMetadata {
+            epoch,
+            loss: val_loss,
+            learning_rate: 0.01,
+            metrics,
+            timestamp: 1000 * epoch as u64,
+            checkpoint_file: format!("checkpoint_{:05}.bin", epoch),
+        };
+
+        let json_path = dir.join(format!("checkpoint_{:05}.json", epoch));
+        let bin_path = dir.join(format!("checkpoint_{:05}.bin", epoch));
+
+        fs::write(&json_path, serde_json::to_string(&metadata).unwrap()).unwrap();
+        fs::write(&bin_path, format!("params_{}", epoch).as_bytes()).unwrap();
+
+        bin_path
+    }
 
     #[test]
     fn test_find_latest_checkpoint_empty_dir() {
@@ -214,5 +238,195 @@ mod tests {
         let dir = tempdir().unwrap();
         let checkpoints = list_checkpoints(dir.path()).unwrap();
         assert!(checkpoints.is_empty());
+    }
+
+    #[test]
+    fn test_loaded_checkpoint_load() {
+        let dir = tempdir().unwrap();
+        create_test_checkpoint(dir.path(), 5, 0.25);
+
+        let path = dir.path().join("checkpoint_00005");
+        let checkpoint = LoadedCheckpoint::load(&path).unwrap();
+
+        assert_eq!(checkpoint.epoch(), 5);
+        assert!((checkpoint.loss() - 0.25).abs() < 1e-10);
+        assert!((checkpoint.learning_rate() - 0.01).abs() < 1e-10);
+        assert_eq!(checkpoint.params_bytes, format!("params_{}", 5).as_bytes());
+    }
+
+    #[test]
+    fn test_loaded_checkpoint_load_not_found() {
+        let result = LoadedCheckpoint::load("/nonexistent/path");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CheckpointError::NotFound(_) => {}
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[test]
+    fn test_loaded_checkpoint_load_latest() {
+        let dir = tempdir().unwrap();
+        create_test_checkpoint(dir.path(), 1, 0.5);
+        create_test_checkpoint(dir.path(), 5, 0.3);
+        create_test_checkpoint(dir.path(), 3, 0.4);
+
+        let checkpoint = LoadedCheckpoint::load_latest(dir.path()).unwrap();
+        assert_eq!(checkpoint.epoch(), 5);
+    }
+
+    #[test]
+    fn test_loaded_checkpoint_load_best() {
+        let dir = tempdir().unwrap();
+        create_test_checkpoint(dir.path(), 1, 0.5);
+        create_test_checkpoint(dir.path(), 2, 0.2); // Best
+        create_test_checkpoint(dir.path(), 3, 0.4);
+
+        let checkpoint =
+            LoadedCheckpoint::load_best(dir.path(), "val_loss", MetricMode::Minimize).unwrap();
+        assert_eq!(checkpoint.epoch(), 2);
+    }
+
+    #[test]
+    fn test_loaded_checkpoint_get_metric() {
+        let dir = tempdir().unwrap();
+        create_test_checkpoint(dir.path(), 1, 0.5);
+
+        let path = dir.path().join("checkpoint_00001");
+        let checkpoint = LoadedCheckpoint::load(&path).unwrap();
+
+        assert_eq!(checkpoint.get_metric("val_loss"), Some(0.5));
+        assert_eq!(checkpoint.get_metric("nonexistent"), None);
+    }
+
+    #[test]
+    fn test_loaded_checkpoint_metrics() {
+        let dir = tempdir().unwrap();
+        create_test_checkpoint(dir.path(), 1, 0.5);
+
+        let path = dir.path().join("checkpoint_00001");
+        let checkpoint = LoadedCheckpoint::load(&path).unwrap();
+
+        let metrics = checkpoint.metrics();
+        assert_eq!(metrics.len(), 1);
+        assert!(metrics.contains_key("val_loss"));
+    }
+
+    #[test]
+    fn test_find_latest_checkpoint_with_data() {
+        let dir = tempdir().unwrap();
+        create_test_checkpoint(dir.path(), 1, 0.5);
+        create_test_checkpoint(dir.path(), 5, 0.3);
+
+        let info = find_latest_checkpoint(dir.path()).unwrap();
+        assert_eq!(info.metadata.epoch, 5);
+    }
+
+    #[test]
+    fn test_find_best_checkpoint_with_data() {
+        let dir = tempdir().unwrap();
+        create_test_checkpoint(dir.path(), 1, 0.5);
+        create_test_checkpoint(dir.path(), 2, 0.1); // Best
+        create_test_checkpoint(dir.path(), 3, 0.3);
+
+        let info = find_best_checkpoint(dir.path(), "val_loss", MetricMode::Minimize).unwrap();
+        assert_eq!(info.metadata.epoch, 2);
+    }
+
+    #[test]
+    fn test_list_checkpoints_with_data() {
+        let dir = tempdir().unwrap();
+        create_test_checkpoint(dir.path(), 1, 0.5);
+        create_test_checkpoint(dir.path(), 3, 0.3);
+
+        let checkpoints = list_checkpoints(dir.path()).unwrap();
+        assert_eq!(checkpoints.len(), 2);
+    }
+
+    #[test]
+    fn test_load_checkpoint_metadata() {
+        let dir = tempdir().unwrap();
+        create_test_checkpoint(dir.path(), 5, 0.25);
+
+        let json_path = dir.path().join("checkpoint_00005.json");
+        let metadata = load_checkpoint_metadata(&json_path).unwrap();
+
+        assert_eq!(metadata.epoch, 5);
+        assert!((metadata.loss - 0.25).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_load_checkpoint_bytes() {
+        let dir = tempdir().unwrap();
+        create_test_checkpoint(dir.path(), 3, 0.4);
+
+        let path = dir.path().join("checkpoint_00003");
+        let (bytes, metadata) = load_checkpoint_bytes(&path).unwrap();
+
+        assert_eq!(bytes, format!("params_{}", 3).as_bytes());
+        assert_eq!(metadata.epoch, 3);
+    }
+
+    #[test]
+    fn test_checkpoint_error_display() {
+        let err = CheckpointError::NotFound(PathBuf::from("/path/to/checkpoint"));
+        assert!(err.to_string().contains("not found"));
+
+        let err = CheckpointError::InvalidMetadata("bad json".to_string());
+        assert!(err.to_string().contains("Invalid checkpoint metadata"));
+
+        let err = CheckpointError::InvalidParams("bad params".to_string());
+        assert!(err.to_string().contains("Invalid model parameters"));
+
+        let err = CheckpointError::Io(std::io::Error::new(std::io::ErrorKind::Other, "io error"));
+        assert!(err.to_string().contains("I/O error"));
+    }
+
+    #[test]
+    fn test_checkpoint_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::Other, "test");
+        let checkpoint_err: CheckpointError = io_err.into();
+        match checkpoint_err {
+            CheckpointError::Io(_) => {}
+            _ => panic!("Expected Io error"),
+        }
+    }
+
+    #[test]
+    fn test_checkpoint_error_source() {
+        let err = CheckpointError::Io(std::io::Error::new(std::io::ErrorKind::Other, "test"));
+        assert!(err.source().is_some());
+
+        let err = CheckpointError::NotFound(PathBuf::from("/path"));
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn test_loaded_checkpoint_load_best_maximize() {
+        let dir = tempdir().unwrap();
+        // Create checkpoints with accuracy metric
+        for (epoch, val_acc) in [(1, 0.8), (2, 0.95), (3, 0.85)] {
+            let mut metrics = HashMap::new();
+            metrics.insert("val_accuracy".to_string(), val_acc);
+
+            let metadata = CheckpointMetadata {
+                epoch,
+                loss: 0.1,
+                learning_rate: 0.01,
+                metrics,
+                timestamp: 1000 * epoch as u64,
+                checkpoint_file: format!("checkpoint_{:05}.bin", epoch),
+            };
+
+            let json_path = dir.path().join(format!("checkpoint_{:05}.json", epoch));
+            let bin_path = dir.path().join(format!("checkpoint_{:05}.bin", epoch));
+
+            fs::write(&json_path, serde_json::to_string(&metadata).unwrap()).unwrap();
+            fs::write(&bin_path, format!("params_{}", epoch).as_bytes()).unwrap();
+        }
+
+        let checkpoint =
+            LoadedCheckpoint::load_best(dir.path(), "val_accuracy", MetricMode::Maximize).unwrap();
+        assert_eq!(checkpoint.epoch(), 2); // highest accuracy
     }
 }
