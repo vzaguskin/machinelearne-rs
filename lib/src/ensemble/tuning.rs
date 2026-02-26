@@ -360,6 +360,35 @@ mod tests {
         let config = HyperParamConfig::default();
         assert_eq!(config.n_estimators, 100);
         assert!((config.learning_rate - 0.1).abs() < 1e-10);
+        assert!(config.max_depth.is_none());
+        assert!((config.colsample_bytree - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_grid_search_config_custom() {
+        let config = GridSearchConfig {
+            validation_fraction: 0.3,
+            verbose: true,
+            random_seed: Some(42),
+        };
+        assert!((config.validation_fraction - 0.3).abs() < 1e-10);
+        assert!(config.verbose);
+        assert_eq!(config.random_seed, Some(42));
+    }
+
+    #[test]
+    fn test_eval_result_new() {
+        let config = HyperParamConfig {
+            n_estimators: 100,
+            learning_rate: 0.1,
+            max_depth: Some(3),
+            colsample_bytree: 0.8,
+        };
+        let result = EvalResult::new(config.clone(), 0.5, 0.6, 1000);
+        assert_eq!(result.config.n_estimators, 100);
+        assert!((result.mse - 0.5).abs() < 1e-10);
+        assert!((result.mae - 0.6).abs() < 1e-10);
+        assert_eq!(result.train_time_ms, 1000);
     }
 
     #[test]
@@ -411,6 +440,33 @@ mod tests {
 
         let top = results.top_n(2);
         assert_eq!(top.len(), 2);
+
+        let sorted = results.sorted_by_mse();
+        assert_eq!(sorted.len(), 2);
+        assert_eq!(sorted[0].config.n_estimators, 50); // Best first
+    }
+
+    #[test]
+    fn test_grid_search_results_empty() {
+        let results = GridSearchResults {
+            results: vec![],
+            config: GridSearchConfig::default(),
+        };
+
+        assert!(results.best().is_none());
+        assert!(results.top_n(5).is_empty());
+        assert!(results.sorted_by_mse().is_empty());
+    }
+
+    #[test]
+    fn test_grid_search_results_top_n_more_than_available() {
+        let results = GridSearchResults {
+            results: vec![EvalResult::new(HyperParamConfig::default(), 0.5, 0.5, 100)],
+            config: GridSearchConfig::default(),
+        };
+
+        let top = results.top_n(5);
+        assert_eq!(top.len(), 1); // Only 1 result available
     }
 
     #[test]
@@ -433,5 +489,56 @@ mod tests {
         for result in &results.results {
             assert!(result.mse.is_finite());
         }
+    }
+
+    #[test]
+    fn test_grid_search_with_random_seed() {
+        let features =
+            Tensor2D::<CpuBackend>::new(vec![0.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 8, 1);
+        let targets = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+
+        let search = GridSearchGB::new()
+            .n_estimators(vec![10])
+            .learning_rates(vec![0.1])
+            .max_depths(vec![None])
+            .colsample_bytrees(vec![0.8])
+            .random_seed(42)
+            .verbose(false);
+
+        let results = search.search(&features, &targets);
+        assert_eq!(results.results.len(), 1);
+        assert_eq!(results.config.random_seed, Some(42));
+    }
+
+    #[test]
+    fn test_grid_search_with_config() {
+        let config = GridSearchConfig {
+            validation_fraction: 0.25,
+            verbose: false,
+            random_seed: None,
+        };
+
+        let search = GridSearchGB::new()
+            .n_estimators(vec![10])
+            .learning_rates(vec![0.1])
+            .max_depths(vec![None])
+            .colsample_bytrees(vec![1.0])
+            .config(config);
+
+        let features =
+            Tensor2D::<CpuBackend>::new(vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0], 8, 1);
+        let targets = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]);
+
+        let results = search.search(&features, &targets);
+        assert!((results.config.validation_fraction - 0.25).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_grid_search_default_parameters() {
+        let search = GridSearchGB::default();
+        assert_eq!(search.n_estimators, vec![50, 100, 200]);
+        assert_eq!(search.learning_rates, vec![0.05, 0.1, 0.2]);
+        assert_eq!(search.max_depths, vec![None, Some(3), Some(5)]);
+        assert_eq!(search.colsample_bytrees, vec![0.8, 1.0]);
     }
 }

@@ -212,4 +212,118 @@ mod tests {
         let ensemble = builder.build();
         assert_eq!(ensemble.num_models(), 1);
     }
+
+    #[test]
+    fn test_stacking_ensemble_predict_batch() {
+        // Create training data
+        let features = crate::Tensor2D::<CpuBackend>::new(vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 6, 1);
+        let targets = crate::Tensor1D::<CpuBackend>::new(vec![0.0, 2.0, 4.0, 6.0, 8.0, 10.0]);
+
+        // Fit base model
+        let gb_trainer = GradientBoostingRegressor::default().n_estimators(10);
+        let gb_model = gb_trainer.fit(&features, &targets);
+
+        // Fit meta-learner
+        let meta_trainer = GradientBoostingRegressor::default().n_estimators(5);
+        let meta_model = meta_trainer.fit(&features, &targets);
+
+        // Build ensemble
+        let ensemble = StackingBuilder::new()
+            .add_model("gb", gb_model)
+            .meta_learner(meta_model)
+            .build();
+
+        // Test predict_batch
+        let predictions = ensemble.predict_batch(&features);
+        assert_eq!(predictions.len(), 6);
+
+        // Predictions should be finite
+        for pred in &predictions {
+            assert!(pred.is_finite());
+        }
+    }
+
+    #[test]
+    fn test_stacking_ensemble_with_config() {
+        let config = StackingConfig {
+            use_validation: false,
+            verbose: 1,
+        };
+
+        let features = crate::Tensor2D::<CpuBackend>::new(vec![0.0, 1.0, 2.0], 3, 1);
+        let targets = crate::Tensor1D::<CpuBackend>::new(vec![0.0, 2.0, 4.0]);
+
+        let gb_model = GradientBoostingRegressor::default()
+            .n_estimators(5)
+            .fit(&features, &targets);
+        let meta_model = GradientBoostingRegressor::default()
+            .n_estimators(3)
+            .fit(&features, &targets);
+
+        let ensemble = StackingBuilder::new()
+            .add_model("gb", gb_model)
+            .meta_learner(meta_model)
+            .config(config.clone())
+            .build();
+
+        assert_eq!(ensemble.num_models(), 1);
+    }
+
+    #[test]
+    fn test_stacking_builder_default() {
+        let builder: StackingBuilder<
+            CpuBackend,
+            crate::ensemble::GradientBoostedModel<CpuBackend>,
+        > = StackingBuilder::default();
+        assert!(builder.base_models.is_empty());
+        assert!(builder.meta_learner.is_none());
+    }
+
+    #[test]
+    fn test_stacking_ensemble_new_direct() {
+        let features = crate::Tensor2D::<CpuBackend>::new(vec![0.0, 1.0, 2.0], 3, 1);
+        let targets = crate::Tensor1D::<CpuBackend>::new(vec![0.0, 2.0, 4.0]);
+
+        let meta_model = GradientBoostingRegressor::default()
+            .n_estimators(5)
+            .fit(&features, &targets);
+
+        let ensemble = StackingEnsemble::new(meta_model);
+        assert_eq!(ensemble.num_models(), 0);
+
+        // Add a model
+        let gb_model = GradientBoostingRegressor::default()
+            .n_estimators(5)
+            .fit(&features, &targets);
+        let ensemble = ensemble.add_model("gb", gb_model);
+        assert_eq!(ensemble.num_models(), 1);
+    }
+
+    #[test]
+    fn test_stacking_ensemble_multiple_base_models() {
+        let features = crate::Tensor2D::<CpuBackend>::new(vec![0.0, 1.0, 2.0, 3.0], 4, 1);
+        let targets = crate::Tensor1D::<CpuBackend>::new(vec![0.0, 2.0, 4.0, 6.0]);
+
+        let model1 = GradientBoostingRegressor::default()
+            .n_estimators(5)
+            .fit(&features, &targets);
+        let model2 = GradientBoostingRegressor::default()
+            .n_estimators(10)
+            .fit(&features, &targets);
+        let meta_model = GradientBoostingRegressor::default()
+            .n_estimators(3)
+            .fit(&features, &targets);
+
+        let ensemble = StackingBuilder::new()
+            .add_model("gb1", model1)
+            .add_model("gb2", model2)
+            .meta_learner(meta_model)
+            .build();
+
+        assert_eq!(ensemble.num_models(), 2);
+
+        // Test predictions work with multiple base models
+        let predictions = ensemble.predict_batch(&features);
+        assert_eq!(predictions.len(), 4);
+    }
 }
