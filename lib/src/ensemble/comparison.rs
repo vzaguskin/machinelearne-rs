@@ -164,6 +164,33 @@ mod tests {
     }
 
     #[test]
+    fn test_model_metrics_empty() {
+        let predictions: Vec<f64> = vec![];
+        let targets: Vec<f64> = vec![];
+        let metrics = ModelMetrics::compute(&predictions, &targets);
+        assert!((metrics.mse).abs() < 1e-10);
+        assert!((metrics.mae).abs() < 1e-10);
+        assert!((metrics.r2).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_model_metrics_mismatched_lengths() {
+        let predictions = vec![1.0, 2.0];
+        let targets = vec![1.0, 2.0, 3.0];
+        let metrics = ModelMetrics::compute(&predictions, &targets);
+        assert!((metrics.mse).abs() < 1e-10); // Returns default
+    }
+
+    #[test]
+    fn test_model_metrics_no_variance() {
+        // All targets the same - no variance
+        let predictions = vec![1.0, 1.0, 1.0];
+        let targets = vec![1.0, 1.0, 1.0];
+        let metrics = ModelMetrics::compute(&predictions, &targets);
+        assert!((metrics.r2).abs() < 1e-10); // r2 should be 0 when ss_tot is 0
+    }
+
+    #[test]
     fn test_model_comparison() {
         let features = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 4, 1);
         let targets = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0]);
@@ -181,5 +208,155 @@ mod tests {
         assert_eq!(comparison.results.len(), 1);
         let best = comparison.best_model().unwrap();
         assert_eq!(best.name, "MockModel");
+    }
+
+    #[test]
+    fn test_model_comparison_multiple_models() {
+        let features = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 4, 1);
+        let targets = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0]);
+
+        struct GoodModel;
+        impl Evaluable<CpuBackend> for GoodModel {
+            fn predict_batch(&self, _features: &Tensor2D<CpuBackend>) -> Vec<f64> {
+                vec![1.01, 2.01, 3.01, 4.01] // Better predictions
+            }
+        }
+
+        struct BadModel;
+        impl Evaluable<CpuBackend> for BadModel {
+            fn predict_batch(&self, _features: &Tensor2D<CpuBackend>) -> Vec<f64> {
+                vec![2.0, 3.0, 4.0, 5.0] // Worse predictions
+            }
+        }
+
+        let mut comparison = ModelComparison::new(features, targets);
+        comparison.evaluate("BadModel", &BadModel);
+        comparison.evaluate("GoodModel", &GoodModel);
+
+        // Test ranked returns best first
+        let ranked = comparison.ranked();
+        assert_eq!(ranked.len(), 2);
+        assert_eq!(ranked[0].name, "GoodModel"); // Better model first
+
+        // Test best_model returns the one with lowest MSE
+        let best = comparison.best_model().unwrap();
+        assert_eq!(best.name, "GoodModel");
+    }
+
+    #[test]
+    fn test_model_comparison_no_models() {
+        let features = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 4, 1);
+        let targets = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0]);
+
+        let comparison = ModelComparison::new(features, targets);
+        assert!(comparison.best_model().is_none());
+        assert!(comparison.ranked().is_empty());
+    }
+
+    #[test]
+    fn test_model_comparison_chaining() {
+        let features = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 4, 1);
+        let targets = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0]);
+
+        struct MockModel;
+        impl Evaluable<CpuBackend> for MockModel {
+            fn predict_batch(&self, _features: &Tensor2D<CpuBackend>) -> Vec<f64> {
+                vec![1.0, 2.0, 3.0, 4.0]
+            }
+        }
+
+        let mut comparison = ModelComparison::new(features, targets);
+        comparison
+            .evaluate("Model1", &MockModel)
+            .evaluate("Model2", &MockModel);
+
+        assert_eq!(comparison.results.len(), 2);
+    }
+
+    #[test]
+    fn test_model_comparison_summary() {
+        let features = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 4, 1);
+        let targets = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0]);
+
+        struct MockModel;
+        impl Evaluable<CpuBackend> for MockModel {
+            fn predict_batch(&self, _features: &Tensor2D<CpuBackend>) -> Vec<f64> {
+                vec![1.1, 2.1, 3.1, 4.1]
+            }
+        }
+
+        let mut comparison = ModelComparison::new(features, targets);
+        comparison.evaluate("MockModel", &MockModel);
+
+        // Call summary to test the function
+        comparison.summary();
+    }
+
+    #[test]
+    fn test_model_comparison_nan_mse() {
+        // Test with NaN values to trigger unwrap_or branch
+        let features = Tensor2D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0], 4, 1);
+        let targets = Tensor1D::<CpuBackend>::new(vec![1.0, 2.0, 3.0, 4.0]);
+
+        struct NanModel;
+        impl Evaluable<CpuBackend> for NanModel {
+            fn predict_batch(&self, _features: &Tensor2D<CpuBackend>) -> Vec<f64> {
+                vec![f64::NAN, f64::NAN, f64::NAN, f64::NAN]
+            }
+        }
+
+        let mut comparison = ModelComparison::new(features, targets);
+        comparison.evaluate("NanModel", &NanModel);
+
+        // best_model should still return something (using unwrap_or)
+        let best = comparison.best_model();
+        assert!(best.is_some());
+
+        // ranked should also handle NaN
+        let ranked = comparison.ranked();
+        assert_eq!(ranked.len(), 1);
+    }
+
+    #[test]
+    fn test_model_result_debug_clone() {
+        let result = ModelResult {
+            name: "TestModel".to_string(),
+            metrics: ModelMetrics {
+                mse: 0.5,
+                mae: 0.6,
+                r2: 0.9,
+            },
+        };
+
+        // Test Clone
+        let cloned = result.clone();
+        assert_eq!(cloned.name, "TestModel");
+
+        // Test Debug (just make sure it doesn't panic)
+        let _debug = format!("{:?}", result);
+    }
+
+    #[test]
+    fn test_model_metrics_default() {
+        let metrics = ModelMetrics::default();
+        assert!((metrics.mse).abs() < 1e-10);
+        assert!((metrics.mae).abs() < 1e-10);
+        assert!((metrics.r2).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_model_metrics_clone_debug() {
+        let metrics = ModelMetrics {
+            mse: 1.0,
+            mae: 0.5,
+            r2: 0.9,
+        };
+
+        // Test Clone
+        let cloned = metrics.clone();
+        assert!((cloned.mse - 1.0).abs() < 1e-10);
+
+        // Test Debug
+        let _debug = format!("{:?}", metrics);
     }
 }
