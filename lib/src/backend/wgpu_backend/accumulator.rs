@@ -24,6 +24,14 @@ use super::shaders::ComputePipeline;
 /// Increased from 50 to 500 to reduce sync overhead during training.
 const DEFAULT_FLUSH_THRESHOLD: usize = 500;
 
+/// Default maximum memory for queued commands (in bytes).
+/// Set to 256MB to prevent memory exhaustion while allowing good batching.
+const DEFAULT_MEMORY_THRESHOLD: usize = 256 * 1024 * 1024;
+
+/// Estimated memory per command (bind groups, buffers referenced).
+/// This is a rough estimate; actual memory varies by operation.
+const ESTIMATED_MEMORY_PER_COMMAND: usize = 1024; // 1KB per command estimate
+
 /// An executable compute command ready to be added to a command encoder.
 ///
 /// Contains everything needed to dispatch one compute pass.
@@ -148,6 +156,10 @@ pub struct CommandAccumulator {
     pending_commands: Vec<ExecutableCommand>,
     /// Number of operations before auto-flush.
     flush_threshold: usize,
+    /// Maximum estimated memory for queued commands (in bytes).
+    memory_threshold: usize,
+    /// Estimated memory usage of pending commands.
+    estimated_memory: usize,
     /// Total operations queued (for statistics).
     total_ops: u64,
     /// Total flushes performed.
@@ -164,9 +176,16 @@ impl CommandAccumulator {
 
     /// Creates a new command accumulator with specified flush threshold.
     pub fn with_threshold(threshold: usize) -> Self {
+        Self::with_threshold_and_memory(threshold, DEFAULT_MEMORY_THRESHOLD)
+    }
+
+    /// Creates a new command accumulator with specified flush and memory thresholds.
+    pub fn with_threshold_and_memory(flush_threshold: usize, memory_threshold: usize) -> Self {
         Self {
-            pending_commands: Vec::with_capacity(threshold),
-            flush_threshold: threshold,
+            pending_commands: Vec::with_capacity(flush_threshold.min(1000)),
+            flush_threshold,
+            memory_threshold,
+            estimated_memory: 0,
             total_ops: 0,
             total_flushes: 0,
             debug_mode: false,
@@ -176,13 +195,16 @@ impl CommandAccumulator {
     /// Adds an executable command to the accumulator.
     pub fn add_command(&mut self, command: ExecutableCommand) {
         self.pending_commands.push(command);
+        self.estimated_memory += ESTIMATED_MEMORY_PER_COMMAND;
         self.total_ops += 1;
     }
 
     /// Returns true if we should flush after adding a command.
     /// This is true in debug mode (eager flush) or when threshold is reached.
     pub fn should_flush_after_add(&self) -> bool {
-        self.debug_mode || self.pending_commands.len() >= self.flush_threshold
+        self.debug_mode
+            || self.pending_commands.len() >= self.flush_threshold
+            || self.estimated_memory >= self.memory_threshold
     }
 
     /// Returns the number of pending commands.
@@ -190,9 +212,15 @@ impl CommandAccumulator {
         self.pending_commands.len()
     }
 
-    /// Returns true if auto-flush threshold is reached.
+    /// Returns true if auto-flush threshold is reached (count or memory).
     pub fn should_flush(&self) -> bool {
         self.pending_commands.len() >= self.flush_threshold
+            || self.estimated_memory >= self.memory_threshold
+    }
+
+    /// Returns the estimated memory usage of pending commands.
+    pub fn estimated_memory(&self) -> usize {
+        self.estimated_memory
     }
 
     /// Flushes all pending commands to the GPU.
@@ -218,8 +246,9 @@ impl CommandAccumulator {
         // Submit once for all operations
         queue.submit(std::iter::once(encoder.finish()));
 
-        // Clear pending commands
+        // Clear pending commands and reset memory estimate
         self.pending_commands.clear();
+        self.estimated_memory = 0;
         self.total_flushes += 1;
     }
 
@@ -227,9 +256,11 @@ impl CommandAccumulator {
     pub fn stats(&self) -> AccumulatorStats {
         AccumulatorStats {
             pending_ops: self.pending_commands.len(),
+            estimated_memory: self.estimated_memory,
             total_ops: self.total_ops,
             total_flushes: self.total_flushes,
             flush_threshold: self.flush_threshold,
+            memory_threshold: self.memory_threshold,
             debug_mode: self.debug_mode,
         }
     }
@@ -237,6 +268,11 @@ impl CommandAccumulator {
     /// Sets the flush threshold.
     pub fn set_flush_threshold(&mut self, threshold: usize) {
         self.flush_threshold = threshold;
+    }
+
+    /// Sets the memory threshold.
+    pub fn set_memory_threshold(&mut self, threshold: usize) {
+        self.memory_threshold = threshold;
     }
 
     /// Enables or disables debug mode for eager flushing.
@@ -261,12 +297,16 @@ impl Default for CommandAccumulator {
 pub struct AccumulatorStats {
     /// Number of operations currently pending.
     pub pending_ops: usize,
+    /// Estimated memory usage of pending commands (bytes).
+    pub estimated_memory: usize,
     /// Total operations queued since creation.
     pub total_ops: u64,
     /// Total flushes performed.
     pub total_flushes: u64,
-    /// Current flush threshold.
+    /// Current flush threshold (operation count).
     pub flush_threshold: usize,
+    /// Current memory threshold (bytes).
+    pub memory_threshold: usize,
     /// Debug mode enabled (eager flushing).
     pub debug_mode: bool,
 }
@@ -320,7 +360,31 @@ mod tests {
         let acc = CommandAccumulator::new();
         let stats = acc.stats();
         assert_eq!(stats.pending_ops, 0);
+        assert_eq!(stats.estimated_memory, 0);
         assert_eq!(stats.total_ops, 0);
         assert_eq!(stats.total_flushes, 0);
+        assert_eq!(stats.memory_threshold, DEFAULT_MEMORY_THRESHOLD);
+    }
+
+    #[test]
+    fn test_memory_threshold() {
+        let acc = CommandAccumulator::with_threshold_and_memory(100, 1024);
+        assert_eq!(acc.flush_threshold, 100);
+        assert_eq!(acc.memory_threshold, 1024);
+    }
+
+    #[test]
+    fn test_memory_based_flush() {
+        let mut acc = CommandAccumulator::with_threshold_and_memory(100, 100); // Very low memory threshold
+
+        // Adding commands should eventually trigger memory-based flush
+        // (though we can't test actual flushing without a device)
+        assert!(!acc.should_flush()); // Empty
+
+        // Simulate adding enough commands to exceed memory threshold
+        // With ESTIMATED_MEMORY_PER_COMMAND = 1024, 1 command = 1024 bytes
+        // So with memory_threshold = 100, first command should trigger
+        acc.estimated_memory = 200; // Manually set for test
+        assert!(acc.should_flush());
     }
 }
