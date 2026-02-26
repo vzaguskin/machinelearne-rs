@@ -15,7 +15,10 @@
 
 use machinelearne_rs::{
     backend::CpuBackend,
-    ensemble::{Evaluable, GradientBoostingRegressor, GridSearchGB, ModelComparison},
+    ensemble::{
+        DecisionTree, Evaluable, GradientBoostedModel, GradientBoostingRegressor, ModelComparison,
+        WeakLearner,
+    },
     loss::MSELoss,
     model::{
         linear::{LinearModel, LinearRegression},
@@ -182,66 +185,55 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // ============================================
-    // 3. Train and evaluate Gradient Boosting with hyperparameter tuning
+    // 3. Train and evaluate Gradient Boosting with deeper trees
     // ============================================
-    println!("=== 3. Gradient Boosting with GridSearch ===");
+    println!("=== 3. Gradient Boosting with Deeper Trees ===");
 
-    let gb_search_start = std::time::Instant::now();
+    // sklearn uses max_depth=3 by default, which achieves R² ≈ 0.78-0.82
+    // Let's try different tree depths to match sklearn's performance
 
-    // Use a focused grid search for faster execution
-    // Note: We're using decision stumps (default), not deep trees
-    let grid_search = GridSearchGB::new()
-        .n_estimators(vec![50, 100, 200])
-        .learning_rates(vec![0.05, 0.1, 0.2])
-        .max_depths(vec![None]) // Use stumps only
-        .colsample_bytrees(vec![0.8, 1.0])
-        .verbose(true);
-
-    println!(
-        "Grid search: {} combinations",
-        grid_search.total_combinations()
-    );
-    println!();
-
-    let search_results = grid_search.search(&train_features, &train_targets);
-    let search_time = gb_search_start.elapsed();
-
-    // Get best configuration
-    let best = search_results.best().expect("Should have results");
-    println!("\nBest hyperparameters found:");
-    println!("  n_estimators: {}", best.config.n_estimators);
-    println!("  learning_rate: {:.3}", best.config.learning_rate);
-    println!("  colsample_bytree: {:.2}", best.config.colsample_bytree);
-    println!("  Validation MSE: {:.6}", best.mse);
-    println!("  Grid search time: {:?}", search_time);
-    println!();
-
-    // Train final model with best hyperparameters
-    println!("Training final model with best hyperparameters...");
-    let gb_final_start = std::time::Instant::now();
-
-    let gb_model = GradientBoostingRegressor::default()
-        .n_estimators(best.config.n_estimators)
-        .learning_rate(best.config.learning_rate)
-        .colsample_bytree(best.config.colsample_bytree)
+    let gb_trainer = GradientBoostingRegressor::default()
+        .n_estimators(200)
+        .learning_rate(0.1)
+        .colsample_bytree(0.8)
         .random_seed(42);
 
-    let gb_fitted = gb_model.fit(&train_features, &train_targets);
-    let gb_train_time = gb_final_start.elapsed();
-
-    // Evaluate GB model
-    struct GBEvaluator {
-        model: machinelearne_rs::ensemble::GradientBoostedModel<CpuBackend>,
+    // Helper function to train and evaluate with a given tree depth
+    struct TreeEvaluator {
+        model: GradientBoostedModel<
+            CpuBackend,
+            <DecisionTree as WeakLearner<CpuBackend>>::FittedModel,
+        >,
     }
 
-    impl Evaluable<CpuBackend> for GBEvaluator {
+    impl Evaluable<CpuBackend> for TreeEvaluator {
         fn predict_batch(&self, features: &Tensor2D<CpuBackend>) -> Vec<f64> {
             self.model.predict_batch(features).to_vec()
         }
     }
 
-    comparison.evaluate("GradientBoosting", &GBEvaluator { model: gb_fitted });
-    println!("Final training time: {:?}", gb_train_time);
+    let depths_to_try = [1, 3, 5];
+
+    for &depth in &depths_to_try {
+        let tree = DecisionTree::new().max_depth(depth);
+        let start = std::time::Instant::now();
+        let fitted = gb_trainer.fit_with_weak_learner(&train_features, &train_targets, &tree);
+        let train_time = start.elapsed();
+
+        // Evaluate
+        let predictions = fitted.predict_batch(&test_features);
+        let preds_vec = predictions.to_vec();
+        let metrics =
+            machinelearne_rs::ensemble::ModelMetrics::compute(&preds_vec, &test_targets.to_vec());
+
+        let name = format!("GB(depth={})", depth);
+        comparison.evaluate(&name, &TreeEvaluator { model: fitted });
+
+        println!(
+            "max_depth={}: R²={:.4}, MSE={:.6}, MAE={:.6}, Time={:?}",
+            depth, metrics.r2, metrics.mse, metrics.mae, train_time
+        );
+    }
     println!();
 
     // ============================================
@@ -257,8 +249,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nTiming Summary:");
     println!("  Linear Regression: {:?}", linear_time);
     println!("  MLP: {:?}", mlp_time);
-    println!("  GB Grid Search: {:?}", search_time);
-    println!("  GB Final Training: {:?}", gb_train_time);
+    println!("  GB (various depths): see above");
 
     // sklearn comparison
     println!("\n{}", "=".repeat(70));
