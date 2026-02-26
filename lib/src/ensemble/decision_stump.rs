@@ -85,6 +85,23 @@ impl DecisionStump {
         features: &Tensor2D<B>,
         targets: &Tensor1D<B>,
     ) -> Option<FittedStump> {
+        self.fit_with_mask(features, targets, None)
+    }
+
+    /// Fit a decision stump to the data with an optional feature mask.
+    ///
+    /// # Arguments
+    /// * `features` - Training features (n_samples x n_features)
+    /// * `targets` - Targets to fit (pseudo-residuals in boosting)
+    /// * `feature_mask` - Optional indices of features to consider (None = all features)
+    ///
+    /// Returns the fitted stump, or None if no valid split was found.
+    pub fn fit_with_mask<B: Backend>(
+        &self,
+        features: &Tensor2D<B>,
+        targets: &Tensor1D<B>,
+        feature_mask: Option<&[usize]>,
+    ) -> Option<FittedStump> {
         let (n_samples, n_features) = features.shape();
         let feature_data: Vec<f64> = features.ravel().to_vec();
         let target_data: Vec<f64> = targets.to_vec();
@@ -104,10 +121,19 @@ impl DecisionStump {
             });
         }
 
-        // Find the best split across all features
+        // Determine which features to consider
+        let features_to_try: Vec<usize> = match feature_mask {
+            Some(mask) if !mask.is_empty() => mask.to_vec(),
+            _ => (0..n_features).collect(),
+        };
+
+        // Find the best split across the allowed features
         let mut best_split: Option<SplitCandidate> = None;
 
-        for feat_idx in 0..n_features {
+        for feat_idx in features_to_try {
+            if feat_idx >= n_features {
+                continue;
+            }
             if let Some(split) = self.find_best_split_for_feature(
                 feat_idx,
                 &feature_data,

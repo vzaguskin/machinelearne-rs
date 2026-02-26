@@ -74,14 +74,17 @@
 
 pub mod boosting;
 pub mod decision_stump;
+pub mod decision_tree;
 pub mod ensemble_model;
 pub mod loss;
 
 // Re-export main types for convenience
 pub use boosting::{
-    GradientBoostingConfig, GradientBoostingRegressor, GradientBoostingTrainer, WeakLearner,
+    EarlyStoppingConfig, GradientBoostingConfig, GradientBoostingRegressor,
+    GradientBoostingTrainer, WeakLearner,
 };
 pub use decision_stump::{DecisionStump, FittedStump};
+pub use decision_tree::{DecisionTree, DecisionTreeConfig, FittedTree, TreeNode};
 pub use ensemble_model::{
     GradientBoostedModel, GradientBoostedModelParams, GradientBoostedRegressor as GBRegressor,
     StumpPredictor,

@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted (Phase 1 & 2 Complete)
 
 ## Context
 
@@ -183,19 +183,24 @@ fn build_histogram(
 
 ## Phased Implementation
 
-### Phase 1: Foundation (MVP)
+### Phase 1: Foundation (MVP) ✓ COMPLETE
 - [x] Create `ensemble/` module
-- [ ] `BoostingLoss` trait with `LeastSquaresLoss`
-- [ ] `DecisionStump` weak learner (exact split finding)
-- [ ] `GradientBoostingTrainer` for regression
-- [ ] `GradientBoostedModel` with `InferenceModel`
-- [ ] Serialization and tests
+- [x] `BoostingLoss` trait with `LeastSquaresLoss`, `LogisticLoss`, `QuantileLoss`
+- [x] `DecisionStump` weak learner (exact split finding)
+- [x] `GradientBoostingTrainer` for regression
+- [x] `GradientBoostedModel` with `InferenceModel`
+- [x] Serialization and tests
+- [x] Example: `train_gradient_boosting.rs`
 
-### Phase 2: Full Trees
-- [ ] `DecisionTree` with configurable depth
-- [ ] Feature subsampling
-- [ ] `LogisticLoss` for binary classification
-- [ ] Early stopping
+### Phase 2: Full Trees ✓ COMPLETE
+- [x] `DecisionTree` with configurable depth (1-10 levels)
+- [x] `min_samples_split` and `min_samples_leaf` constraints
+- [x] Feature subsampling (`colsample_bytree`)
+- [x] Random seed for reproducibility
+- [x] Early stopping with validation loss tracking
+- [x] `EarlyStoppingConfig` with validation_fraction, n_iter_no_change, tol
+- [x] Examples: `train_gradient_boosting_tree.rs`, `train_gradient_boosting_early_stopping.rs`
+- [x] 48 ensemble module tests passing
 
 ### Phase 3: Histogram-Based Trees (CPU)
 - [ ] Implement histogram binning for continuous features
