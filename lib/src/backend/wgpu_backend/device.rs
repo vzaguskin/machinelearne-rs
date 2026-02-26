@@ -257,14 +257,50 @@ impl WgpuDevice {
     /// Sets the flush threshold for the command accumulator.
     ///
     /// Operations will be auto-flushed when the pending count reaches this threshold.
-    /// Default is 500 operations.
+    /// Default is 500 operations. There is also a memory threshold (256MB default)
+    /// that triggers flush when estimated queued command memory is exceeded.
+    ///
+    /// # Performance Tuning
+    ///
+    /// - **Lower threshold** (e.g., 50-100): More frequent flushes, lower latency per operation,
+    ///   but more GPU-CPU synchronization overhead. Good for debugging.
+    /// - **Higher threshold** (e.g., 500-1000): Fewer flushes, better throughput for batch
+    ///   operations, but higher memory usage. Good for training loops.
+    /// - **Debug mode**: Use `set_debug_mode(true)` to flush after every operation.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let device = WgpuDevice::global();
+    /// device.set_flush_threshold(1000); // Batch up to 1000 operations
+    /// ```
     pub fn set_flush_threshold(&self, threshold: usize) {
         COMMAND_ACCUMULATOR.with(|acc| acc.borrow_mut().set_flush_threshold(threshold));
     }
 
-    /// Returns the current flush threshold.
+    /// Returns the current flush threshold (operation count).
     pub fn flush_threshold(&self) -> usize {
         COMMAND_ACCUMULATOR.with(|acc| acc.borrow().stats().flush_threshold)
+    }
+
+    /// Sets the memory threshold for the command accumulator.
+    ///
+    /// Commands will be auto-flushed when estimated memory usage exceeds this threshold.
+    /// Default is 256MB. This prevents memory exhaustion from too many queued operations.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let device = WgpuDevice::global();
+    /// device.set_memory_threshold(128 * 1024 * 1024); // 128MB limit
+    /// ```
+    pub fn set_memory_threshold(&self, threshold: usize) {
+        COMMAND_ACCUMULATOR.with(|acc| acc.borrow_mut().set_memory_threshold(threshold));
+    }
+
+    /// Returns the current memory threshold (bytes).
+    pub fn memory_threshold(&self) -> usize {
+        COMMAND_ACCUMULATOR.with(|acc| acc.borrow().stats().memory_threshold)
     }
 
     /// Executes a function with access to the thread-local bind group cache.
