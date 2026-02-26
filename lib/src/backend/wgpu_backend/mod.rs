@@ -7,6 +7,27 @@
 //!
 //! This backend requires the `wgpu` feature to be enabled.
 //!
+//! ## Performance Warning
+//!
+//! **Important**: This backend is recommended for **inference only**, not training.
+//!
+//! Due to fundamental GPU-CPU synchronization requirements in the training loop,
+//! WGPU is approximately 100-200x slower than the CPU backend for training workloads.
+//! Each batch requires a loss computation that forces GPU-CPU synchronization, negating
+//! GPU parallelism benefits.
+//!
+//! **Recommended use cases:**
+//! - Batch inference on pre-trained models
+//! - Large-batch predictions (single forward pass, minimal sync)
+//! - Prototyping GPU code before CUDA implementation
+//!
+//! **Not recommended for:**
+//! - Model training loops
+//! - Small batch operations
+//! - Workloads requiring frequent scalar reads
+//!
+//! See ADR-0009 for detailed performance analysis.
+//!
 //! ## Performance Optimization
 //!
 //! This backend uses several optimizations to improve GPU performance:

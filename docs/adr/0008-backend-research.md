@@ -2,7 +2,9 @@
 
 ## Status
 
-**Proposed** - 2026-02-17
+**Accepted** - 2026-02-17
+
+**Updated** - 2026-02-26: See ADR-0009 for WGPU performance limitations analysis. WGPU backend is recommended for inference only; training workloads should use CPU backend.
 
 ## Context
 
@@ -140,6 +142,8 @@ We will prioritize backend implementation in the following order:
 
 ### Priority 1: WGPU Backend (Cross-platform GPU)
 
+**Status**: Implemented but limited to inference workloads (see ADR-0009).
+
 **Rationale**: Single backend covers Vulkan, Metal, D3D12, and WebGPU. Pure Rust implementation with no external dependencies. Best cross-platform coverage with a single codebase.
 
 **Implementation approach**:
@@ -147,6 +151,8 @@ We will prioritize backend implementation in the following order:
 2. Implement core operations (matmul, element-wise, reductions)
 3. Write WGSL compute shaders for tensor ops
 4. Support async operation model required by wgpu
+
+**Limitations**: Per-batch GPU-CPU synchronization makes training ~100-200x slower than CPU. Recommended for inference only.
 
 ### Priority 2: BLAS Backend (CPU Performance)
 
@@ -185,11 +191,13 @@ We will prioritize backend implementation in the following order:
 
 | Backend | Platforms | Rust Purity | Effort | Performance | Priority |
 |---------|-----------|-------------|--------|-------------|----------|
-| WGPU | Cross (Vulkan/Metal/D3D12/WebGPU) | Pure | Medium | Good | **1** |
+| WGPU | Cross (Vulkan/Metal/D3D12/WebGPU) | Pure | Medium | Inference only* | **1** |
 | BLAS | CPU (OpenBLAS/MKL/Accelerate) | FFI | Low | Excellent | **2** |
 | Rust-CUDA | NVIDIA GPU | Pure Rust kernels | High | Excellent | **3** |
 | Metal | Apple Silicon | FFI | Medium | Excellent | **4** |
 | rust-gpu | Vulkan platforms | Pure Rust kernels | High | Good | **5** |
+
+*WGPU training is ~100-200x slower than CPU due to sync overhead. See ADR-0009.
 
 ## Consequences
 
@@ -201,6 +209,7 @@ We will prioritize backend implementation in the following order:
 
 ### Negative
 - WGPU requires async API which may complicate the current synchronous Backend trait
+- WGPU backend is not viable for training due to inherent sync overhead (see ADR-0009)
 - BLAS introduces external C library dependencies
 - Rust-CUDA has complex build requirements and is NVIDIA-only
 - Multiple backends increase maintenance burden

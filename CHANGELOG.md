@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### WGPU Performance Analysis (ADR-0009)
+- **ADR-0009**: Documented WGPU backend limitations and async analysis
+- Comprehensive analysis showing async Backend trait would NOT solve performance issues
+- Root cause: GPU-CPU sync at loss computation is inherent to training, not the API
+- Recommendation: WGPU backend for inference only; use CPU for training
+- Future direction: Consider CUDA/cuBLAS backends for GPU training
+
 #### Training Callbacks and Checkpoints
 - **Callback System**: Hook into training events for monitoring and control
   - `Callback<B, M>` trait with lifecycle hooks: `on_train_start`, `on_epoch_start`, `on_batch_start`, `on_batch_end`, `on_epoch_end`, `on_train_end`

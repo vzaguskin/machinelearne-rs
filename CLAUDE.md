@@ -423,12 +423,13 @@ When adding backend-specific code, always wrap in `#[cfg(feature = "...")]`.
 
 ### WGPU Backend Performance Notes
 
-The WGPU backend provides GPU acceleration but has important performance characteristics:
+The WGPU backend provides GPU acceleration but has important performance limitations:
 
 **Current Status:**
-- WGPU backend is functionally correct but not yet performant for training
-- Expect ~1000-2000x slower than CPU for typical training workloads
+- WGPU backend is functionally correct but **not viable for training**
+- Expect ~100-200x slower than CPU for typical training workloads
 - Root cause: Training loops trigger GPU synchronization per batch (for loss computation)
+- See ADR-0009 for detailed analysis
 
 **Optimizations Implemented:**
 - Staging buffer pooling: Reuses buffers for CPU readback
@@ -436,9 +437,13 @@ The WGPU backend provides GPU acceleration but has important performance charact
 - Debug mode: `device.set_debug_mode(true)` for eager flushing during debugging
 
 **When to Use WGPU:**
-- Currently recommended for CPU backends for production training
-- WGPU useful for: inference on pre-trained models, very large batch operations
-- Future work: Asynchronous training to reduce sync points
+- **Recommended**: Inference on pre-trained models (single forward pass, minimal sync)
+- **Recommended**: Large-batch predictions
+- **Not recommended**: Training loops (sync overhead negates GPU benefits)
+- **Future**: Consider CUDA/cuBLAS backend for GPU training (designed for ML workloads)
+
+**Why Async Backend Won't Help:**
+The sync points are inherent to training, not the API. Loss computation requires the scalar value on CPU for metrics, early stopping, and LR scheduling. Even with async, training would still need to wait for loss values. See ADR-0009 for detailed analysis.
 
 **Debugging WGPU:**
 ```rust
