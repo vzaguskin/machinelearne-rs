@@ -292,12 +292,10 @@ impl<L: BoostingLoss> GradientBoostingTrainer<L> {
                 "Starting gradient boosting with {} estimators, lr={}",
                 self.config.n_estimators, self.config.learning_rate
             );
-            if early_stopping_config.is_some() {
+            if let Some(es_config) = &early_stopping_config {
                 println!(
                     "Early stopping enabled: validation_fraction={}, n_iter_no_change={}, tol={}",
-                    early_stopping_config.as_ref().unwrap().validation_fraction,
-                    early_stopping_config.as_ref().unwrap().n_iter_no_change,
-                    early_stopping_config.as_ref().unwrap().tol
+                    es_config.validation_fraction, es_config.n_iter_no_change, es_config.tol
                 );
             }
             println!("Initial prediction: {:.4}", initial_prediction);
