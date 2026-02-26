@@ -54,10 +54,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Preprocessing: Standardizing features...");
     let (x_scaled, y) = normalize_data(&x_raw, &y_raw);
 
+    // Shuffle data before splitting (critical for unbiased evaluation!)
+    // California Housing is sorted geographically, so without shuffling,
+    // train/test would have different geographic distributions.
+    println!("Shuffling data with seed 42 for reproducibility...");
+    let mut indices: Vec<usize> = (0..x_scaled.len()).collect();
+    // Simple Fisher-Yates shuffle with fixed seed
+    let mut rng_state: u64 = 42;
+    for i in (1..indices.len()).rev() {
+        rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let j = (rng_state % ((i + 1) as u64)) as usize;
+        indices.swap(i, j);
+    }
+
+    let x_shuffled: Vec<Vec<f64>> = indices.iter().map(|&i| x_scaled[i].clone()).collect();
+    let y_shuffled: Vec<f64> = indices.iter().map(|&i| y[i]).collect();
+
     // Split into train/test (80/20)
-    let split_idx = (x_scaled.len() as f64 * 0.8) as usize;
-    let (x_train, x_test) = x_scaled.split_at(split_idx);
-    let (y_train, y_test) = y.split_at(split_idx);
+    let split_idx = (x_shuffled.len() as f64 * 0.8) as usize;
+    let (x_train, x_test) = x_shuffled.split_at(split_idx);
+    let (y_train, y_test) = y_shuffled.split_at(split_idx);
 
     println!(
         "Train/Test split: {}/{} samples",
