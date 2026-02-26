@@ -8,6 +8,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### Ensemble Model Comparison and Tuning
+- `ModelComparison<B>`: Compare multiple models on test data with unified metrics
+  - `evaluate()`: Add models and compute MSE, MAE, R² metrics
+  - `best_model()`: Get model with lowest MSE
+  - `ranked()`: Get all models sorted by performance
+  - `summary()`: Print formatted comparison table
+- `GridSearchGB`: Hyperparameter grid search for Gradient Boosting
+  - Search over n_estimators, learning_rate, max_depth, colsample_bytree
+  - Train/validation split for evaluation
+  - Verbose progress output
+  - `GridSearchResults`: Access best config and top-N results
+- `StackingEnsemble<B, M>`: Combine multiple base models via meta-learner
+  - `StackingBuilder`: Fluent API for building ensembles
+  - `Stackable<B>` trait for models that can be stacked
+  - Configurable validation settings
+- `ModelMetrics`: Compute MSE, MAE, R² from predictions and targets
+- `Evaluable<B>` trait: Interface for models to be evaluated
+
+#### California Housing Example
+- `california_housing_comparison.rs`: Complete model comparison example
+  - Loads real California Housing dataset (20,640 samples, 8 features)
+  - Compares Linear Regression, MLP, and Gradient Boosting
+  - Uses Fisher-Yates shuffle for unbiased train/test split
+  - Tests different tree depths (1, 3, 5) to match sklearn baseline
+  - Results: GB(depth=3) R²=0.81 matches sklearn's 0.78-0.82 range
+  - Results: GB(depth=5) R²=0.84 exceeds sklearn baseline
+
 #### WGPU Performance Analysis (ADR-0009)
 - **ADR-0009**: Documented WGPU backend limitations and async analysis
 - Comprehensive analysis showing async Backend trait would NOT solve performance issues
@@ -105,6 +132,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Increased default command accumulator flush threshold from 50 to 500 operations
 - `to_vec()` and `sum()` methods now use pooled staging buffers
 - Command accumulator supports debug mode for eager flushing
+- CLAUDE.md: Added guidance to use `--release` mode for long-running examples (10-50x faster)
 
 #### Composable ONNX Export API
 - `OnnxNodeBuilder` trait: Allows preprocessing transformers to contribute nodes to ONNX graphs
