@@ -151,6 +151,9 @@ pub mod checkpoint;
 /// Linear algebra utilities for closed-form solutions.
 pub mod linalg;
 
+/// Gradient boosting ensemble methods for tabular data.
+pub mod ensemble;
+
 /// ONNX export and inference support.
 #[cfg(feature = "onnx")]
 pub mod onnx;
