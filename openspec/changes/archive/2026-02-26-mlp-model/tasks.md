@@ -4,7 +4,7 @@
 - [x] Add `relu_1d`, `relu_2d` to Backend trait
 - [x] Add `tanh_1d`, `tanh_2d` to Backend trait
 - [x] Implement in CPU backend
-- [ ] Implement in ndarray backend (if feature enabled)
+- [x] Implement in ndarray backend (if feature enabled)
 - [x] Add unit tests for new operations (via existing test suite)
 
 ## Phase 2: Activation Module
