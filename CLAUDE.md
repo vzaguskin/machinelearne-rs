@@ -49,6 +49,12 @@ cargo run --example train_mlp_california  # MLP on California Housing dataset
 cargo run --example export_mlp_onnx --features onnx  # Export MLP to ONNX
 ```
 
+**IMPORTANT**: Use `--release` mode for long-running examples (e.g., `california_housing_comparison`):
+```bash
+cargo run --release --example california_housing_comparison
+```
+Release mode is typically 10-50x faster for compute-intensive ML training.
+
 ## Git Workflow
 
 1. **Always run `cargo fmt` before committing** to ensure consistent code formatting.
