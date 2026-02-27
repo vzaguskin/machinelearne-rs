@@ -182,12 +182,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // ============================================
-    // MLP: CPU only (GPU too slow)
+    // GPU Batch Size Impact
     // ============================================
     println!("\n{}", "=".repeat(60));
-    println!("MLP (8->32->16->1): CPU only");
+    println!("GPU BATCH SIZE IMPACT (Linear Regression)");
     println!("{}", "=".repeat(60));
-    println!("(Skipping GPU training - would take 10+ minutes based on Linear Regression results)");
+    println!("Testing if larger batches reduce sync overhead...\n");
+
+    let train_size = x_train.len();
+    for batch_size in [64, 256, 1024, 4096, train_size] {
+        let gpu_dataset = InMemoryDataset::new(
+            x_train
+                .iter()
+                .map(|row| row.iter().map(|&v| v as f32).collect())
+                .collect(),
+            y_train.iter().map(|&v| v as f32).collect(),
+        )?;
+        let gpu_model = LinearRegression::<WgpuBackend>::new(n_features);
+        let trainer = Trainer::builder(MSELoss, SGD::new(0.01), NoRegularizer)
+            .batch_size(batch_size)
+            .max_epochs(100)
+            .verbose(false)
+            .build();
+
+        let start = std::time::Instant::now();
+        let _fitted = trainer.fit(gpu_model, &gpu_dataset)?;
+        let time = start.elapsed();
+
+        let batches_per_epoch = (train_size + batch_size - 1) / batch_size;
+        let speedup = cpu_linear_time.as_secs_f64() / time.as_secs_f64();
+        println!(
+            "batch_size={:5} | batches/epoch={:3} | time={:7?} | speedup vs CPU: {:6.2}x",
+            batch_size, batches_per_epoch, time, speedup
+        );
+    }
+
+    // ============================================
+    // MLP: CPU vs GPU (with full batch)
+    // ============================================
+    println!("\n{}", "=".repeat(60));
+    println!("MLP (8->32->16->1): CPU vs GPU (full batch)");
+    println!("{}", "=".repeat(60));
+    println!("(Using full batch to minimize GPU-CPU sync overhead)");
 
     // CPU MLP
     let cpu_start = std::time::Instant::now();
@@ -203,6 +239,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cpu_mlp_fitted = cpu_mlp_trainer.fit(cpu_mlp, &cpu_dataset)?;
     let cpu_mlp_time = cpu_start.elapsed();
 
+    // GPU MLP with full batch (batch_size = train_size)
+    println!("\nTesting GPU MLP with full batch...");
+    let gpu_mlp = MLP::<WgpuBackend>::new(
+        &[n_features, 32, 16, 1],
+        &[Activation::ReLU, Activation::ReLU, Activation::Identity],
+    );
+    let gpu_mlp_trainer = Trainer::builder(MSELoss, SGD::new(0.005), NoRegularizer)
+        .batch_size(train_size) // Full batch - 1 sync per epoch
+        .max_epochs(200)
+        .verbose(false)
+        .build();
+
+    let gpu_start = std::time::Instant::now();
+    let gpu_mlp_fitted = gpu_mlp_trainer.fit(gpu_mlp, &gpu_dataset)?;
+    let gpu_mlp_time = gpu_start.elapsed();
+
     // Evaluate CPU MLP
     let cpu_mlp_preds = cpu_mlp_fitted.predict_batch(&test_features_cpu);
     let cpu_mlp_flat = cpu_mlp_preds.ravel().to_vec();
@@ -214,6 +266,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "CPU R² = {:.4}, MSE = {:.6}",
         cpu_mlp_metrics.r2, cpu_mlp_metrics.mse
     );
+
+    // Evaluate GPU MLP
+    let gpu_mlp_preds = gpu_mlp_fitted.predict_batch(&test_features_gpu);
+    let gpu_mlp_flat = gpu_mlp_preds.ravel().to_vec();
+    let gpu_mlp_preds_vec: Vec<f64> = (0..x_test.len()).map(|i| gpu_mlp_flat[i] as f64).collect();
+    let gpu_mlp_metrics = compute_metrics(&gpu_mlp_preds_vec, &y_test);
+
+    println!("GPU Training time: {:?}", gpu_mlp_time);
+    println!(
+        "GPU R² = {:.4}, MSE = {:.6}",
+        gpu_mlp_metrics.r2, gpu_mlp_metrics.mse
+    );
+
+    let mlp_speedup = cpu_mlp_time.as_secs_f64() / gpu_mlp_time.as_secs_f64();
 
     // ============================================
     // Summary
@@ -231,20 +297,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Linear Regression", cpu_linear_time, gpu_linear_time, linear_speedup
     );
     println!(
-        "{:20} {:>15?} {:>15} {:>15}",
-        "MLP", cpu_mlp_time, "skipped", "CPU much faster"
+        "{:20} {:>15?} {:>15?} {:>15.2}x",
+        "MLP (full batch)", cpu_mlp_time, gpu_mlp_time, mlp_speedup
     );
+
+    let conclusion = if mlp_speedup > 1.0 {
+        format!(
+            "GPU IS faster for MLP training with full batch! ({:.1}x speedup)",
+            mlp_speedup
+        )
+    } else {
+        format!(
+            "GPU still slower ({:.1}x). Sync overhead dominates.",
+            1.0 / mlp_speedup
+        )
+    };
 
     println!("\n{}", "=".repeat(60));
     println!("CONCLUSION");
     println!("{}", "=".repeat(60));
-    println!("WGPU backend is NOT recommended for training due to GPU-CPU sync overhead.");
-    println!("Root cause: Loss computation requires CPU access, forcing sync every epoch.");
+    println!("{}", conclusion);
     println!();
-    println!("Expected speedup if GPU training worked efficiently: 10-50x faster");
-    println!("Actual result: CPU is 100-1000x faster for training");
+    println!("Key finding: Larger batches reduce GPU-CPU syncs per epoch.");
+    println!("With full batch (1 sync/epoch), GPU becomes more competitive.");
     println!();
-    println!("Recommendation: Use WGPU for inference only (single forward pass).");
+    println!("For production GPU training, consider:");
+    println!("  1. CUDA/cuBLAS backends (designed for ML workloads)");
+    println!("  2. Async training without per-epoch loss logging");
     println!("See ADR-0009 for detailed analysis.");
 
     Ok(())
