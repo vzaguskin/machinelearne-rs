@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+#### Histogram-Based Decision Trees
+- `HistogramTree`: Fast histogram-based decision tree for gradient boosting
+  - O(#bins × #features) complexity vs O(#data × #features) for exact trees
+  - Quantile-based binning for feature discretization
+  - Bin subtraction trick for efficient child histogram computation
+  - Seamless integration with `GradientBoostingTrainer`
+- `HistogramTreeConfig`: Configuration with max_depth, min_samples_leaf, num_bins, min_split_gain
+- `FeatureBinner`: Quantile-based feature binning with configurable number of bins
+- `Histogram`: Efficient histogram structure for gradient aggregation
+- `FittedHistogramTree`: Fitted model implementing `StumpPredictor` trait
+- `build_histograms()`: Build histograms for all features from bin indices
+- `find_best_split_from_histograms()`: Find optimal split from histogram statistics
+- `train_histogram_tree.rs` example: Compare histogram vs exact trees in gradient boosting
+
 #### Ensemble Model Comparison and Tuning
 - `ModelComparison<B>`: Compare multiple models on test data with unified metrics
   - `evaluate()`: Add models and compute MSE, MAE, R² metrics

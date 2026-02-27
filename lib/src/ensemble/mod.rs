@@ -77,6 +77,7 @@ pub mod comparison;
 pub mod decision_stump;
 pub mod decision_tree;
 pub mod ensemble_model;
+pub mod histogram_tree;
 pub mod loss;
 pub mod stacking;
 pub mod tuning;
@@ -92,6 +93,10 @@ pub use decision_tree::{DecisionTree, DecisionTreeConfig, FittedTree, TreeNode};
 pub use ensemble_model::{
     GradientBoostedModel, GradientBoostedModelParams, GradientBoostedRegressor as GBRegressor,
     StumpPredictor,
+};
+pub use histogram_tree::{
+    build_histograms, find_best_split_from_histograms, FeatureBinner, FittedHistogramTree,
+    Histogram, HistogramTree, HistogramTreeConfig,
 };
 pub use loss::{BoostingLoss, LeastSquaresLoss, LogisticLoss, QuantileLoss};
 pub use stacking::{Stackable, StackingBuilder, StackingConfig, StackingEnsemble};
