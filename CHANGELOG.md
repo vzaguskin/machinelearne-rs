@@ -35,6 +35,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Results: GB(depth=3) R²=0.81 matches sklearn's 0.78-0.82 range
   - Results: GB(depth=5) R²=0.84 exceeds sklearn baseline
 
+#### CPU vs GPU Training Comparison Example
+- `cpu_gpu_training_comparison.rs`: Comprehensive GPU vs CPU performance analysis
+  - Tests Linear Regression and MLP on California Housing (small model)
+  - Tests large models (64 features, 256 neurons) on synthetic data
+  - Demonstrates manual training loop to avoid Trainer sync overhead
+  - Key findings:
+    - Small models (8 features): CPU 10-1000x faster
+    - Large models (64+ features, 256+ neurons): GPU 10-20x faster
+  - Requirements for GPU speedup: batch_size=512+, manual training loop
+
 #### WGPU Performance Analysis (ADR-0009)
 - **ADR-0009**: Documented WGPU backend limitations and async analysis
 - Comprehensive analysis showing async Backend trait would NOT solve performance issues
