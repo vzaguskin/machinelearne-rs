@@ -22,6 +22,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `find_best_split_from_histograms()`: Find optimal split from histogram statistics
 - `train_histogram_tree.rs` example: Compare histogram vs exact trees in gradient boosting
 
+##### CPU Optimizations for Histogram Trees
+- Parallel histogram building using Rayon (`build_histograms_parallel()`)
+- Parallel split finding across features (`find_best_split_from_histograms_parallel()`)
+- Compact u8 bin indices (8x memory reduction vs usize)
+- Packed `BinData` struct for better cache locality (16 bytes: grad_sum + count)
+- `HistogramOptimized`: Single-allocation SoA layout histogram
+- `HistogramScratchSpace`: Reusable buffer for cumulative stats (avoids allocations)
+- Auto-selection of parallel vs sequential based on data size
+- Performance: 1.5-2x faster on 10K+ samples vs exact trees
+- Optional `histogram-simd` feature flag for future SIMD optimizations
+
 #### Ensemble Model Comparison and Tuning
 - `ModelComparison<B>`: Compare multiple models on test data with unified metrics
   - `evaluate()`: Add models and compute MSE, MAE, R² metrics
